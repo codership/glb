@@ -16,9 +16,9 @@ then
     CFLAGS=" -O2 -g "
 fi
 
-CXXFLAGS="$CFLAGS -Wall -Werror $CXXFLAGS"
-
+CFLAGS="$CFLAGS -Wall -Werror"
 AC_SUBST(CFLAGS)
+CXXFLAGS="$CFLAGS $CXXFLAGS"
 AC_SUBST(CXXFLAGS)
 
 # Checks for programs.
