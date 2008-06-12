@@ -7,4 +7,13 @@
 #include "glb_conf.h"
 
 int main (int argc, char* argv[])
-{ return 0; }
+{
+    glb_conf_t* conf = glb_conf_cmd_parse (argc, argv);
+
+    if (!conf) {
+        fprintf (stderr, "Failed to parse arguments. Exiting.\n");
+        exit (EXIT_FAILURE);
+    }
+
+    return 0;
+}

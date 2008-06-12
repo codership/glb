@@ -1,8 +1,10 @@
 # Copyright (C) 2008 Codership Oy <info@codership.com>
+# $Id$
 
 sbin_PROGRAMS = glbd
 glbd_SOURCES =          \
-	glb_main.c
+	glb_main.c      \
+	glb_conf.c
 
 #glbd_INCLUDES =         \
 #	
