@@ -17,7 +17,7 @@ extern char* optarg;
 #define RA required_argument
 #define OA optional_argument
 
-#include "glb_conf.h"
+#include "glb_cmd.h"
 
 typedef enum conf_opt
 {

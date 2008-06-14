@@ -4,7 +4,7 @@
  * $Id$
  */
 
-#include "glb_conf.h"
+#include "glb_cmd.h"
 
 int main (int argc, char* argv[])
 {

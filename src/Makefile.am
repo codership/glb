@@ -4,7 +4,7 @@
 sbin_PROGRAMS = glbd
 glbd_SOURCES =          \
 	glb_main.c      \
-	glb_conf.c
+	glb_cmd.c
 
 #glbd_INCLUDES =         \
 #	
