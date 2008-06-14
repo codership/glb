@@ -8,7 +8,7 @@
 
 int main (int argc, char* argv[])
 {
-    glb_cmd_t* cmd = glb_cmd_cmd_parse (argc, argv);
+    glb_cmd_t* cmd = glb_cmd_parse (argc, argv);
 
     if (!cmd) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");

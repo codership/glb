@@ -2,9 +2,11 @@
 # $Id$
 
 sbin_PROGRAMS = glbd
-glbd_SOURCES =          \
-	glb_main.c      \
-	glb_cmd.c
+
+glbd_SOURCES =      \
+	glb_dst.c   \
+	glb_cmd.c   \
+	glb_main.c
 
 #glbd_INCLUDES =         \
 #	

@@ -42,11 +42,9 @@ static option_t cmd_options[] =
 };
 
 // Some constants
-static const int cmd_dst_separator    = ':';
-static const int cmd_list_separator   = ',';
-static const ptrdiff_t cmd_ip_len_max = 16;
-static const ptrdiff_t cmd_ip_len_min = 7;
-static const ulong cmd_port_max       = (1 << 16) - 1;
+static const int  cmd_list_separator = ',';
+static const long cmd_ip_len_max     = 15; // aaa.bbb.ccc.ddd
+static const long cmd_port_max       = (1<<16) - 1;
 
 void
 glb_cmd_help (FILE* out, const char* progname)
@@ -83,23 +81,22 @@ glb_cmd_help (FILE* out, const char* progname)
 }
 
 void
-glb_cmd_print (FILE* out, glb_cmd_t* conf)
+glb_cmd_print (FILE* out, glb_cmd_t* cmd)
 {
     ulong i;
 
     fprintf (out, "Incoming address: %s:%lu, ",
-             inet_ntoa(conf->inc_addr), conf->inc_port);
+             inet_ntoa(cmd->inc_addr), cmd->inc_port);
     fprintf (out, "control address: %s:%lu\n",
-             inet_ntoa(conf->ctrl_addr), conf->ctrl_port);
+             inet_ntoa(cmd->ctrl_addr), cmd->ctrl_port);
     fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s\n",
-             conf->n_threads, conf->src_tracking ? "ON" : "OFF",
-             conf->verbose ? "ON" : "OFF");
-    fprintf (out, "Destinations: %lu\n", (ulong)conf->n_dst);
+             cmd->n_threads, cmd->src_tracking ? "ON" : "OFF",
+             cmd->verbose ? "ON" : "OFF");
+    fprintf (out, "Destinations: %lu\n", (ulong)cmd->n_dst);
 
-    for (i = 0; i < conf->n_dst; i++) {
-        fprintf (out, "  %2lu: %s:%lu,\tweight: %lu\n",
-                 i, inet_ntoa(conf->dst[i].addr),
-                 conf->dst[i].port, conf->dst[i].weight);
+    for (i = 0; i < cmd->n_dst; i++) {
+        fprintf (out, "  %2lu: ", i);
+        glb_dst_print (out, &cmd->dst[i]);
     }
 }
 
@@ -113,7 +110,7 @@ cmd_parse_addr (struct in_addr* addr,
     char*       endptr;
     char        addr_str[cmd_ip_len_max + 1] = { 0, };
 
-    port_str = strchr (str, cmd_dst_separator);
+    port_str = strchr (str, ':');
     if (!port_str) {
         // no separator - only port present
         port_str = str;
@@ -143,78 +140,18 @@ cmd_parse_addr (struct in_addr* addr,
     return 0;
 }
 
-// parses addr:port:weight string, stores in dst
-// returns number of parsed fields or negative error code
-static long
-cmd_parse_dst (glb_cmd_dst_t* dst, const char* s, const char** next)
-{
-    const char* token;
-    char*       endptr;
-    char        addr_str[cmd_ip_len_max + 1] = { 0, };
-    ptrdiff_t   addr_len;
-    long        ret;
-
-    // parse IP address
-    *next  = strchr (s, cmd_list_separator);
-    endptr = strchr (s, cmd_dst_separator);
-    if (endptr && *next && endptr >= *next) endptr = NULL;
-
-    if (NULL != endptr)
-        addr_len = endptr - s;
-    else if (NULL != *next)
-        addr_len = *next - s;
-    else
-        addr_len = strlen (s);
-
-    // make sure that whenever we return, *next has the rigth value
-    if (NULL != *next) *next = *next + 1; // skip list separator
-
-    if (addr_len > cmd_ip_len_max || addr_len < cmd_ip_len_min)
-        return -EINVAL;
-
-    strncpy (addr_str, s, addr_len);
-    ret = inet_aton (addr_str, &dst->addr);
-    if (!ret)
-        return -EINVAL;
-    else if (NULL == endptr) // string or item is over
-        return 1;
-
-    // parse port
-    assert (*endptr == cmd_dst_separator);
-    token = endptr + 1;
-    dst->port = strtoul (token, &endptr, 10);
-    if (*endptr != cmd_dst_separator  &&
-        *endptr != cmd_list_separator &&
-        *endptr != '\0') {
-        // port field doesn't consist only of numbers
-        return -EINVAL;
-    }
-    if (dst->port > cmd_port_max) // value of 0 means no setting, don't check
-        return -EINVAL;
-    else if (*endptr == '\0' || *endptr == cmd_list_separator) // string is over
-        return 2;
-
-    // parse weight
-    assert (*endptr == cmd_dst_separator);
-    token = endptr + 1;
-    dst->weight = strtoul (token, &endptr, 10);
-    if (*endptr != cmd_list_separator &&
-        *endptr != '\0') {
-        // port field doesn't consist only of numbers
-        return -EINVAL;
-    }
-    return 3;
-}
-
 // parses comma separated list of destinations, reallocates and fills conf
 static glb_cmd_t*
 cmd_parse_dst_list (const char* dst_list,
-                     ulong       default_port,
-                     long        default_weight)
+                    ulong       default_port,
+                    long        default_weight)
 {
-    glb_cmd_t* ret  = NULL;
-    const char* next = dst_list;
-    size_t n_dst = 0, i;
+    glb_cmd_t*   ret   = NULL;
+    const char*  next  = dst_list;
+    size_t       n_dst = 0, i;
+    const size_t max_dst_len = 16 + 1 + 5 + 1 + 10; // addr:port:weight\0
+    char         dst_str[max_dst_len + 1] = { 0, };
+    ptrdiff_t    dst_len;
 
     // find out how many destinations
     while (next) {
@@ -223,12 +160,27 @@ cmd_parse_dst_list (const char* dst_list,
         if (next) next++; // skip separator
     }
 
-    ret = calloc (sizeof(*ret) + n_dst * sizeof(glb_cmd_dst_t), 1);
+    ret = calloc (sizeof(*ret) + n_dst * sizeof(glb_dst_t), 1);
     if (ret) {
-        next = dst_list;
         for (i = 0; i < n_dst; i++) {
-            assert (next);
-            switch (cmd_parse_dst (&ret->dst[i], next, &next)) {
+
+            if ((next = strchr (dst_list, cmd_list_separator))) {
+                dst_len = next - dst_list;
+            }
+            else {
+                dst_len = strlen (dst_list);
+            }
+
+            if (dst_len > max_dst_len) {
+                fprintf (stderr, "Destination spec too long: %s\n", dst_list);
+                free (ret);
+                return NULL;
+            }
+
+            strncpy (dst_str, dst_list, dst_len);
+            dst_list = next + 1;
+
+            switch (glb_dst_parse (&ret->dst[i], dst_str)) {
             case 1:
                 ret->dst[i].port   = default_port;
             case 2:
@@ -236,8 +188,9 @@ cmd_parse_dst_list (const char* dst_list,
             case 3:
                 break;
             default: // error parsing destination
-                fprintf (stderr, "Invalid destination spec: %s\n", dst_list);
+                fprintf (stderr, "Invalid destination spec: %s\n", dst_str);
                 free (ret);
+                return NULL;
             }
         }
         ret->n_dst = n_dst;
@@ -253,10 +206,10 @@ static const bool  cmd_src_tracking_default = false;
 static const bool  cmd_verbose_default      = false;
 
 glb_cmd_t*
-glb_cmd_cmd_parse (int argc, char* argv[])
+glb_cmd_parse (int argc, char* argv[])
 {
-    glb_cmd_t  tmp = {{ 0 }}; // initialize to 0
-    glb_cmd_t* ret = NULL;
+    glb_cmd_t   tmp = {{ 0 }}; // initialize to 0
+    glb_cmd_t*  ret = NULL;
     const char* dst_list = NULL;
     long        opt = 0;
     int         opt_idx = 0;
@@ -270,7 +223,8 @@ glb_cmd_cmd_parse (int argc, char* argv[])
     tmp.verbose      = cmd_verbose_default;
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "c:ht:svV", cmd_options, &opt_idx)) != -1) {
+    while ((opt = getopt_long (argc, argv, "c:ht:svV", cmd_options, &opt_idx))
+           != -1) {
         switch (opt) {
         case '?':
         case CMD_OPT_HELP:
