@@ -1,8 +1,7 @@
 # Copyright (C) 2007 Codership Oy <info@codership.com>
   
-sqlgen is a simple program which generates a query load on SQL server
-according to a certain scenario using multiple simultaneous connections.
-Simple load scenarios can be constructed by derivation from SgScenStd class.
+glb is a simple TCP connection balancer made with scalabiloity and
+performance in mind. It was inspired by pen.
 
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY, to the extent permitted by law; without even the

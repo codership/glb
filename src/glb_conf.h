@@ -41,4 +41,7 @@ glb_conf_cmd_parse (int argc, char* argv[]);
 extern void
 glb_conf_print (FILE* out, glb_conf_t* conf);
 
+extern void
+glb_conf_help (FILE* out, const char* progname);
+
 #endif // _glb_config_h_
