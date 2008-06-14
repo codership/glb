@@ -7,13 +7,15 @@
 #include <stddef.h> // ptrdiff_t
 #include <errno.h>
 #include <assert.h>
+#include <netdb.h>
 
+#include "glb_socket.h"
 #include "glb_dst.h"
 
 // Some constants
 static const int       dst_separator  = ':';
-static const ptrdiff_t dst_ip_len_max = 16;
-static const ptrdiff_t dst_ip_len_min = 7;
+static const ptrdiff_t dst_ip_len_max = 256;
+static const ptrdiff_t dst_ip_len_min = 1;
 static const ulong     dst_port_max   = (1 << 16) - 1;
 static const long      dst_default_weight = 1;
 
@@ -26,7 +28,6 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     char*       endptr;
     char        addr_str[dst_ip_len_max + 1] = { 0, };
     ptrdiff_t   addr_len;
-    long        ret;
 
     dst->weight = dst_default_weight;
 
@@ -37,15 +38,16 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
         addr_len = endptr - s;
     else
         addr_len = strlen (s);
-
-    if (addr_len > dst_ip_len_max || addr_len < dst_ip_len_min)
+    if (addr_len > dst_ip_len_max) {
+        fprintf (stderr, "Host address too long: %s\n", s);
         return -EINVAL;
+    }
 
-    strncpy (addr_str, s, addr_len);
-    ret = inet_aton (addr_str, &dst->addr);
-    if (!ret)
-        return -EINVAL;
-    else if (NULL == endptr) // string or item is over
+    strncpy (addr_str, s, addr_len); // this now contains only host address
+
+    if (glb_socket_in_addr (&dst->addr, addr_str)) return -EINVAL;
+
+    if (NULL == endptr) // string is over
         return 1;
 
     // parse port

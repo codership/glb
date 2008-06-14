@@ -18,6 +18,7 @@ extern char* optarg;
 #define OA optional_argument
 
 #include "glb_cmd.h"
+#include "glb_socket.h"
 
 typedef enum cmd_opt
 {
@@ -43,7 +44,7 @@ static option_t cmd_options[] =
 
 // Some constants
 static const int  cmd_list_separator = ',';
-static const long cmd_ip_len_max     = 15; // aaa.bbb.ccc.ddd
+static const long cmd_ip_len_max     = 256;
 static const long cmd_port_max       = (1<<16) - 1;
 
 void
@@ -103,8 +104,8 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
 // parses [addr:]port
 static long
 cmd_parse_addr (struct in_addr* addr,
-                 ulong*          port,
-                 const char*     str)
+                ulong*          port,
+                const char*     str)
 {
     const char* port_str;
     char*       endptr;
@@ -118,13 +119,13 @@ cmd_parse_addr (struct in_addr* addr,
     else {
         ptrdiff_t addr_len = port_str - str;
         if (addr_len > cmd_ip_len_max) {
-            fprintf (stderr, "Invalid IP address: %s\n", str);
+            fprintf (stderr, "Host address too long: %s\n", str);
             return -EINVAL;
         }
         port_str = port_str + 1;
         strncpy (addr_str, str, addr_len);
-        if (!inet_aton (addr_str, addr)) {
-            fprintf (stderr, "Invalid IP address: %s\n", addr_str);
+        if (glb_socket_in_addr (addr, addr_str)) {
+            fprintf (stderr, "Invalid host address: %s\n", addr_str);
             return -EINVAL;
         }
     }

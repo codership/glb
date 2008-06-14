@@ -3,12 +3,15 @@
 
 sbin_PROGRAMS = glbd
 
-glbd_SOURCES =      \
-	glb_dst.c   \
-	glb_cmd.c   \
+glbd_SOURCES = \
+	glb_dst.c    \
+	glb_cmd.c    \
+	glb_socket.c \
+	glb_router.c \
+	glb_pool.c   \
 	glb_main.c
 
-#glbd_INCLUDES =         \
+#glbd_INCLUDES =     \
 #	
 
 .PHONY: all clean
