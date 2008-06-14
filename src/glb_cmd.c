@@ -143,8 +143,7 @@ cmd_parse_addr (struct in_addr* addr,
 // parses comma separated list of destinations, reallocates and fills conf
 static glb_cmd_t*
 cmd_parse_dst_list (const char* dst_list,
-                    ulong       default_port,
-                    long        default_weight)
+                    ulong       default_port)
 {
     glb_cmd_t*   ret   = NULL;
     const char*  next  = dst_list;
@@ -184,7 +183,7 @@ cmd_parse_dst_list (const char* dst_list,
             case 1:
                 ret->dst[i].port   = default_port;
             case 2:
-                ret->dst[i].weight = default_weight;
+                // default wight is assigned glb_dst_parse()
             case 3:
                 break;
             default: // error parsing destination
@@ -274,7 +273,7 @@ glb_cmd_parse (int argc, char* argv[])
 
     // parse destination list
     if (++optind < argc) dst_list = argv[optind];
-    ret = cmd_parse_dst_list (dst_list, tmp.inc_port, 100);
+    ret = cmd_parse_dst_list (dst_list, tmp.inc_port);
 
     if (ret) {
         ret->inc_addr  = tmp.inc_addr;

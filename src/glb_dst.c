@@ -5,11 +5,8 @@
  */
 
 #include <stddef.h> // ptrdiff_t
-//#include <string.h>
 #include <errno.h>
 #include <assert.h>
-//#include <getopt.h>
-//#include <arpa/inet.h>
 
 #include "glb_dst.h"
 
@@ -18,6 +15,7 @@ static const int       dst_separator  = ':';
 static const ptrdiff_t dst_ip_len_max = 16;
 static const ptrdiff_t dst_ip_len_min = 7;
 static const ulong     dst_port_max   = (1 << 16) - 1;
+static const long      dst_default_weight = 1;
 
 // parses addr:port:weight string, stores in dst
 // returns number of parsed fields or negative error code
@@ -29,6 +27,8 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     char        addr_str[dst_ip_len_max + 1] = { 0, };
     ptrdiff_t   addr_len;
     long        ret;
+
+    dst->weight = dst_default_weight;
 
     // parse IP address
     endptr = strchr (s, dst_separator);
