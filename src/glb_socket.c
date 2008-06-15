@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <netdb.h>
 #include <errno.h>
 
@@ -28,9 +27,9 @@ glb_socket_in_addr (struct in_addr* addr, const char* hostname)
 }
 
 void
-glb_socket_sockaddr (struct sockaddr_in* name,
-                     struct in_addr*     host,
-                     uint16_t            port)
+glb_socket_sockaddr_in (struct sockaddr_in* name,
+                        struct in_addr*     host,
+                        uint16_t            port)
 {
     name->sin_family = AF_INET;
     name->sin_port   = htons (port);
@@ -52,7 +51,7 @@ glb_socket_make (struct in_addr* addr, uint16_t port)
     }
 
     /* Give the socket a name. */
-    glb_socket_sockaddr (&name, addr, port);
+    glb_socket_sockaddr_in (&name, addr, port);
     if (bind (sock, (struct sockaddr *) &name, sizeof (name)) < 0)
     {
         perror ("bind");

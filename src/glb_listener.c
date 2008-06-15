@@ -4,8 +4,5 @@
  * $Id$
  */
 
-#ifndef _glb_pool_h_
-#define _glb_pool_h_
+#include "glb_listener.h"
 
-
-#endif // _glb_pool_h_

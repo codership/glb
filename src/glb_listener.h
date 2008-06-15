@@ -4,8 +4,8 @@
  * $Id$
  */
 
-#ifndef _glb_pool_h_
-#define _glb_pool_h_
+#ifndef _glb_listener_h_
+#define _glb_listener_h_
 
 
-#endif // _glb_pool_h_
+#endif // _glb_listener_h_

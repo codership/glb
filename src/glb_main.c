@@ -14,13 +14,16 @@ int main (int argc, char* argv[])
 
     if (!cmd) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");
-        // glb_cmd_help(stdout, argv[0]);
         exit (EXIT_FAILURE);
     }
 
     glb_cmd_print (stdout, cmd);
 
     router = glb_router_create (cmd->n_dst, cmd->dst);
+    if (!router) {
+        fprintf (stderr, "Failed to create router. Exiting.\n");
+        exit (EXIT_FAILURE);
+    }
 
     return 0;
 }

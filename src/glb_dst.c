@@ -7,7 +7,6 @@
 #include <stddef.h> // ptrdiff_t
 #include <errno.h>
 #include <assert.h>
-#include <netdb.h>
 
 #include "glb_socket.h"
 #include "glb_dst.h"
