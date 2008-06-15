@@ -22,6 +22,6 @@ glb_socket_sockaddr_in (struct sockaddr_in* name,
 
 // Return socket bound to a given address.
 int
-glb_socket_make (struct in_addr* addr, uint16_t port);
+glb_socket_create (struct sockaddr_in* addr);
 
 #endif // _glb_socket_h_

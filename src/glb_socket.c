@@ -15,32 +15,31 @@
 int
 glb_socket_in_addr (struct in_addr* addr, const char* hostname)
 {
-    struct hostent *hostinfo;
-    hostinfo = gethostbyname (hostname);
-    if (hostinfo == NULL)
+    struct hostent *host;
+    host = gethostbyname (hostname);
+    if (host == NULL)
     {
         fprintf (stderr, "Unknown host %s.\n", hostname);
         return -EINVAL;
     }
-    *addr = *(struct in_addr *) hostinfo->h_addr;
+    *addr = *(struct in_addr *) host->h_addr;
     return 0;
 }
 
 void
-glb_socket_sockaddr_in (struct sockaddr_in* name,
+glb_socket_sockaddr_in (struct sockaddr_in* addr,
                         struct in_addr*     host,
                         uint16_t            port)
 {
-    name->sin_family = AF_INET;
-    name->sin_port   = htons (port);
-    name->sin_addr   = *host;
+    addr->sin_family = AF_INET;
+    addr->sin_port   = htons (port);
+    addr->sin_addr   = *host;
 }
 
 int
-glb_socket_make (struct in_addr* addr, uint16_t port)
+glb_socket_create (struct sockaddr_in* addr)
 {
     int sock;
-    struct sockaddr_in name;
 
     /* Create the socket. */
     sock = socket (PF_INET, SOCK_STREAM, 0);
@@ -51,8 +50,7 @@ glb_socket_make (struct in_addr* addr, uint16_t port)
     }
 
     /* Give the socket a name. */
-    glb_socket_sockaddr_in (&name, addr, port);
-    if (bind (sock, (struct sockaddr *) &name, sizeof (name)) < 0)
+    if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
         perror ("bind");
         return -errno;

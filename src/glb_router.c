@@ -26,10 +26,10 @@ typedef struct router_dst
 
 struct glb_router
 {
-    pthread_mutex_t lock;
-    size_t          n_dst;
-    int             sock; // outgoing socket
-    router_dst_t*   dst;
+    pthread_mutex_t    lock;
+    size_t             n_dst;
+    struct sockaddr_in sock; // outgoing socket address
+    router_dst_t*      dst;
 };
 
 long
@@ -108,6 +108,19 @@ out:
     return i;
 }
 
+// creates a client socket address for outgoing connections
+static void
+router_client_sockaddr_in (struct sockaddr_in* addr)
+{
+    struct in_addr host;
+
+    if (glb_socket_in_addr (&host, "0.0.0.0")) {
+        perror ("glb_socket_in_addr");
+        abort();
+    }
+    glb_socket_sockaddr_in (addr, &host, 0);
+}
+
 static void
 router_cleanup (glb_router_t* router)
 {
@@ -125,6 +138,7 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
         size_t i;
 
         pthread_mutex_init (&ret->lock, NULL);
+        router_client_sockaddr_in (&ret->sock);
         ret->n_dst = 0;
         ret->dst   = NULL;
 
@@ -139,15 +153,6 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
     }
 
     return ret;
-}
-
-// creates a client socket to connect to a destination
-static int
-router_client_socket ()
-{
-    struct in_addr host;
-    glb_socket_in_addr (&host, "0.0.0.0");
-    return glb_socket_make (&host, 0);
 }
 
 // find a ready destination with minimal usage
@@ -219,7 +224,7 @@ glb_router_connect (glb_router_t* router)
     int sock;
 
     // prepare a socket
-    sock = router_client_socket();
+    sock = glb_socket_create (&router->sock);
     if (sock < 0) goto out;
 
     if (pthread_mutex_lock (&router->lock)) {
