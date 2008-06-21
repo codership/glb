@@ -11,37 +11,57 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "glb_pool.h"
 
-#define pool_buf_size 32768
-
-typedef struct pool_conn
+typedef enum pool_ctl_code
 {
-    int             fd;  // fd where to send
+    POOL_CTL_ADD_CONN,
+    POOL_CTL_DEL_DST,
+    POOL_CTL_SHUTDOWN,
+    POOL_CTL_MAX
+} pool_ctl_code_t;
+
+typedef struct pool_ctl
+{
+    pool_ctl_code_t code;
+    void*           data;
+} pool_ctl_t;
+
+typedef struct pool_conn_end
+{
+    bool            inc;      // to differentiate between the ends
+    int             sock;     // fd of connection
     size_t          sent;
-    size_t          rcvd;
-    uint8_t         buf[pool_buf_size];
-    glb_sockaddr_t  dst; // destinaiton id
-} pool_conn_t;
+    size_t          total;
+    glb_sockaddr_t  dst_addr; // destinaiton id
+    uint8_t         buf[];    // has pool_buf_size
+} pool_conn_end_t;
+
+// we want to allocate memory for both ends in one malloc() call and have it
+// nicely aligned.
+#define pool_conn_size 4096 // presumably a page and should be enough for
+                            // two ethernet frames (what about jumbo?)
+const size_t pool_buf_size  = (pool_conn_size/2 - sizeof(pool_conn_end_t));
 
 typedef struct pool
 {
     pthread_t       thread;
     int             ctl_recv; // receive commands - pool thread
     int             ctl_send; // send commands to pool - other function
-    size_t          n_conns;
+    volatile ulong  n_conns;  // how many connecitons this pool serves
     fd_set          fds_ref;  // reference fd_set, to initialize fds_read
     fd_set          fds_read;
     fd_set          fds_write;
     int             fd_max;
-    pool_conn_t*    route_map[FD_SETSIZE]; // looking for connection ctx by fd
+    pool_conn_end_t* route_map[FD_SETSIZE]; // looking for connection ctx by fd
 } pool_t;
 
 struct glb_pool
 {
     pthread_mutex_t lock;
-    size_t          n_pools;
+    ulong           n_pools;
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
@@ -127,10 +147,59 @@ glb_pool_destroy (glb_pool_t* pool)
     fprintf (stderr, "glb_pool_destroy() not implemented yet!");
 }
 
-extern long
-glb_pool_add_conn (glb_pool_t* pool)
+// finds the least busy pool
+static inline pool_t*
+pool_get_pool (glb_pool_t* pool)
 {
-    return 0;
+    pool_t* ret     = pool->pool;
+    ulong min_conns = ret->n_conns;
+    register ulong i;
+
+    for (i = 1; i < pool->n_pools; i++) {
+        if (min_conns > pool->pool[i].n_conns) {
+            min_conns = pool->pool[i].n_conns;
+            ret = pool->pool + i;
+        }
+    }
+    return ret;
+}
+
+extern long
+glb_pool_add_conn (glb_pool_t*     pool,
+                   int             inc_sock,
+                   int             dst_sock,
+                   glb_sockaddr_t* dst_addr)
+{
+    pool_t* p     = pool_get_pool (pool);
+    long    ret   = -ENOMEM;
+    void*   route = malloc (pool_conn_size);
+
+    if (route) {
+        pool_conn_end_t* inc_end = route;
+        pool_conn_end_t* dst_end = route + pool_conn_size / 2;
+        pool_ctl_t       add_conn_ctl = { POOL_CTL_ADD_CONN, route };
+
+        inc_end->inc      = true;
+        inc_end->sock     = inc_sock;
+        inc_end->sent     = 0;
+        inc_end->total    = 0;
+        inc_end->dst_addr = *dst_addr; // needed for cleanups
+
+        dst_end->inc      = false;
+        dst_end->sock     = dst_sock;
+        dst_end->sent     = 0;
+        dst_end->total    = 0;
+        dst_end->dst_addr = *dst_addr; // needed for cleanups
+
+        ret = write (p->ctl_send, &add_conn_ctl, sizeof (add_conn_ctl));
+        if (ret != sizeof (add_conn_ctl)) {
+            perror ("Sending add_conn_ctl failed");
+            if (ret > 0) abort(); // partial ctl was sent, don't know what to do
+        }
+        else ret = 0;
+    }
+
+    return ret;
 }
 
 extern long

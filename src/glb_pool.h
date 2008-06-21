@@ -20,7 +20,10 @@ glb_pool_destroy (glb_pool_t* pool);
 
 // Adds connection to conneciton pool
 extern long
-glb_pool_add_conn (glb_pool_t* pool);
+glb_pool_add_conn (glb_pool_t*     pool,
+                   int             inc_sock,
+                   int             dst_sock,
+                   glb_sockaddr_t* dst_addr);
 
 // Closes all connecitons to a given address
 extern long
