@@ -4,13 +4,17 @@
  * $Id$
  */
 
+#include <unistd.h> // for sleep()
+
 #include "glb_cmd.h"
 #include "glb_router.h"
+#include "glb_pool.h"
 
 int main (int argc, char* argv[])
 {
     glb_cmd_t*    cmd = glb_cmd_parse (argc, argv);
     glb_router_t* router;
+    glb_pool_t*   pool;
 
     if (!cmd) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");
@@ -24,6 +28,14 @@ int main (int argc, char* argv[])
         fprintf (stderr, "Failed to create router. Exiting.\n");
         exit (EXIT_FAILURE);
     }
+
+    pool = glb_pool_create (cmd->n_threads);
+    if (!pool) {
+        fprintf (stderr, "Failed to create thread pool. Exiting.\n");
+        exit (EXIT_FAILURE);
+    }
+
+    sleep (3);
 
     return 0;
 }
