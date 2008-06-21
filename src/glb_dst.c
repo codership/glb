@@ -27,6 +27,8 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     char*       endptr;
     char        addr_str[dst_ip_len_max + 1] = { 0, };
     ptrdiff_t   addr_len;
+    ulong       port = 0;
+    long        ret  = 0;
 
     dst->weight = dst_default_weight;
 
@@ -44,24 +46,25 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
 
     strncpy (addr_str, s, addr_len); // this now contains only host address
 
-    if (glb_socket_in_addr (&dst->addr, addr_str)) return -EINVAL;
-
+    ret = 1;
     if (NULL == endptr) // string is over
-        return 1;
+        goto end;
 
     // parse port
     assert (*endptr == dst_separator);
     token = endptr + 1;
-    dst->port = strtoul (token, &endptr, 10);
+    port = strtoul (token, &endptr, 10);
     if (*endptr != dst_separator  &&
         *endptr != '\0') {
         // port field doesn't consist only of numbers
         return -EINVAL;
     }
-    if (dst->port > dst_port_max) // value of 0 means no setting, don't check
+    if (port > dst_port_max) // value of 0 means no setting, don't check
         return -EINVAL;
-    else if (*endptr == '\0') // string is over
-        return 2;
+
+    ret = 2;
+    if (*endptr == '\0') // string is over
+        goto end;
 
     // parse weight
     assert (*endptr == dst_separator);
@@ -71,6 +74,10 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
         // weight field doesn't consist only of numbers
         return -EINVAL;
     }
-    return 3;
+    ret = 3;
+
+end:
+    if (glb_socket_addr_init (&dst->addr, addr_str, port)) return -EINVAL;
+    return ret;
 }
 

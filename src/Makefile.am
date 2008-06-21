@@ -4,9 +4,9 @@
 sbin_PROGRAMS = glbd
 
 glbd_SOURCES = \
+	glb_socket.c   \
 	glb_dst.c      \
 	glb_cmd.c      \
-	glb_socket.c   \
 	glb_router.c   \
 	glb_pool.c     \
 	glb_listener.c \

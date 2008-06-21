@@ -16,10 +16,8 @@
 
 typedef struct glb_cmd
 {
-    struct in_addr inc_addr;     // IP to bind listener for incoming connecitons
-    ulong          inc_port;     // port to listen at (no default)
-    struct in_addr ctrl_addr;    // control connection interface (127.0.0.1)
-    ulong          ctrl_port;    // control connection port (inc_port + 1)
+    glb_sockaddr_t inc_addr;     // IP to bind listener for incoming connecitons
+    glb_sockaddr_t ctrl_addr;    // control connection interface (127.0.0.1)
     ulong          n_threads;    // number of routing threads (1 .. oo)
     bool           src_tracking; // connect to the same dst for the same src?
     bool           verbose;      // connect to the same dst for the same src?

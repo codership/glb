@@ -10,14 +10,12 @@
 #include <stdlib.h>     // for ulong
 #include <stdbool.h>    // for bool
 #include <stdio.h>      // for FILE and fprintf()
-#include <netinet/in.h> // for in_addr()
-#include <arpa/inet.h>  // for inet_ntoa()
-#include <string.h>     // for memcmp()
+
+#include "glb_socket.h"
 
 typedef struct glb_dst
 {
-    struct in_addr addr;         // destination IP
-    ulong          port;         // destination port
+    glb_sockaddr_t addr;         // destination address in prepared form
     long           weight;       // >0: connection allocation weight (def: 1)
                                  //  0: no new conns, but keep existing (drain)
                                  // -1: discard destination entirely
@@ -30,18 +28,23 @@ typedef struct glb_dst
 extern long
 glb_dst_parse (glb_dst_t* dst, const char* str);
 
-static inline bool
-glb_dst_equal (glb_dst_t* d1, glb_dst_t* d2)
+static inline void
+glb_dst_set_port (glb_dst_t* dst, uint16_t port)
 {
-    return (!memcmp (&d1->addr, &d2->addr, sizeof (d1->addr)) &&
-            d1->port == d2->port);
+    glb_socket_addr_set_port (&dst->addr, port);
+}
+
+static inline bool
+glb_dst_is_equal (glb_dst_t* d1, glb_dst_t* d2)
+{
+    return (glb_socket_addr_is_equal (&d1->addr, &d2->addr));
 }
 
 static inline void
 glb_dst_print (FILE* out, glb_dst_t* dst)
 {
-    fprintf (out, "%s:%lu,\tw: %lu\n",
-             inet_ntoa(dst->addr), dst->port, dst->weight);
+    fprintf (out, "%s,\tw: %lu\n",
+             glb_socket_addr_to_string(&dst->addr), dst->weight);
 }
 
 #endif // _glb_dst_h_

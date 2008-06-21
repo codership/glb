@@ -21,15 +21,15 @@ typedef struct router_dst
     double    usage; // usage measure: weight/(conns + 1) - bigger wins
     bool      ready; // if destinaiton accepts connecitons
 
-    struct sockaddr_in addr; // destinaiton address to connect
+//    glb_sockaddr_t addr; // destinaiton address to connect
 } router_dst_t;
 
 struct glb_router
 {
-    pthread_mutex_t    lock;
-    size_t             n_dst;
-    struct sockaddr_in sock; // outgoing socket address
-    router_dst_t*      dst;
+    glb_sockaddr_t  sock_out; // outgoing socket address
+    pthread_mutex_t lock;
+    size_t          n_dst;
+    router_dst_t*   dst;
 };
 
 long
@@ -48,7 +48,7 @@ glb_router_change_dst (glb_router_t* router, glb_dst_t* dst)
     for (i = 0; i < router->n_dst; i++) {
         d = &router->dst[i];
 
-        if (glb_dst_equal(&d->dst, dst)) {
+        if (glb_dst_is_equal(&d->dst, dst)) {
             if (dst->weight < 0) {
                 // remove destination from the list
                 if ((i + 1) < router->n_dst) {
@@ -100,7 +100,7 @@ glb_router_change_dst (glb_router_t* router, glb_dst_t* dst)
     d->ready  = true;
 
     // initialize sockaddr (to establish connections)
-    glb_socket_sockaddr_in (&d->addr, &dst->addr, dst->port);
+//    glb_socket_addr_init (&d->addr, &dst->addr, dst->port);
 
 out:
     assert (router->n_dst >= 0);
@@ -108,6 +108,7 @@ out:
     return i;
 }
 
+#if 0
 // creates a client socket address for outgoing connections
 static void
 router_client_sockaddr_in (struct sockaddr_in* addr)
@@ -120,6 +121,7 @@ router_client_sockaddr_in (struct sockaddr_in* addr)
     }
     glb_socket_sockaddr_in (addr, &host, 0);
 }
+#endif
 
 static void
 router_cleanup (glb_router_t* router)
@@ -138,7 +140,7 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
         size_t i;
 
         pthread_mutex_init (&ret->lock, NULL);
-        router_client_sockaddr_in (&ret->sock);
+        glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
         ret->n_dst = 0;
         ret->dst   = NULL;
 
@@ -187,8 +189,8 @@ router_connect_dst (int sock, glb_router_t* router)
     while ((i = router_choose_dst (router)) >= 0) {
         router_dst_t* d = &router->dst[i];
         ret = connect (sock,
-                       (struct sockaddr*)&d->addr,
-                       sizeof (struct sockaddr_in));
+                       (struct sockaddr*)&d->dst.addr,
+                       sizeof (d->dst.addr));
         if (ret) {
             // connect failed, mark destination bad
             d->ready = false;
@@ -224,7 +226,7 @@ glb_router_connect (glb_router_t* router)
     int sock;
 
     // prepare a socket
-    sock = glb_socket_create (&router->sock);
+    sock = glb_socket_create (&router->sock_out);
     if (sock < 0) goto out;
 
     if (pthread_mutex_lock (&router->lock)) {

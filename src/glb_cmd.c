@@ -86,10 +86,10 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
 {
     ulong i;
 
-    fprintf (out, "Incoming address: %s:%lu, ",
-             inet_ntoa(cmd->inc_addr), cmd->inc_port);
-    fprintf (out, "control address: %s:%lu\n",
-             inet_ntoa(cmd->ctrl_addr), cmd->ctrl_port);
+    fprintf (out, "Incoming address: %s, ",
+             glb_socket_addr_to_string (&cmd->inc_addr));
+    fprintf (out, "control address: %s\n",
+             glb_socket_addr_to_string (&cmd->ctrl_addr));
     fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s\n",
              cmd->n_threads, cmd->src_tracking ? "ON" : "OFF",
              cmd->verbose ? "ON" : "OFF");
@@ -103,11 +103,12 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
 
 // parses [addr:]port
 static long
-cmd_parse_addr (struct in_addr* addr,
-                ulong*          port,
-                const char*     str)
+cmd_parse_addr (glb_sockaddr_t* addr,
+                const char*     str,
+                const char*     default_addr)
 {
     const char* port_str;
+    ulong       port;
     char*       endptr;
     char        addr_str[cmd_ip_len_max + 1] = { 0, };
 
@@ -115,6 +116,7 @@ cmd_parse_addr (struct in_addr* addr,
     if (!port_str) {
         // no separator - only port present
         port_str = str;
+        strncpy (addr_str, default_addr, cmd_ip_len_max); // any address
     }
     else {
         ptrdiff_t addr_len = port_str - str;
@@ -124,21 +126,21 @@ cmd_parse_addr (struct in_addr* addr,
         }
         port_str = port_str + 1;
         strncpy (addr_str, str, addr_len);
-        if (glb_socket_in_addr (addr, addr_str)) {
-            fprintf (stderr, "Invalid host address: %s\n", addr_str);
-            return -EINVAL;
-        }
+//        if (glb_socket_in_addr (addr, addr_str)) {
+//            fprintf (stderr, "Invalid host address: %s\n", addr_str);
+//            return -EINVAL;
+//        }
     }
 
-    *port = strtoul (port_str, &endptr, 10);
-    if (*endptr != '\0' || *port > cmd_port_max) {
-        fprintf (stderr, "Invalid port: %s\n", port_str);
+    port = strtoul (port_str, &endptr, 10);
+    if (*endptr != '\0' || port > cmd_port_max) {
+        fprintf (stderr, "Invalid port spec: %s\n", port_str);
         return -EINVAL;
     }
 
 //    printf ("Option: %s, found addr = '%s', port = '%s'\n",
 //            str, addr_str, port_str);
-    return 0;
+    return glb_socket_addr_init (addr, addr_str, port);
 }
 
 // parses comma separated list of destinations, reallocates and fills conf
@@ -149,7 +151,7 @@ cmd_parse_dst_list (const char* dst_list,
     glb_cmd_t*   ret   = NULL;
     const char*  next  = dst_list;
     size_t       n_dst = 0, i;
-    const size_t max_dst_len = 16 + 1 + 5 + 1 + 10; // addr:port:weight\0
+    const size_t max_dst_len = 256; // addr:port:weight\0
     char         dst_str[max_dst_len + 1] = { 0, };
     ptrdiff_t    dst_len;
 
@@ -182,9 +184,9 @@ cmd_parse_dst_list (const char* dst_list,
 
             switch (glb_dst_parse (&ret->dst[i], dst_str)) {
             case 1:
-                ret->dst[i].port   = default_port;
+                glb_dst_set_port (&ret->dst[i], default_port);
             case 2:
-                // default wight is assigned glb_dst_parse()
+                // default weight is assigned glb_dst_parse()
             case 3:
                 break;
             default: // error parsing destination
@@ -214,10 +216,11 @@ glb_cmd_parse (int argc, char* argv[])
     long        opt = 0;
     int         opt_idx = 0;
     char*       endptr;
+    uint16_t    inc_port;
 
     // Set defaults
-    if (!inet_aton (cmd_inc_addr_default,  &tmp.inc_addr))  abort();
-    if (!inet_aton (cmd_ctrl_addr_default, &tmp.ctrl_addr)) abort();
+//    if (!inet_aton (cmd_inc_addr_default,  &tmp.inc_addr))  abort();
+//    if (!inet_aton (cmd_ctrl_addr_default, &tmp.ctrl_addr)) abort();
     tmp.n_threads    = cmd_min_threads;
     tmp.src_tracking = cmd_src_tracking_default;
     tmp.verbose      = cmd_verbose_default;
@@ -231,9 +234,8 @@ glb_cmd_parse (int argc, char* argv[])
             glb_cmd_help(stdout, argv[0]);
             break;
         case CMD_OPT_CONTROL:
-            if (cmd_parse_addr (&tmp.ctrl_addr, &tmp.ctrl_port, optarg)) {
+            if (cmd_parse_addr (&tmp.ctrl_addr, optarg, cmd_ctrl_addr_default))
                 return NULL;
-            }
             break;
         case CMD_OPT_N_THREADS:
             tmp.n_threads = strtoul (optarg, &endptr, 10);
@@ -263,24 +265,26 @@ glb_cmd_parse (int argc, char* argv[])
     }
 
     // parse obligatory incoming address
-    if (cmd_parse_addr (&tmp.inc_addr, &tmp.inc_port, argv[optind])) {
+    if (cmd_parse_addr (&tmp.inc_addr, argv[optind], cmd_inc_addr_default)) {
         return NULL;
     }
+    inc_port = glb_socket_addr_get_port (&tmp.inc_addr);
 
-    // if control port was not specified
-    if (!tmp.ctrl_port) tmp.ctrl_port = tmp.inc_port + 1;
+    // if control address was not specified
+    if (!glb_socket_addr_get_port (&tmp.ctrl_addr)) {
+        glb_socket_addr_init (&tmp.ctrl_addr, cmd_ctrl_addr_default,
+                              inc_port + 1);
+    }
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;
 
     // parse destination list
     if (++optind < argc) dst_list = argv[optind];
-    ret = cmd_parse_dst_list (dst_list, tmp.inc_port);
+    ret = cmd_parse_dst_list (dst_list, inc_port);
 
     if (ret) {
         ret->inc_addr  = tmp.inc_addr;
-        ret->inc_port  = tmp.inc_port;
         ret->ctrl_addr = tmp.ctrl_addr;
-        ret->ctrl_port = tmp.ctrl_port;
         ret->n_threads = tmp.n_threads;
         ret->verbose   = tmp.verbose;
         ret->src_tracking = tmp.src_tracking;
