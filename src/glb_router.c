@@ -11,7 +11,10 @@
 #include <stdio.h>
 
 #include "glb_socket.h"
+#include "glb_pool.h"
 #include "glb_router.h"
+
+extern glb_pool_t* pool;
 
 typedef struct router_dst
 {
@@ -43,7 +46,6 @@ glb_router_change_dst (glb_router_t* router, glb_dst_t* dst)
         fprintf (stderr, "Router mutex lock failed, abort.");
         abort();
     }
-
     // try to find destination in the list
     for (i = 0; i < router->n_dst; i++) {
         d = &router->dst[i];
@@ -181,7 +183,7 @@ router_choose_dst (glb_router_t* router)
 
 // connect to a best destination, possiblly failing over to a next best
 static int
-router_connect_dst (int sock, glb_router_t* router)
+router_connect_dst (glb_router_t* router, int inc_sock, int sock)
 {
     int i;
     int ret;
@@ -200,7 +202,7 @@ router_connect_dst (int sock, glb_router_t* router)
             // success, update stats
             d->conns++;
             d->usage = d->weight / (d->conns + 1);
-            return sock;
+            return glb_pool_add_conn (pool, inc_sock, sock, &d->dst.addr);
         }
     }
 
@@ -212,17 +214,17 @@ router_connect_dst (int sock, glb_router_t* router)
 static void
 router_reset_dst (glb_router_t* router)
 {
-    size_t i;
+    long i;
     for (i = 0; i < router->n_dst; i++) {
         router->dst[i].ready = true;
     }
 }
 
-// returns connected socket
-int
-glb_router_connect (glb_router_t* router)
+// returns error code
+long
+glb_router_connect (glb_router_t* router, int inc_sock)
 {
-    int ret = -1;
+    long ret = -1;
     int sock;
 
     // prepare a socket
@@ -235,13 +237,41 @@ glb_router_connect (glb_router_t* router)
     }
 
     // attmept to connect until we run out of destinations
-    ret = router_connect_dst (sock, router);
+    ret = router_connect_dst (router, inc_sock, sock);
     router_reset_dst(router);
 
     // avoid socket leak
-    if (ret < 0) shutdown (sock, 2);
+    if (ret < 0) {
+        shutdown (sock, 2);
+    }
+
 out:
     pthread_mutex_unlock (&router->lock);
     return ret;
 }
 
+void
+glb_router_disconnect (glb_router_t* router, glb_sockaddr_t* dst)
+{
+    long i;
+
+    if (pthread_mutex_lock (&router->lock)) {
+        fprintf (stderr, "Router mutex lock failed, abort.");
+        abort();
+    }
+
+    for (i = 0; i < router->n_dst; i++) {
+        router_dst_t* d = &router->dst[i];
+        if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
+            d->conns--;
+            d->usage = d->weight / (d->conns + 1);
+        }
+    }
+
+    if (i == router->n_dst) {
+        perror ("Attempt to disconnect from non-existing destination");
+        perror (glb_socket_addr_to_string(dst));
+    }
+
+    pthread_mutex_unlock (&router->lock);
+}

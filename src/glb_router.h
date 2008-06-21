@@ -15,11 +15,11 @@ extern glb_router_t*
 glb_router_create (size_t n_dst, glb_dst_t dst[]);
 
 // return file descriptor of a new destinaiton conneciton
-extern int
-glb_router_connect (glb_router_t* router);
+extern long
+glb_router_connect (glb_router_t* router, int inc_sock);
 
 extern void
-glb_router_disconnect (glb_router_t* router, int fd);
+glb_router_disconnect (glb_router_t* router, glb_sockaddr_t* dst_addr);
 
 /*!
  * Modifies internal list of destinations
