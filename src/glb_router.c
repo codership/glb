@@ -14,6 +14,8 @@
 #include "glb_socket.h"
 #include "glb_router.h"
 
+extern bool glb_verbose;
+
 typedef struct router_dst
 {
     glb_dst_t dst;
@@ -29,7 +31,7 @@ struct glb_router
 {
     glb_sockaddr_t  sock_out; // outgoing socket address
     pthread_mutex_t lock;
-    size_t          n_dst;
+    long            n_dst;
     router_dst_t*   dst;
 };
 
@@ -108,21 +110,6 @@ out:
     return i;
 }
 
-#if 0
-// creates a client socket address for outgoing connections
-static void
-router_client_sockaddr_in (struct sockaddr_in* addr)
-{
-    struct in_addr host;
-
-    if (glb_socket_in_addr (&host, "0.0.0.0")) {
-        perror ("glb_socket_in_addr");
-        abort();
-    }
-    glb_socket_sockaddr_in (addr, &host, 0);
-}
-#endif
-
 static void
 router_cleanup (glb_router_t* router)
 {
@@ -137,7 +124,7 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
     glb_router_t* ret = malloc (sizeof (glb_router_t));
 
     if (ret) {
-        size_t i;
+        long i;
 
         pthread_mutex_init (&ret->lock, NULL);
         glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
@@ -151,7 +138,7 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
             }
         }
 
-        assert (ret->n_dst = n_dst);
+        assert (ret->n_dst == n_dst);
     }
 
     return ret;
@@ -257,7 +244,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     long i;
 
     if (pthread_mutex_lock (&router->lock)) {
-        fprintf (stderr, "Router mutex lock failed, abort.");
+        perror ("Router mutex lock failed, abort.");
         abort();
     }
 
@@ -266,6 +253,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
         if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
             d->conns--;
             d->usage = d->weight / (d->conns + 1);
+            break;
         }
     }
 
@@ -275,4 +263,55 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     }
 
     pthread_mutex_unlock (&router->lock);
+}
+
+size_t
+glb_router_print_stats (glb_router_t* router, char* buf, size_t buf_len)
+{
+    size_t len = 0;
+    long   total_conns = 0;
+    long   n_dst;
+    long   i;
+
+    len += snprintf (buf + len, buf_len - len, "Router:\n"
+                     "----------------------------------------------------\n"
+                     "        Address       :   weight   usage   conns\n");
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+    if (pthread_mutex_lock (&router->lock)) {
+        perror ("Router mutex lock failed, abort.");
+        abort();
+    }
+
+    for (i = 0; i < router->n_dst; i++) {
+        router_dst_t* d = &router->dst[i];
+
+        total_conns += d->conns;
+
+        len += snprintf (buf + len, buf_len - len, "%s : %6ld %9.2f %6ld\n",
+                         glb_socket_addr_to_string(&d->dst.addr),
+                         d->dst.weight, d->usage, d->conns);
+        if (len == buf_len) {
+            buf[len - 1] = '\0';
+            return (len - 1);
+        }
+    }
+
+    n_dst = router->n_dst;
+
+    pthread_mutex_unlock (&router->lock);
+
+    len += snprintf (buf + len, buf_len - len,
+                     "----------------------------------------------------\n"
+                     "Destinations: %ld, total connections: %ld\n",
+                     n_dst, total_conns);
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+     return len;
 }

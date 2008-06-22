@@ -45,7 +45,17 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    while (1) sleep (1);
+    while (1) {
+        char stats[1024];
+
+        glb_router_print_stats (router, stats, 1024);
+        puts (stats);
+
+        glb_pool_print_stats (pool, stats, 1024);
+        puts (stats);
+
+        sleep (5);
+    }
 
     return 0;
 }

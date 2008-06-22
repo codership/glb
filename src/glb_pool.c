@@ -140,6 +140,8 @@ pool_reset_conn_end (pool_t* pool, int fd)
         }
         pool->fd_min = i;
     }
+
+    close (fd);
 }
 
 static void
@@ -148,8 +150,13 @@ pool_remove_conn (pool_t* pool, int src_fd)
     pool_conn_end_t* end    = pool->route_map[src_fd];
     int              dst_fd = end->sock;
 
-    close (dst_fd);
     pool->n_conns--;
+
+    if (glb_verbose) {
+        fprintf (stderr, "Pool %ld: disconnecting from %s "
+                 "(total pool connections: %ld)\n", pool->id,
+                 glb_socket_addr_to_string (&end->dst_addr), pool->n_conns);
+    }
     glb_router_disconnect (pool->router, &end->dst_addr);
 
     if (end->inc) {
@@ -254,10 +261,10 @@ pool_thread (void* arg)
         fd_set fds_read, fds_write;
 
         tmp = timeout;
-        memcpy (&fds_read,  &pool->fds_read,  sizeof (fd_set));
-        memcpy (&fds_write, &pool->fds_write, sizeof (fd_set));
-        ret = select (pool->fd_max+1, &fds_read, &fds_write,
-                      NULL, &tmp);
+        fds_read  = pool->fds_read;
+        fds_write = pool->fds_write;
+
+        ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, &tmp);
 
         if (ret > 0) { // we have some input
             long count = ret;
@@ -274,12 +281,15 @@ pool_thread (void* arg)
                     perror ("Pool: incomplete read from ctl");
                     abort();
                 }
-                // pool->ctl_recv can theoretically get between fd_min and
-                // fd_max.
-                // For simplicity we want to assume that it is not set when
-                // processing normal fds
-                // also set of connections could be modified, start over
-                continue;
+                /*
+                 * pool->ctl_recv can theoretically get between fd_min and
+                 * fd_max.
+                 * For simplicity we want to assume that it is not set when
+                 * processing normal fds
+                 * also set of connections could be modified by ctl,
+                 * so start over
+                 */
+                goto end;
             }
 
             assert (!FD_ISSET (pool->ctl_recv, &fds_read));
@@ -288,13 +298,19 @@ pool_thread (void* arg)
             while (count) {
                 assert (fd <= pool->fd_max);
 
+                /*
+                 * If pool_handle_read() or pool_handle_write() below
+                 * return error, this is most likely because connection was
+                 * closed. In that case cleanup has happend and fd set has
+                 * changed. Break out of the loop to start over again. 
+                 */ 
                 if (FD_ISSET (fd, &fds_read)) {
-                    if (pool_handle_read (pool, fd) < 0) continue;
+                    if (pool_handle_read (pool, fd) < 0) goto end;
                     count--;
                 }
 
                 if (FD_ISSET (fd, &fds_write)) {
-                    if (pool_handle_write (pool, fd) < 0) continue;
+                    if (pool_handle_write (pool, fd) < 0) goto end;
                     count--;
                 }
 
@@ -308,6 +324,7 @@ pool_thread (void* arg)
             // timed out
             //printf ("Thread %ld is idle\n", pool->id);
         }
+    end: continue;
     }
 
     return NULL;
@@ -435,7 +452,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
     void*   route = NULL;
 
     if (pthread_mutex_lock (&pool->lock)) {
-        perror ("glb_pool_add_conn: failed to lock mutex");
+        perror ("glb_pool_add_conn(): failed to lock mutex");
         abort();
     }
 
@@ -465,9 +482,45 @@ glb_pool_add_conn (glb_pool_t*     pool,
     return ret;
 }
 
-extern long
+long
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
 {
     return 0;
 }
 
+size_t
+glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
+{
+    size_t len = 0;
+    long i;
+
+    len += snprintf (buf + len, buf_len - len, "Pool: connections per thread:");
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+    if (pthread_mutex_lock (&pool->lock)) {
+        perror ("glb_pool_print_stats(): failed to lock mutex");
+        abort();
+    }
+
+    for (i = 0; i < pool->n_pools; i++) {
+        len += snprintf (buf + len, buf_len - len," %5ld",
+                         pool->pool[i].n_conns);
+        if (len == buf_len) {
+            buf[len - 1] = '\0';
+            return (len - 1);
+        }
+    }
+
+    pthread_mutex_unlock (&pool->lock);
+
+    len += snprintf (buf + len, buf_len - len,"\n");
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+    return len;
+}

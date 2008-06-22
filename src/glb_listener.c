@@ -10,6 +10,8 @@
 
 #include "glb_listener.h"
 
+extern bool glb_verbose;
+
 struct glb_listener
 {
     int           sock;
@@ -68,10 +70,12 @@ listener_thread (void* arg)
             goto err2;
         }
 
-        fprintf (stderr, "Listener: accepted connection from %s ",
-                 glb_socket_addr_to_string (&client));
-        fprintf (stderr, "to %s\n",
-                 glb_socket_addr_to_string (&server));
+        if (glb_verbose) {
+            fprintf (stderr, "Listener: accepted connection from %s ",
+                     glb_socket_addr_to_string (&client));
+            fprintf (stderr, "to %s\n",
+                     glb_socket_addr_to_string (&server));
+        }
         continue;
 
     err2:

@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>  // for inet_ntoa()
 #include <netdb.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "glb_socket.h"
 
@@ -17,12 +17,29 @@
 #define addr_string_len 512
 static char addr_string[addr_string_len] = { 0, };
 
+// maximum IP address length = 21: aaa.bbb.ccc.ddd:ppppp
+//                                                ^ position 15
 const char*
 glb_socket_addr_to_string (const glb_sockaddr_t* addr)
 {
-    uint8_t* ip = (void*)&addr->sin_addr.s_addr;
-    snprintf (addr_string, addr_string_len, "%hhu.%hhu.%hhu.%hhu:%hu",
-              ip[0], ip[1], ip[2], ip[3], ntohs (addr->sin_port));
+    uint8_t* a = (void*)&addr->sin_addr.s_addr;
+    char ip[16];
+    long ip_len;
+    char port[7];
+    long port_len;
+
+    ip_len = snprintf (ip, 16, "%hhu.%hhu.%hhu.%hhu", a[0], a[1], a[2], a[3]);
+    assert (ip_len < 16);
+
+    port_len = snprintf (port, 7, ":%hu", ntohs (addr->sin_port));
+    assert (port_len < 7);
+
+    snprintf (addr_string, addr_string_len, "                     ");
+
+    // make so that ':' is on position 15
+    memcpy (addr_string + 15 - ip_len, ip, ip_len);
+    memcpy (addr_string + 15, port, port_len);
+
     return addr_string;
 }
 
