@@ -14,10 +14,7 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "glb_router.h"
 #include "glb_pool.h"
-
-extern glb_router_t* router;
 
 typedef enum pool_ctl_code
 {
@@ -60,6 +57,7 @@ typedef struct pool
     fd_set          fds_write;
     int             fd_max;
     int             fd_min;
+    glb_router_t*   router;
     pool_conn_end_t* route_map[FD_SETSIZE]; // looking for connection ctx by fd
 } pool_t;
 
@@ -73,6 +71,7 @@ struct glb_pool
 static inline void
 pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
 {
+    assert (NULL == pool->route_map[end1->sock]);
     pool->route_map[end1->sock] = end2;
     if (end1->sock > pool->fd_max) pool->fd_max = end1->sock;
     if (end1->sock < pool->fd_min) pool->fd_min = end1->sock;
@@ -135,7 +134,7 @@ pool_remove_conn (pool_t* pool, int src_fd)
 
     close (dst_fd);
     pool->n_conns--;
-    glb_router_disconnect (router, &end->dst_addr);
+    glb_router_disconnect (pool->router, &end->dst_addr);
 
     if (end->inc) {
         free (end); // frees both ends
@@ -288,12 +287,13 @@ pool_thread (void* arg)
 }
 
 static long
-pool_init (pool_t* pool, long id)
+pool_init (pool_t* pool, long id, glb_router_t* router)
 {
     long ret;
     int pipe_fds[2];
 
-    pool->id = id;
+    pool->id     = id;
+    pool->router = router;
 
     ret = pipe(pipe_fds);
     if (ret) {
@@ -321,7 +321,7 @@ pool_init (pool_t* pool, long id)
 }
 
 extern glb_pool_t*
-glb_pool_create (size_t n_pools)
+glb_pool_create (size_t n_pools, glb_router_t* router)
 {
     size_t ret_size = sizeof(glb_pool_t) + n_pools * sizeof(pool_t);
     glb_pool_t* ret = malloc (ret_size);
@@ -335,7 +335,7 @@ glb_pool_create (size_t n_pools)
         ret->n_pools = n_pools;
 
         for (i = 0; i < n_pools; i++) {
-            if ((err = pool_init(&ret->pool[i], i))) {
+            if ((err = pool_init(&ret->pool[i], i, router))) {
                 fprintf (stderr, "Failed to initialize pool %ld\n", i);
                 abort();
             }

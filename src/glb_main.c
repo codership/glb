@@ -30,7 +30,7 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    pool = glb_pool_create (cmd->n_threads);
+    pool = glb_pool_create (cmd->n_threads, router);
     if (!pool) {
         fprintf (stderr, "Failed to create thread pool. Exiting.\n");
         exit (EXIT_FAILURE);

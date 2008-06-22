@@ -8,12 +8,13 @@
 #define _glb_pool_h_
 
 #include "glb_socket.h"
+#include "glb_router.h"
 
 typedef struct glb_pool glb_pool_t;
 
 // Creates array of routing pools, each pool is serviced by a separate thread
 extern glb_pool_t*
-glb_pool_create (size_t pools);
+glb_pool_create (size_t pools, glb_router_t* router);
 
 extern void
 glb_pool_destroy (glb_pool_t* pool);
@@ -25,7 +26,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
                    int             dst_sock,
                    glb_sockaddr_t* dst_addr);
 
-// Closes all connecitons to a given address
+// Closes all connecitons to a given destination
 extern long
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst);
 
