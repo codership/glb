@@ -11,11 +11,20 @@ AM_INIT_AUTOMAKE
 #AM_GNU_GETTEXT
 #AM_GNU_GETTEXT_VERSION(0.17)
 
-if test "$CFLAGS" == ""
+# Check for debug
+AC_ARG_ENABLE(debug,
+              AC_HELP_STRING([--enable-debug],
+	                    [disable debugging code [[default=disabled]]]),,
+	      enable_debug="no")
+if test "$enable_debug" == "yes"
 then
-    CFLAGS=" -O2 -g "
+    CFLAGS="-g -O0 -fno-inline "
+else
+    CFLAGS=${CFLAGS:-" -O3 -mtune=i686 "}
+    CFLAGS="$CFLAGS -DNDEBUG "
 fi
-
+AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")
+	
 CFLAGS="$CFLAGS -Wall -Werror"
 AC_SUBST(CFLAGS)
 CXXFLAGS="$CFLAGS $CXXFLAGS"
