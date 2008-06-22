@@ -20,6 +20,8 @@ extern char* optarg;
 #include "glb_cmd.h"
 #include "glb_socket.h"
 
+extern bool glb_verbose;
+
 typedef enum cmd_opt
 {
     CMD_OPT_CONTROL      = 'c',
@@ -250,6 +252,7 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_VERBOSE:
             tmp.verbose = true;
+            glb_verbose = true;
             break;
         case CMD_OPT_VERSION:
         default:

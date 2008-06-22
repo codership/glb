@@ -11,12 +11,13 @@
 #include "glb_pool.h"
 #include "glb_listener.h"
 
-glb_pool_t*   pool   = NULL;
+bool  glb_verbose = false;
 
 int main (int argc, char* argv[])
 {
-    glb_cmd_t*    cmd = glb_cmd_parse (argc, argv);
-    glb_router_t* router;
+    glb_cmd_t*      cmd = glb_cmd_parse (argc, argv);
+    glb_router_t*   router;
+    glb_pool_t*     pool;
     glb_listener_t* listener;
 
     if (!cmd) {
@@ -44,7 +45,7 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    sleep (3);
+    while (1) sleep (1);
 
     return 0;
 }

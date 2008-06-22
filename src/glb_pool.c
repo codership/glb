@@ -16,6 +16,8 @@
 
 #include "glb_pool.h"
 
+extern bool glb_verbose;
+
 typedef enum pool_ctl_code
 {
     POOL_CTL_ADD_CONN,
@@ -73,6 +75,7 @@ struct glb_pool
 static inline void
 pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
 {
+    assert (end1->sock < FD_SETSIZE);
     assert (NULL == pool->route_map[end1->sock]);
     pool->route_map[end1->sock] = end2;
     if (end1->sock > pool->fd_max) pool->fd_max = end1->sock;
@@ -93,6 +96,12 @@ pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
         pool_set_conn_end (pool, dst_end, inc_end);
 
         pool->n_conns++; // increment connection count
+        if (glb_verbose) {
+            fprintf (stderr,
+                     "Pool %ld: added connection, "
+                     "(total pool connections: %ld)\n",
+                     pool->id, pool->n_conns);
+        }
     }
     break;
     default: // nothing else is implemented
@@ -257,12 +266,12 @@ pool_thread (void* arg)
             if (FD_ISSET (pool->ctl_recv, &fds_read)) {
                 pool_ctl_t ctl;
 
-                ret = recv (pool->ctl_recv, &ctl, sizeof(ctl), MSG_WAITALL);
+                ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
                 if (sizeof(ctl) == ret) { // complete ctl read
                     pool_handle_ctl (pool, &ctl);
                 }
                 else { // should never happen!
-                    perror ("read from ctl");
+                    perror ("Pool: incomplete read from ctl");
                     abort();
                 }
                 // pool->ctl_recv can theoretically get between fd_min and
@@ -297,7 +306,7 @@ pool_thread (void* arg)
         }
         else {
             // timed out
-            printf ("Thread %ld is idle\n", pool->id);
+            //printf ("Thread %ld is idle\n", pool->id);
         }
     }
 
@@ -403,7 +412,7 @@ pool_send_ctl (pool_t* p, pool_ctl_t* ctl)
     ssize_t ret;
 
     pthread_mutex_lock (&p->lock);
-    ret = send (p->ctl_send, ctl, sizeof (*ctl), 0);
+    ret = write (p->ctl_send, ctl, sizeof (*ctl));
     if (ret != sizeof (*ctl)) {
         perror ("Sending ctl failed");
         if (ret > 0) abort(); // partial ctl was sent, don't know what to do
@@ -448,7 +457,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
         dst_end->total    = 0;
         dst_end->dst_addr = *dst_addr; // needed for cleanups
 
-        pool_send_ctl (p, &add_conn_ctl);
+        ret = pool_send_ctl (p, &add_conn_ctl);
     }
 
     pthread_mutex_unlock (&pool->lock);

@@ -9,12 +9,10 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include <unistd.h> // for close()
 
 #include "glb_socket.h"
-#include "glb_pool.h"
 #include "glb_router.h"
-
-extern glb_pool_t* pool;
 
 typedef struct router_dst
 {
@@ -36,7 +34,7 @@ struct glb_router
 };
 
 long
-glb_router_change_dst (glb_router_t* router, glb_dst_t* dst)
+glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 {
     long          i;
     void*         tmp;
@@ -160,10 +158,10 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
 }
 
 // find a ready destination with minimal usage
-static int
+static router_dst_t*
 router_choose_dst (glb_router_t* router)
 {
-    int ret = -1;
+    router_dst_t* ret = NULL;
 
     if (router->n_dst > 0) {
         double max_usage = 0.0;
@@ -172,7 +170,7 @@ router_choose_dst (glb_router_t* router)
         for (i = 0; i < router->n_dst; i++) {
             router_dst_t* d = &router->dst[i];
             if (d->ready && d->usage > max_usage) {
-                ret = i;
+                ret = d;
                 max_usage = d->usage;
             }
         }
@@ -183,26 +181,25 @@ router_choose_dst (glb_router_t* router)
 
 // connect to a best destination, possiblly failing over to a next best
 static int
-router_connect_dst (glb_router_t* router, int inc_sock, int sock)
+router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 {
-    int i;
-    int ret;
+    router_dst_t* dst;
     // keep trying until we run out of destinations
-    while ((i = router_choose_dst (router)) >= 0) {
-        router_dst_t* d = &router->dst[i];
-        ret = connect (sock,
-                       (struct sockaddr*)&d->dst.addr,
-                       sizeof (d->dst.addr));
-        if (ret) {
+    while ((dst = router_choose_dst (router))) {
+        if (connect (sock, (struct sockaddr*)&dst->dst.addr,
+                     sizeof (dst->dst.addr))) {
             // connect failed, mark destination bad
-            d->ready = false;
+            fprintf (stderr, "Router: failed to connect to %s\n",
+                     glb_socket_addr_to_string (&dst->dst.addr));
+            dst->ready = false;
             return -1;
         }
         else {
             // success, update stats
-            d->conns++;
-            d->usage = d->weight / (d->conns + 1);
-            return glb_pool_add_conn (pool, inc_sock, sock, &d->dst.addr);
+            dst->conns++;
+            dst->usage = dst->weight / (dst->conns + 1);
+            *addr = dst->dst.addr;
+            return 0;
         }
     }
 
@@ -221,37 +218,41 @@ router_reset_dst (glb_router_t* router)
 }
 
 // returns error code
-long
-glb_router_connect (glb_router_t* router, int inc_sock)
+int
+glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
 {
-    long ret = -1;
-    int sock;
+    int sock, ret;
 
     // prepare a socket
     sock = glb_socket_create (&router->sock_out);
-    if (sock < 0) goto out;
+    if (sock < 0) {
+        perror ("Router: glb_socket_create");
+        goto out;
+    }
 
     if (pthread_mutex_lock (&router->lock)) {
-        fprintf (stderr, "Router mutex lock failed, abort.");
+        perror ("Router mutex lock failed, abort.");
         abort();
     }
 
     // attmept to connect until we run out of destinations
-    ret = router_connect_dst (router, inc_sock, sock);
+    ret = router_connect_dst (router, sock, dst_addr);
     router_reset_dst(router);
 
     // avoid socket leak
     if (ret < 0) {
-        shutdown (sock, 2);
+        perror ("Router: router_connect_dst()");
+        close (sock);
+        sock = ret;
     }
 
 out:
     pthread_mutex_unlock (&router->lock);
-    return ret;
+    return sock;
 }
 
 void
-glb_router_disconnect (glb_router_t* router, glb_sockaddr_t* dst)
+glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
 {
     long i;
 

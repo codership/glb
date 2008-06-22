@@ -35,13 +35,13 @@ glb_dst_set_port (glb_dst_t* dst, uint16_t port)
 }
 
 static inline bool
-glb_dst_is_equal (glb_dst_t* d1, glb_dst_t* d2)
+glb_dst_is_equal (const glb_dst_t* d1, const glb_dst_t* d2)
 {
     return (glb_socket_addr_is_equal (&d1->addr, &d2->addr));
 }
 
 static inline void
-glb_dst_print (FILE* out, glb_dst_t* dst)
+glb_dst_print (FILE* out, const glb_dst_t* dst)
 {
     fprintf (out, "%s,\tw: %lu\n",
              glb_socket_addr_to_string(&dst->addr), dst->weight);

@@ -14,12 +14,19 @@ typedef struct glb_router glb_router_t;
 extern glb_router_t*
 glb_router_create (size_t n_dst, glb_dst_t dst[]);
 
-// return file descriptor of a new destinaiton conneciton
-extern long
-glb_router_connect (glb_router_t* router, int inc_sock);
+/*!
+ * Returns file descriptor of a new destinaiton conneciton and fills
+ * dst_addr with real server address
+ * @return file descriptor or negative error code
+ */
+extern int
+glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr);
 
+/*!
+ * Decrements connection reference count for destination
+ */
 extern void
-glb_router_disconnect (glb_router_t* router, glb_sockaddr_t* dst_addr);
+glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr);
 
 /*!
  * Modifies internal list of destinations
@@ -28,6 +35,6 @@ glb_router_disconnect (glb_router_t* router, glb_sockaddr_t* dst_addr);
  * @return index of record changed or negative error code
  */
 extern long
-glb_router_change_dst (glb_router_t* router, glb_dst_t* dst);
+glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
 
 #endif // _glb_router_h_

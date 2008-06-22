@@ -30,9 +30,11 @@ listener_thread (void* arg)
 
     while (1) {
         long           ret;
-        int            inc_sock;
+        int            client_sock;
         glb_sockaddr_t client;
         size_t         client_size;
+        int            server_sock;
+        glb_sockaddr_t server;
 
         ret = select (listener->sock + 1, &fds, NULL, NULL, NULL);
         if (ret < 0) {
@@ -45,16 +47,38 @@ listener_thread (void* arg)
         assert (FD_ISSET (listener->sock, &fds));
 
         // first must connect to a destination!
-
-        inc_sock = accept (listener->sock,
-                           (struct sockaddr*) &client, &client_size);
-
-        if (inc_sock < 0) {
-            perror ("Failed tp accept connection");
+        server_sock = glb_router_connect (listener->router, &server);
+        if (server_sock < 0) {
+            perror ("Listener: failed to connect to destination");
+            usleep (1000000); // to avoid busy loop
+            continue;
         }
 
-        fprintf (stderr, "Connect from %s\n",
+        client_sock = accept (listener->sock,
+                              (struct sockaddr*) &client, &client_size);
+        if (client_sock < 0) {
+            perror ("Listener: failed to accept connection");
+            goto err1;
+        }
+
+        ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
+                                 &server);
+        if (ret < 0) {
+            perror ("Listener: failed to add connection to pool");
+            goto err2;
+        }
+
+        fprintf (stderr, "Listener: accepted connection from %s ",
                  glb_socket_addr_to_string (&client));
+        fprintf (stderr, "to %s\n",
+                 glb_socket_addr_to_string (&server));
+        continue;
+
+    err2:
+        close (client_sock);
+    err1:
+        close (server_sock);
+        glb_router_disconnect (listener->router, &server);
     }
 
     return NULL;

@@ -18,35 +18,12 @@
 static char addr_string[addr_string_len] = { 0, };
 
 const char*
-glb_socket_addr_to_string (glb_sockaddr_t* addr)
+glb_socket_addr_to_string (const glb_sockaddr_t* addr)
 {
-    snprintf (addr_string, addr_string_len, "%s:%hu",
-              inet_ntoa (addr->sin_addr), ntohs(addr->sin_port));
+    uint8_t* ip = (void*)&addr->sin_addr.s_addr;
+    snprintf (addr_string, addr_string_len, "%hhu.%hhu.%hhu.%hhu:%hu",
+              ip[0], ip[1], ip[2], ip[3], ntohs (addr->sin_port));
     return addr_string;
-}
-
-int
-_glb_socket_in_addr (struct in_addr* addr, const char* hostname)
-{
-    struct hostent *host;
-    host = gethostbyname (hostname);
-    if (host == NULL)
-    {
-        fprintf (stderr, "Unknown host %s.\n", hostname);
-        return -EINVAL;
-    }
-    *addr = *(struct in_addr *) host->h_addr;
-    return 0;
-}
-
-void
-_glb_socket_sockaddr_in (struct sockaddr_in* addr,
-                        struct in_addr*     host,
-                        uint16_t            port)
-{
-    addr->sin_family = AF_INET;
-    addr->sin_port   = htons (port);
-    addr->sin_addr   = *host;
 }
 
 // Initialize glb_sockaddr_t struct
