@@ -92,7 +92,7 @@ pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
         pool_set_conn_end (pool, inc_end, dst_end);
         pool_set_conn_end (pool, dst_end, inc_end);
 
-        pool->n_conns++; // update connection count
+        pool->n_conns++; // increment connection count
     }
     break;
     default: // nothing else is implemented
