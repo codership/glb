@@ -50,6 +50,8 @@ typedef struct pool
 {
     long            id;
     pthread_t       thread;
+    pthread_mutex_t lock;
+    pthread_cond_t  cond;
     int             ctl_recv; // receive commands - pool thread
     int             ctl_send; // send commands to pool - other function
     volatile ulong  n_conns;  // how many connecitons this pool serves
@@ -96,6 +98,11 @@ pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
     default: // nothing else is implemented
         fprintf (stderr, "Unsupported CTL: %d\n", ctl->code);
     }
+
+    // Notify ctl sender
+    pthread_mutex_lock (&pool->lock);
+    pthread_cond_signal (&pool->cond);
+    pthread_mutex_unlock (&pool->lock);
 
     return 0;
 }
@@ -153,7 +160,8 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
 {
     ssize_t ret;
 
-    ret = write (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent);
+    ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
+                MSG_DONTWAIT);
     if (ret >= 0) {
         dst->sent += ret;
         if (dst->sent == dst->total) { // all data sent, reset pointers
@@ -161,7 +169,12 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
             FD_CLR (dst->sock, &pool->fds_write);
         }
         else { // hm, will it work? - remind to send later
-            FD_SET (dst->sock, &pool->fds_write);
+            switch (errno) {
+            case EAGAIN:
+                FD_SET (dst->sock, &pool->fds_write);
+                ret = 0;
+                break;
+            }
         }
     }
 
@@ -177,7 +190,8 @@ pool_handle_read (pool_t* pool, int src_fd)
 
     // first, try read data from source, if there's enough space
     if (dst->total < pool_buf_size) {
-        ret = read (src_fd, &dst->buf[dst->total], pool_buf_size - dst->total);
+        ret = recv (src_fd, &dst->buf[dst->total], pool_buf_size - dst->total,
+                    0);
         if (ret > 0) {
             dst->total += ret;
             // now try to send whatever we have
@@ -218,9 +232,13 @@ pool_handle_write (pool_t* pool, int dst_fd)
 static void*
 pool_thread (void* arg)
 {
-    pool_t* pool = arg;
+    pool_t* pool   = arg;
     struct timeval timeout = { 1, 0 }; // 1 second
     struct timeval tmp;
+
+    // synchronize with the calling process
+    pthread_mutex_lock (&pool->lock);
+    pthread_mutex_unlock (&pool->lock);
 
     while (1) {
         long ret;
@@ -239,7 +257,7 @@ pool_thread (void* arg)
             if (FD_ISSET (pool->ctl_recv, &fds_read)) {
                 pool_ctl_t ctl;
 
-                ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
+                ret = recv (pool->ctl_recv, &ctl, sizeof(ctl), MSG_WAITALL);
                 if (sizeof(ctl) == ret) { // complete ctl read
                     pool_handle_ctl (pool, &ctl);
                 }
@@ -295,6 +313,9 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
     pool->id     = id;
     pool->router = router;
 
+    pthread_mutex_init (&pool->lock, NULL);
+    pthread_cond_init  (&pool->cond, NULL);
+
     ret = pipe(pipe_fds);
     if (ret) {
         perror ("Failed to open control pipe");
@@ -310,8 +331,11 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
     pool->fd_max = pool->ctl_recv;
     pool->fd_min = pool->fd_max;
 
-    // FIXME: is this a race (pool->thread and pool)?
+    // this, together with pthread_mutex_lock() in the beginning of
+    // pool_thread() avoids possible race in access to pool->thread
+    pthread_mutex_lock   (&pool->lock);
     ret = pthread_create (&pool->thread, NULL, pool_thread, pool);
+    pthread_mutex_unlock (&pool->lock);
     if (ret) {
         perror ("Failed to create thread");
         return -ret;
@@ -372,6 +396,25 @@ pool_get_pool (glb_pool_t* pool)
     return ret;
 }
 
+// Sends ctl and waits for confirmation from the pool thread
+extern ssize_t
+pool_send_ctl (pool_t* p, pool_ctl_t* ctl)
+{
+    ssize_t ret;
+
+    pthread_mutex_lock (&p->lock);
+    ret = send (p->ctl_send, ctl, sizeof (*ctl), 0);
+    if (ret != sizeof (*ctl)) {
+        perror ("Sending ctl failed");
+        if (ret > 0) abort(); // partial ctl was sent, don't know what to do
+    }
+    else ret = 0;
+    pthread_cond_wait (&p->cond, &p->lock);
+    pthread_mutex_unlock (&p->lock);
+
+    return ret;
+}
+
 extern long
 glb_pool_add_conn (glb_pool_t*     pool,
                    int             inc_sock,
@@ -405,12 +448,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
         dst_end->total    = 0;
         dst_end->dst_addr = *dst_addr; // needed for cleanups
 
-        ret = write (p->ctl_send, &add_conn_ctl, sizeof (add_conn_ctl));
-        if (ret != sizeof (add_conn_ctl)) {
-            perror ("Sending add_conn_ctl failed");
-            if (ret > 0) abort(); // partial ctl was sent, don't know what to do
-        }
-        else ret = 0;
+        pool_send_ctl (p, &add_conn_ctl);
     }
 
     pthread_mutex_unlock (&pool->lock);

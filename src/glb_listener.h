@@ -12,12 +12,12 @@
 
 typedef struct glb_listener glb_listener_t;
 
-glb_listener_t*
+extern glb_listener_t*
 glb_listener_create (glb_sockaddr_t* addr,
                      glb_router_t*   router,
                      glb_pool_t*     pool);
 
-void
+extern void
 glb_listener_destroy (glb_listener_t* listener);
 
 #endif // _glb_listener_h_
