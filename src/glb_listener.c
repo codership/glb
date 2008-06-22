@@ -34,7 +34,7 @@ listener_thread (void* arg)
         long           ret;
         int            client_sock;
         glb_sockaddr_t client;
-        size_t         client_size;
+        socklen_t      client_size;
         int            server_sock;
         glb_sockaddr_t server;
 
