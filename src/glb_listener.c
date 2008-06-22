@@ -42,24 +42,22 @@ listener_thread (void* arg)
         if (ret < 0) {
             perror ("error waiting for connections");
             FD_SET (listener->sock, &fds);
-            continue; //?
+            goto err; //?
         }
 
         assert (1 == ret);
         assert (FD_ISSET (listener->sock, &fds));
 
-        // first must connect to a destination!
-        server_sock = glb_router_connect (listener->router, &server);
-        if (server_sock < 0) {
-            perror ("Listener: failed to connect to destination");
-            usleep (1000000); // to avoid busy loop
-            continue;
-        }
-
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
         if (client_sock < 0) {
             perror ("Listener: failed to accept connection");
+            goto err;
+        }
+
+        server_sock = glb_router_connect (listener->router, &server);
+        if (server_sock < 0) {
+            perror ("Listener: failed to connect to destination");
             goto err1;
         }
 
@@ -79,10 +77,12 @@ listener_thread (void* arg)
         continue;
 
     err2:
-        close (client_sock);
-    err1:
         close (server_sock);
         glb_router_disconnect (listener->router, &server);
+    err1:
+        close (client_sock);
+    err:
+        usleep (100000); // to avoid busy loop in case of error
     }
 
     return NULL;

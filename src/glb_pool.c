@@ -44,7 +44,7 @@ typedef struct pool_conn_end
 
 // we want to allocate memory for both ends in one malloc() call and have it
 // nicely aligned.
-#define pool_conn_size 4096 // presumably a page and should be enough for
+#define pool_conn_size 32768 // presumably a page and should be enough for
                             // two ethernet frames (what about jumbo?)
 const size_t pool_buf_size  = (pool_conn_size/2 - sizeof(pool_conn_end_t));
 
@@ -297,6 +297,8 @@ pool_thread (void* arg)
             // check remaining connections
             while (count) {
                 assert (fd <= pool->fd_max);
+
+                while (NULL == pool->route_map[fd]) fd++;
 
                 /*
                  * If pool_handle_read() or pool_handle_write() below
