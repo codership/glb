@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "glb_socket.h"
 
@@ -80,19 +81,34 @@ int
 glb_socket_create (struct sockaddr_in* addr)
 {
     int sock;
+//    size_t buf_size = 1024;
 
     /* Create the socket. */
     sock = socket (PF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
-        perror ("socket");
+        perror ("glb_socket_create(): socket");
+        return -errno;
+    }
+#if 0
+    /* probably a good place to spcify some socket options */
+    if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size))) {
+        perror ("glb_socket_create(): setsockopt");
+        close (sock);
         return -errno;
     }
 
+    if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size))) {
+        perror ("glb_socket_create(): setsockopt");
+        close (sock);
+        return -errno;
+    }
+#endif
     /* Give the socket a name. */
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
-        perror ("bind");
+        perror ("glb_socket_create(): bind");
+        close (sock);
         return -errno;
     }
 

@@ -14,6 +14,10 @@
 #include <errno.h>
 #include <assert.h>
 
+#ifdef GLB_USE_SPLICE
+#include <fcntl.h>
+#endif
+
 #include "glb_pool.h"
 
 extern bool glb_verbose;
@@ -39,13 +43,16 @@ typedef struct pool_conn_end
     size_t          sent;
     size_t          total;
     glb_sockaddr_t  dst_addr; // destinaiton id
+#ifdef GLB_USE_SPLICE
+    int             splice[2];
+#endif
     uint8_t         buf[];    // has pool_buf_size
 } pool_conn_end_t;
 
 // we want to allocate memory for both ends in one malloc() call and have it
 // nicely aligned.
-#define pool_conn_size 32768 // presumably a page and should be enough for
-                            // two ethernet frames (what about jumbo?)
+#define pool_conn_size 8192 // presumably a page multiple and should be enough
+                            // for two ethernet frames (what about jumbo?)
 const size_t pool_buf_size  = (pool_conn_size/2 - sizeof(pool_conn_end_t));
 
 typedef struct pool
@@ -147,24 +154,30 @@ pool_reset_conn_end (pool_t* pool, int fd)
 static void
 pool_remove_conn (pool_t* pool, int src_fd)
 {
-    pool_conn_end_t* end    = pool->route_map[src_fd];
-    int              dst_fd = end->sock;
+    pool_conn_end_t* dst    = pool->route_map[src_fd];
+    int              dst_fd = dst->sock;
+    pool_conn_end_t* src    = pool->route_map[dst_fd];
 
     pool->n_conns--;
 
     if (glb_verbose) {
         fprintf (stderr, "Pool %ld: disconnecting from %s "
                  "(total pool connections: %ld)\n", pool->id,
-                 glb_socket_addr_to_string (&end->dst_addr), pool->n_conns);
+                 glb_socket_addr_to_string (&dst->dst_addr), pool->n_conns);
     }
-    glb_router_disconnect (pool->router, &end->dst_addr);
+    glb_router_disconnect (pool->router, &dst->dst_addr);
 
-    if (end->inc) {
-        free (end); // frees both ends
+#ifdef GLB_USE_SPLICE
+    close (dst->splice[0]); close (dst->splice[1]);
+    close (src->splice[0]); close (src->splice[1]);
+#endif
+
+    if (dst->inc) {
+        free (dst); // frees both ends
     }
     else {
-        assert (pool->route_map[dst_fd]->inc);
-        free (pool->route_map[dst_fd]);
+        assert (src->inc);
+        free (src);
     }
 
     pool_reset_conn_end (pool, src_fd);
@@ -176,9 +189,15 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
 {
     ssize_t ret;
 
+#ifndef GLB_USE_SPLICE
     ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
                 MSG_DONTWAIT);
-    if (ret >= 0) {
+#else
+    ret = splice (dst->splice[0], NULL, dst->sock, NULL,
+                  dst->total - dst->sent, SPLICE_F_NONBLOCK);
+#endif
+
+    if (ret > 0) {
         dst->sent += ret;
         if (dst->sent == dst->total) { // all data sent, reset pointers
             dst->sent =  dst->total = 0;
@@ -206,14 +225,20 @@ pool_handle_read (pool_t* pool, int src_fd)
 
     // first, try read data from source, if there's enough space
     if (dst->total < pool_buf_size) {
+#ifndef GLB_USE_SPLICE
         ret = recv (src_fd, &dst->buf[dst->total], pool_buf_size - dst->total,
                     0);
+#else
+        ret = splice (src_fd, NULL, dst->splice[1], NULL,
+                      pool_buf_size - dst->total,
+                      SPLICE_F_MORE | SPLICE_F_MOVE);
+#endif
         if (ret > 0) {
             dst->total += ret;
             // now try to send whatever we have
             if (pool_send_data (pool, dst) < 0) {
                 // probably don't care what error is
-                perror ("pool_handle_read(): sending data error");
+                perror ("pool_handle_read(): sending data");
             }
         }
         else {
@@ -222,7 +247,7 @@ pool_handle_read (pool_t* pool, int src_fd)
                 ret = -1;
             }
             else { // some other error
-                perror ("pool_handle_read(): receiving data error");
+                perror ("pool_handle_read(): receiving data");
             }
         }
     }
@@ -249,8 +274,8 @@ static void*
 pool_thread (void* arg)
 {
     pool_t* pool   = arg;
-    struct timeval timeout = { 1, 0 }; // 1 second
-    struct timeval tmp;
+//    struct timeval timeout = { 1, 0 }; // 1 second
+//    struct timeval tmp;
 
     // synchronize with the calling process
     pthread_mutex_lock (&pool->lock);
@@ -260,11 +285,11 @@ pool_thread (void* arg)
         long ret;
         fd_set fds_read, fds_write;
 
-        tmp = timeout;
+//        tmp = timeout;
+//        usleep (1000);
         fds_read  = pool->fds_read;
         fds_write = pool->fds_write;
-
-        ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, &tmp);
+        ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, NULL);
 
         if (ret > 0) { // we have some input
             long count = ret;
@@ -476,6 +501,10 @@ glb_pool_add_conn (glb_pool_t*     pool,
         dst_end->total    = 0;
         dst_end->dst_addr = *dst_addr; // needed for cleanups
 
+#ifdef GLB_USE_SPLICE
+        if (pipe (inc_end->splice)) abort();
+        if (pipe (dst_end->splice)) abort();
+#endif
         ret = pool_send_ctl (p, &add_conn_ctl);
     }
 

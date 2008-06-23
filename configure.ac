@@ -24,6 +24,18 @@ else
     CFLAGS="$CFLAGS -DNDEBUG "
 fi
 AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")
+
+# Check for debug
+AC_ARG_ENABLE(splice,
+              AC_HELP_STRING([--enable-splice],
+	                    [use splice() [[default=disabled]]]),,
+	      enable_splice="no")
+if test "$enable_splice" == "yes"
+then
+    CFLAGS="$CFLAGS -D_GNU_SOURCE -DGLB_USE_SPLICE "
+fi
+AM_CONDITIONAL(ENABLE_SPLICE, test "$enable_splice" != "no")
+
 	
 CFLAGS="$CFLAGS -Wall -Werror"
 AC_SUBST(CFLAGS)
@@ -56,6 +68,10 @@ AC_FUNC_MALLOC
 AC_HEADER_STDC
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gettimeofday memset strcasecmp strdup strncasecmp strtol])
+if test "$enable_splice" == "yes"
+then
+AC_CHECK_FUNCS([splice])
+fi
 
 AC_CONFIG_FILES([Makefile
                  doc/Makefile
