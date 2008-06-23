@@ -25,16 +25,27 @@ else
 fi
 AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")
 
-# Check for debug
+# Check for splice()
 AC_ARG_ENABLE(splice,
               AC_HELP_STRING([--enable-splice],
 	                    [use splice() [[default=disabled]]]),,
 	      enable_splice="no")
 if test "$enable_splice" == "yes"
 then
-    CFLAGS="$CFLAGS -D_GNU_SOURCE -DGLB_USE_SPLICE "
+    CFLAGS="$CFLAGS -D_GNU_SOURCE -DGLB_USE_SPLICE"
 fi
 AM_CONDITIONAL(ENABLE_SPLICE, test "$enable_splice" != "no")
+
+# Check for stats
+AC_ARG_ENABLE(splice,
+              AC_HELP_STRING([--enable-stats],
+	                    [use extensive pool statistics [[default=disabled]]]),,
+	      enable_stats="no")
+if test "$enable_stats" == "yes"
+then
+    CFLAGS="$CFLAGS -DGLB_POOL_STATS"
+fi
+AM_CONDITIONAL(ENABLE_STATS, test "$enable_stats" != "no")
 
 	
 CFLAGS="$CFLAGS -Wall -Werror"

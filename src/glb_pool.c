@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+#include <sys/time.h>
 
 #ifdef GLB_USE_SPLICE
 #include <fcntl.h>
@@ -35,6 +36,21 @@ typedef struct pool_ctl
     pool_ctl_code_t code;
     void*           data;
 } pool_ctl_t;
+
+typedef struct pool_stats
+{
+    size_t recv_bytes;
+    size_t n_recv;
+    size_t send_bytes;
+    size_t n_send;
+    size_t sel_reads;
+    size_t sel_writes;
+    size_t n_select;
+} pool_stats_t;
+
+#ifdef GLB_POOL_STATS
+static pool_stats_t zero_stats = { 0, };
+#endif
 
 typedef struct pool_conn_end
 {
@@ -69,6 +85,9 @@ typedef struct pool
     int             fd_max;
     int             fd_min;
     glb_router_t*   router;
+#ifdef GLB_POOL_STATS
+    volatile pool_stats_t stats;
+#endif
     pool_conn_end_t* route_map[FD_SETSIZE]; // looking for connection ctx by fd
 } pool_t;
 
@@ -76,6 +95,7 @@ struct glb_pool
 {
     pthread_mutex_t lock;
     ulong           n_pools;
+    struct timeval  begin;
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
@@ -198,6 +218,9 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
 #endif
 
     if (ret > 0) {
+#ifdef GLB_POOL_STATS
+        pool->stats.send_bytes += ret;
+#endif
         dst->sent += ret;
         if (dst->sent == dst->total) { // all data sent, reset pointers
             dst->sent =  dst->total = 0;
@@ -211,6 +234,9 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
                 break;
             }
         }
+#ifdef GLB_POOL_STATS
+        pool->stats.n_send++;
+#endif
     }
 
     return ret;
@@ -240,6 +266,9 @@ pool_handle_read (pool_t* pool, int src_fd)
                 // probably don't care what error is
                 perror ("pool_handle_read(): sending data");
             }
+#ifdef GLB_POOL_STATS
+            pool->stats.recv_bytes += ret;
+#endif
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
@@ -247,9 +276,13 @@ pool_handle_read (pool_t* pool, int src_fd)
                 ret = -1;
             }
             else { // some other error
-                perror ("pool_handle_read(): receiving data");
+                if (errno != EAGAIN)
+                    perror ("pool_handle_read(): receiving data");
             }
         }
+#ifdef GLB_POOL_STATS
+        pool->stats.n_recv++;
+#endif
     }
     return ret;
 }
@@ -274,8 +307,6 @@ static void*
 pool_thread (void* arg)
 {
     pool_t* pool   = arg;
-//    struct timeval timeout = { 1, 0 }; // 1 second
-//    struct timeval tmp;
 
     // synchronize with the calling process
     pthread_mutex_lock (&pool->lock);
@@ -285,8 +316,6 @@ pool_thread (void* arg)
         long ret;
         fd_set fds_read, fds_write;
 
-//        tmp = timeout;
-//        usleep (1000);
         fds_read  = pool->fds_read;
         fds_write = pool->fds_write;
         ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, NULL);
@@ -306,6 +335,9 @@ pool_thread (void* arg)
                     perror ("Pool: incomplete read from ctl");
                     abort();
                 }
+#ifdef GLB_POOL_STATS
+                pool->stats.sel_reads++;
+#endif
                 /*
                  * pool->ctl_recv can theoretically get between fd_min and
                  * fd_max.
@@ -332,11 +364,17 @@ pool_thread (void* arg)
                  * changed. Break out of the loop to start over again. 
                  */ 
                 if (FD_ISSET (fd, &fds_read)) {
+#ifdef GLB_POOL_STATS
+                    pool->stats.sel_reads++;
+#endif
                     if (pool_handle_read (pool, fd) < 0) goto end;
                     count--;
                 }
 
                 if (FD_ISSET (fd, &fds_write)) {
+#ifdef GLB_POOL_STATS
+                    pool->stats.sel_writes++;
+#endif
                     if (pool_handle_write (pool, fd) < 0) goto end;
                     count--;
                 }
@@ -351,7 +389,11 @@ pool_thread (void* arg)
             // timed out
             //printf ("Thread %ld is idle\n", pool->id);
         }
-    end: continue;
+    end:
+#ifdef GLB_POOL_STATS
+        pool->stats.n_select++;
+#endif
+        continue;
     }
 
     return NULL;
@@ -422,6 +464,8 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
         fprintf (stderr, "Could not allocate memory for %zu pools\n", n_pools);
         abort();
     }
+
+    gettimeofday (&ret->begin, NULL);
 
     return ret;
 }
@@ -524,25 +568,55 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 {
     size_t len = 0;
     long i;
+    struct timeval now;
+    double         seconds;
 
+#ifndef GLB_POOL_STATS
     len += snprintf (buf + len, buf_len - len, "Pool: connections per thread:");
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);
     }
+#endif
 
     if (pthread_mutex_lock (&pool->lock)) {
         perror ("glb_pool_print_stats(): failed to lock mutex");
         abort();
     }
 
+    gettimeofday (&now, NULL);
+    seconds = now.tv_sec - pool->begin.tv_sec +
+        (now.tv_usec - pool->begin.tv_usec) * 1.0e-06;
+
     for (i = 0; i < pool->n_pools; i++) {
+#ifdef GLB_POOL_STATS
+        pool_stats_t s = pool->pool[i].stats;
+
+        pool->pool[i].stats = zero_stats;
+        len += snprintf (buf + len, buf_len - len,
+        "Pool %2ld: conns: %5ld, selects: %9zu (%9.2f sel/sec)\n"
+        "recv   : %9zuB %9zuR %9zuS %9.2fB/R %9.2fB/sec %9.2fR/S %9.2fR/sec\n"
+        "send   : %9zuB %9zuW %9zuS %9.2fB/W %9.2fB/sec %9.2fW/S %9.2fW/sec\n",
+         i, pool->pool[i].n_conns, s.n_select, (double)s.n_select/seconds,
+         s.recv_bytes,s.n_recv,s.sel_reads,(double)s.recv_bytes/s.n_recv,
+         (double)s.recv_bytes/seconds,(double)s.n_recv/s.n_select,
+         (double)s.n_recv/seconds,
+         s.send_bytes,s.n_send,s.sel_writes,(double)s.send_bytes/s.n_send,
+         (double)s.send_bytes/seconds,(double)s.n_send/s.n_select,
+         (double)s.n_send/seconds
+        );
+        if (len == buf_len) {
+            buf[len - 1] = '\0';
+            return (len - 1);
+        }
+#else
         len += snprintf (buf + len, buf_len - len," %5ld",
                          pool->pool[i].n_conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';
             return (len - 1);
         }
+#endif
     }
 
     pthread_mutex_unlock (&pool->lock);
@@ -552,6 +626,8 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
         buf[len - 1] = '\0';
         return (len - 1);
     }
+
+    pool->begin = now;
 
     return len;
 }
