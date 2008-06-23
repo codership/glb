@@ -211,7 +211,7 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
 
 #ifndef GLB_USE_SPLICE
     ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
-                MSG_DONTWAIT);
+                MSG_DONTWAIT | MSG_NOSIGNAL);
 #else
     ret = splice (dst->splice[0], NULL, dst->sock, NULL,
                   dst->total - dst->sent, SPLICE_F_NONBLOCK);
@@ -227,17 +227,32 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
             FD_CLR (dst->sock, &pool->fds_write);
         }
         else { // hm, will it work? - remind to send later
-            switch (errno) {
-            case EAGAIN:
-                FD_SET (dst->sock, &pool->fds_write);
-                ret = 0;
-                break;
-            }
+//            perror ("Pool: incomplete send");
+            FD_SET (dst->sock, &pool->fds_write);
         }
+    }
+    else {
+        perror ("Pool: send failed");
+        switch (errno) {
+        case ESPIPE:
+        case EBUSY:
+        case EINTR:
+        case ENOBUFS:
+        case EAGAIN:
+            puts ("adding to fds_write");
+            FD_SET (dst->sock, &pool->fds_write);
+            ret = 0;
+            break;
+        case EPIPE:
+            pool_remove_conn(pool, dst->sock);
+            break;
+        default:
+            printf ("missed case: errno = %d\n", errno);
+        }
+    }
 #ifdef GLB_POOL_STATS
         pool->stats.n_send++;
 #endif
-    }
 
     return ret;
 }
@@ -386,6 +401,7 @@ pool_thread (void* arg)
             perror ("select() failed");
         }
         else {
+            perror ("select() returned 0!");
             // timed out
             //printf ("Thread %ld is idle\n", pool->id);
         }
