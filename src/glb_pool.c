@@ -67,7 +67,7 @@ typedef struct pool_conn_end
 
 // we want to allocate memory for both ends in one malloc() call and have it
 // nicely aligned.
-#define pool_conn_size 8192 // presumably a page multiple and should be enough
+#define pool_conn_size 65536 // presumably a page multiple and should be enough
                             // for two ethernet frames (what about jumbo?)
 const size_t pool_buf_size  = (pool_conn_size/2 - sizeof(pool_conn_end_t));
 
@@ -205,7 +205,7 @@ pool_remove_conn (pool_t* pool, int src_fd)
 }
 
 static inline ssize_t
-pool_send_data (pool_t* pool, pool_conn_end_t* dst)
+pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
 {
     ssize_t ret;
 
@@ -226,28 +226,33 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst)
             dst->sent =  dst->total = 0;
             FD_CLR (dst->sock, &pool->fds_write);
         }
-        else { // hm, will it work? - remind to send later
+        else {
 //            perror ("Pool: incomplete send");
             FD_SET (dst->sock, &pool->fds_write);
         }
+        if (reset_fds_read && (dst->total < pool_buf_size)) {
+            // some space exists in the buffer,
+            // reestablish src_fd in pool->fds_read
+            int src_sock = pool->route_map[dst->sock]->sock;
+            FD_SET (src_sock, &pool->fds_read);
+        }
     }
     else {
-        perror ("Pool: send failed");
         switch (errno) {
         case ESPIPE:
         case EBUSY:
         case EINTR:
         case ENOBUFS:
         case EAGAIN:
-            puts ("adding to fds_write");
             FD_SET (dst->sock, &pool->fds_write);
-            ret = 0;
+            ret = 0; // pretend nothing happened
             break;
         case EPIPE:
             pool_remove_conn(pool, dst->sock);
             break;
         default:
-            printf ("missed case: errno = %d\n", errno);
+            perror ("Pool: send failed");
+            printf ("ALARM!!! missed case: errno = %d\n", errno);
         }
     }
 #ifdef GLB_POOL_STATS
@@ -277,9 +282,14 @@ pool_handle_read (pool_t* pool, int src_fd)
         if (ret > 0) {
             dst->total += ret;
             // now try to send whatever we have
-            if (pool_send_data (pool, dst) < 0) {
+            // (since we're here, we're in fds_read, no need to reset)
+            if (pool_send_data (pool, dst, false) < 0) {
                 // probably don't care what error is
                 perror ("pool_handle_read(): sending data");
+            }
+            if (dst->total == pool_buf_size) {
+                // no space for next read, remove from fds_read
+                FD_CLR (src_fd, &pool->fds_read);
             }
 #ifdef GLB_POOL_STATS
             pool->stats.recv_bytes += ret;
@@ -310,7 +320,8 @@ pool_handle_write (pool_t* pool, int dst_fd)
 
     if (dst->total) {
         assert (dst->total > dst->sent);
-        if (pool_send_data (pool, dst) < 0) {
+        // if (dst->total == pool_buf_size), source was removed from fds_read
+        if (pool_send_data (pool, dst, (dst->total == pool_buf_size)) < 0) {
             // probably don't care what error is
             perror ("pool_handle_read(): sending data error");
         }
