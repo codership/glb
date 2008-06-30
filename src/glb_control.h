@@ -9,6 +9,7 @@
 
 #include "glb_socket.h"
 #include "glb_router.h"
+#include "glb_pool.h"
 
 typedef struct glb_ctrl glb_ctrl_t;
 
@@ -22,6 +23,7 @@ typedef struct glb_ctrl glb_ctrl_t;
  */
 extern glb_ctrl_t*
 glb_ctrl_create (glb_router_t*         router,
+                 glb_pool_t*           pool,
                  const char*           fifo_name,
                  const glb_sockaddr_t* inet_addr);
 

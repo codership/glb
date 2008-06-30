@@ -26,7 +26,7 @@ extern bool glb_verbose;
 typedef enum pool_ctl_code
 {
     POOL_CTL_ADD_CONN,
-    POOL_CTL_DEL_DST,
+    POOL_CTL_DROP_DST,
     POOL_CTL_SHUTDOWN,
     POOL_CTL_MAX
 } pool_ctl_code_t;
@@ -65,10 +65,10 @@ typedef struct pool_conn_end
     uint8_t         buf[];    // has pool_buf_size
 } pool_conn_end_t;
 
-// we want to allocate memory for both ends in one malloc() call and have it
-// nicely aligned.
-#define pool_conn_size 65536 // presumably a page multiple and should be enough
-                            // for two ethernet frames (what about jumbo?)
+// We want to allocate memory for both ends in one malloc() call and have it
+// nicely aligned. This is presumably a page multiple and
+// should be enough for two ethernet frames (what about jumbo?)
+#define pool_conn_size (BUFSIZ << 2)
 const size_t pool_buf_size  = (pool_conn_size/2 - sizeof(pool_conn_end_t));
 
 typedef struct pool
@@ -99,6 +99,8 @@ struct glb_pool
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
+// performs necessary magic (adds end-to-end mapping, alters fd_max and fd_min)
+// when new file descriptor is added to fd_set
 static inline void
 pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
 {
@@ -108,39 +110,6 @@ pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
     if (end1->sock > pool->fd_max) pool->fd_max = end1->sock;
     if (end1->sock < pool->fd_min) pool->fd_min = end1->sock;
     FD_SET (end1->sock, &pool->fds_read);
-}
-
-static long
-pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
-{
-    switch (ctl->code) {
-    case POOL_CTL_ADD_CONN:
-    {
-        pool_conn_end_t* inc_end = ctl->data;
-        pool_conn_end_t* dst_end = ctl->data + pool_conn_size/2;
-
-        pool_set_conn_end (pool, inc_end, dst_end);
-        pool_set_conn_end (pool, dst_end, inc_end);
-
-        pool->n_conns++; // increment connection count
-        if (glb_verbose) {
-            fprintf (stderr,
-                     "Pool %ld: added connection, "
-                     "(total pool connections: %ld)\n",
-                     pool->id, pool->n_conns);
-        }
-    }
-    break;
-    default: // nothing else is implemented
-        fprintf (stderr, "Unsupported CTL: %d\n", ctl->code);
-    }
-
-    // Notify ctl sender
-    pthread_mutex_lock (&pool->lock);
-    pthread_cond_signal (&pool->cond);
-    pthread_mutex_unlock (&pool->lock);
-
-    return 0;
 }
 
 // removing traces of connection end - reverse to what pool_set_conn_end() did
@@ -172,7 +141,7 @@ pool_reset_conn_end (pool_t* pool, int fd)
 }
 
 static void
-pool_remove_conn (pool_t* pool, int src_fd)
+pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
 {
     pool_conn_end_t* dst    = pool->route_map[src_fd];
     int              dst_fd = dst->sock;
@@ -185,7 +154,9 @@ pool_remove_conn (pool_t* pool, int src_fd)
                  "(total pool connections: %ld)\n", pool->id,
                  glb_socket_addr_to_string (&dst->dst_addr), pool->n_conns);
     }
-    glb_router_disconnect (pool->router, &dst->dst_addr);
+
+    if (notify_router)
+        glb_router_disconnect (pool->router, &dst->dst_addr);
 
 #ifdef GLB_USE_SPLICE
     close (dst->splice[0]); close (dst->splice[1]);
@@ -202,6 +173,62 @@ pool_remove_conn (pool_t* pool, int src_fd)
 
     pool_reset_conn_end (pool, src_fd);
     pool_reset_conn_end (pool, dst_fd);
+}
+
+static void
+pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
+{
+    pool_conn_end_t* inc_end = ctl->data;
+    pool_conn_end_t* dst_end = ctl->data + pool_conn_size/2;
+
+    pool_set_conn_end (pool, inc_end, dst_end);
+    pool_set_conn_end (pool, dst_end, inc_end);
+
+    pool->n_conns++; // increment connection count
+    if (glb_verbose) {
+        fprintf (stderr,
+                 "Pool %ld: added connection, (total pool connections: %ld)\n",
+                 pool->id, pool->n_conns);
+    }
+}
+
+static void
+pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
+{
+    const glb_sockaddr_t* dst = ctl->data;
+    int fd;
+
+    for (fd = pool->fd_min; fd <= pool->fd_max; fd++) {
+        pool_conn_end_t* end = pool->route_map[fd];
+
+        if (end && glb_socket_addr_is_equal(&end->dst_addr, dst)) {
+            // remove conn, but don't try to notify router 'cause it's already
+            // dropped this destination
+            pool_remove_conn (pool, fd, false);
+        }
+    }
+}
+
+static long
+pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
+{
+    switch (ctl->code) {
+    case POOL_CTL_ADD_CONN:
+        pool_handle_add_conn (pool, ctl);
+        break;
+    case POOL_CTL_DROP_DST:
+        pool_handle_drop_dst (pool, ctl);
+        break;
+    default: // nothing else is implemented
+        fprintf (stderr, "Unsupported CTL: %d\n", ctl->code);
+    }
+
+    // Notify ctl sender
+    pthread_mutex_lock (&pool->lock);
+    pthread_cond_signal (&pool->cond);
+    pthread_mutex_unlock (&pool->lock);
+
+    return 0;
 }
 
 static inline ssize_t
@@ -248,7 +275,7 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
             ret = 0; // pretend nothing happened
             break;
         case EPIPE:
-            pool_remove_conn(pool, dst->sock);
+            pool_remove_conn(pool, dst->sock, true);
             break;
         default:
             perror ("Pool: send failed");
@@ -297,7 +324,7 @@ pool_handle_read (pool_t* pool, int src_fd)
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
-                pool_remove_conn (pool, src_fd);
+                pool_remove_conn (pool, src_fd, true);
                 ret = -1;
             }
             else { // some other error
@@ -507,8 +534,8 @@ glb_pool_destroy (glb_pool_t* pool)
 static inline pool_t*
 pool_get_pool (glb_pool_t* pool)
 {
-    pool_t* ret     = pool->pool;
-    ulong min_conns = ret->n_conns;
+    pool_t* ret       = pool->pool;
+    ulong   min_conns = ret->n_conns;
     register ulong i;
 
     for (i = 1; i < pool->n_pools; i++) {
@@ -587,7 +614,22 @@ glb_pool_add_conn (glb_pool_t*     pool,
 long
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
 {
-    return 0;
+    pool_ctl_t drop_dst_ctl = { POOL_CTL_DROP_DST, (void*)dst };
+    ulong i;
+    long ret = 0;
+
+    if (pthread_mutex_lock (&pool->lock)) {
+        perror ("glb_pool_add_conn(): failed to lock mutex");
+        abort();
+    }
+
+    for (i = 0; i < pool->n_pools; i++) {
+        ret -= (pool_send_ctl (&pool->pool[i], &drop_dst_ctl) < 0);
+    }
+
+    pthread_mutex_unlock (&pool->lock);
+
+    return ret;
 }
 
 size_t

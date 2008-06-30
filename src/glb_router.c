@@ -23,8 +23,6 @@ typedef struct router_dst
     long      conns; // how many connections use this destination
     double    usage; // usage measure: weight/(conns + 1) - bigger wins
     bool      ready; // if destinaiton accepts connecitons
-
-//    glb_sockaddr_t addr; // destinaiton address to connect
 } router_dst_t;
 
 struct glb_router
@@ -61,7 +59,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
                 }
                 tmp = realloc (router->dst,
                                (router->n_dst - 1) * sizeof(router_dst_t));
-                if (!tmp) {
+                if (!tmp && (router->n_dst > 1)) {
                     i = -ENOTRECOVERABLE;
                     goto out;
                 }
@@ -84,6 +82,8 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     if (dst->weight < 0) {
         fprintf (stderr, "WARNING: Command to remove inexisting destination: ");
         glb_dst_print (stderr, dst);
+        i = -EADDRNOTAVAIL;
+        goto out;
     }
 
     tmp = realloc (router->dst, (router->n_dst + 1) * sizeof(router_dst_t));
@@ -93,16 +93,13 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     }
 
     router->dst = tmp;
+    d = router->dst + router->n_dst;
     router->n_dst++;
-    d = &router->dst[i];
     d->dst    = *dst;
     d->weight = dst->weight;
     d->conns  = 0;
     d->usage  = d->weight / (d->conns + 1);
     d->ready  = true;
-
-    // initialize sockaddr (to establish connections)
-//    glb_socket_addr_init (&d->addr, &dst->addr, dst->port);
 
 out:
     assert (router->n_dst >= 0);

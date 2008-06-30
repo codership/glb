@@ -48,9 +48,9 @@ int main (int argc, char* argv[])
     }
 
     if (cmd->ctrl_set) {
-        ctrl = glb_ctrl_create (router, cmd->fifo_name, &cmd->ctrl_addr);
+        ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, &cmd->ctrl_addr);
     } else {
-        ctrl = glb_ctrl_create (router, cmd->fifo_name, NULL);
+        ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, NULL);
     }
     if (!ctrl) {
         fprintf (stderr, "Failed to create control thread. Exiting.\n");

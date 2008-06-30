@@ -30,13 +30,14 @@ static const char ctrl_getstat_cmd[] = "getstat";
 
 struct glb_ctrl
 {
+    pthread_t     thread;
     const char*   fifo_name;
     int           fifo;
     int           inet_sock;
     glb_router_t* router;
-    fd_set        fds;
+    glb_pool_t*   pool;
     int           fd_max;
-    pthread_t     thread;
+    fd_set        fds;
 };
 
 static void
@@ -122,6 +123,11 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
             return 0;
         }
         ctrl_respond (ctrl, fd, "OK\n");
+
+        if (dst.weight < 0) {
+            // destination was removed from router, drop all connections to it
+            glb_pool_drop_dst (ctrl->pool, &dst.addr);
+        }
         return 0;
     }
 }
@@ -179,6 +185,7 @@ ctrl_thread (void* arg)
 
 glb_ctrl_t*
 glb_ctrl_create (glb_router_t*         router,
+                 glb_pool_t*           pool,
                  const char*           name,
                  const glb_sockaddr_t* inet_addr)
 {
@@ -226,6 +233,7 @@ glb_ctrl_create (glb_router_t*         router,
     if (ret) {
         pthread_t tmp;
         ret->router    = router;
+        ret->pool      = pool;
         ret->fifo_name = fifo_name;
         ret->fifo      = fifo;
         ret->inet_sock = inet_sock;
