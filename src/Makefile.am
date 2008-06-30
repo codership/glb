@@ -10,6 +10,7 @@ glbd_SOURCES = \
 	glb_router.c   \
 	glb_pool.c     \
 	glb_listener.c \
+	glb_control.c  \
 	glb_main.c
 
 #glbd_INCLUDES =     \

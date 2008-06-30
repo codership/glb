@@ -57,10 +57,14 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     if (*endptr != dst_separator  &&
         *endptr != '\0') {
         // port field doesn't consist only of numbers
+        perror ("1");
         return -EINVAL;
     }
-    if (port > dst_port_max) // value of 0 means no setting, don't check
+    if (port > dst_port_max) {
+        // value of 0 means no setting, don't check
+        perror ("2");
         return -EINVAL;
+    }
 
     ret = 2;
     if (*endptr == '\0') // string is over
@@ -72,12 +76,17 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     dst->weight = strtoul (token, &endptr, 10);
     if (*endptr != '\0') {
         // weight field doesn't consist only of numbers
+        perror ("3");
         return -EINVAL;
     }
     ret = 3;
 
 end:
-    if (glb_socket_addr_init (&dst->addr, addr_str, port)) return -EINVAL;
+    if (glb_socket_addr_init (&dst->addr, addr_str, port)) {
+        perror ("4");
+        return -EINVAL;
+    }
+
     return ret;
 }
 

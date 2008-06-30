@@ -14,7 +14,7 @@ AM_INIT_AUTOMAKE
 # Check for debug
 AC_ARG_ENABLE(debug,
               AC_HELP_STRING([--enable-debug],
-	                    [disable debugging code [[default=disabled]]]),,
+	                    [enable debugging code [[default=disabled]]]),,
 	      enable_debug="no")
 if test "$enable_debug" == "yes"
 then
@@ -47,11 +47,6 @@ then
 fi
 AM_CONDITIONAL(ENABLE_STATS, test "$enable_stats" != "no")
 
-	
-CFLAGS="$CFLAGS -Wall -Werror"
-AC_SUBST(CFLAGS)
-CXXFLAGS="$CFLAGS $CXXFLAGS"
-AC_SUBST(CXXFLAGS)
 
 # Checks for programs.
 AC_PROG_CXX
@@ -83,6 +78,13 @@ if test "$enable_splice" == "yes"
 then
 AC_CHECK_FUNCS([splice])
 fi
+
+# Many feature checks are broken and issue warnings.
+# If we want checks to pass we have to put this at the very end.
+CFLAGS="$CFLAGS -Wall -Werror"
+AC_SUBST(CFLAGS)
+CXXFLAGS="$CFLAGS $CXXFLAGS"
+AC_SUBST(CXXFLAGS)
 
 AC_CONFIG_FILES([Makefile
                  doc/Makefile

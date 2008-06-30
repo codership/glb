@@ -38,6 +38,6 @@ glb_socket_addr_get_port (glb_sockaddr_t* addr);
 
 // Returns socket (file descriptor) bound to a given address.
 extern int
-glb_socket_create (glb_sockaddr_t* addr);
+glb_socket_create (const glb_sockaddr_t* addr);
 
 #endif // _glb_socket_h_

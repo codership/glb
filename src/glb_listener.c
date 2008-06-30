@@ -106,7 +106,7 @@ glb_listener_create (glb_sockaddr_t* addr,
         return NULL;
     }
 
-    ret = calloc (1, sizeof (glb_listener_t*));
+    ret = calloc (1, sizeof (glb_listener_t));
     if (ret) {
         ret->sock   = sock;
         ret->router = router;

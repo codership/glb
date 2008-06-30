@@ -78,7 +78,7 @@ glb_socket_addr_get_port (glb_sockaddr_t* addr)
 }
 
 int
-glb_socket_create (struct sockaddr_in* addr)
+glb_socket_create (const struct sockaddr_in* addr)
 {
     int sock;
 //    size_t buf_size = 1024;

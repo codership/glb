@@ -17,6 +17,7 @@ extern char* optarg;
 #define RA required_argument
 #define OA optional_argument
 
+#include "../config.h" // for version
 #include "glb_cmd.h"
 #include "glb_socket.h"
 
@@ -24,23 +25,27 @@ extern bool glb_verbose;
 
 typedef enum cmd_opt
 {
+    CMD_OPT_VERSION      = 'V',
     CMD_OPT_CONTROL      = 'c',
+    CMD_OPT_DAEMON       = 'd',
+    CMD_OPT_FIFO         = 'f',
     CMD_OPT_HELP         = 'h',
     CMD_OPT_SRC_TRACKING = 's',
     CMD_OPT_N_THREADS    = 't',
     CMD_OPT_VERBOSE      = 'v',
-    CMD_OPT_VERSION      = 'V'
 } cmd_opt_t;
 
 static option_t cmd_options[] =
 {
+    { "version",         NA, NULL, CMD_OPT_VERSION       },
     { "control",         RA, NULL, CMD_OPT_CONTROL       },
+    { "daemon",          NA, NULL, CMD_OPT_DAEMON        },
+    { "fifo",            RA, NULL, CMD_OPT_FIFO          },
     { "help",            NA, NULL, CMD_OPT_HELP          },
     { "src_tracking",    NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "source_tracking", NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "threads",         RA, NULL, CMD_OPT_N_THREADS     },
     { "verbose",         NA, NULL, CMD_OPT_VERBOSE       },
-    { "version",         NA, NULL, CMD_OPT_VERSION       },
     { 0, 0, 0, 0 }
 };
 
@@ -58,8 +63,10 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  --help                  this help message\n");
     fprintf (out,
+             "  --fifo <fifo name>      name of the FIFO file for control\n");
+    fprintf (out,
              "  --control [HOST:]PORT   "
-             "listen for control connections on this address\n"
+             "listen for control requests on this address\n"
              "                          "
              "(default: 127.0.0.1:<LISTEN_PORT + 1>\n");
     fprintf (out,
@@ -90,8 +97,10 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
 
     fprintf (out, "Incoming address: %s, ",
              glb_socket_addr_to_string (&cmd->inc_addr));
-    fprintf (out, "control address: %s\n",
-             glb_socket_addr_to_string (&cmd->ctrl_addr));
+    fprintf (out, "control FIFO: %s\n", cmd->fifo_name);
+    fprintf (out, "Control address:  %s\n",
+             cmd->ctrl_set ? glb_socket_addr_to_string (&cmd->ctrl_addr) :
+             "none");
     fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s\n",
              cmd->n_threads, cmd->src_tracking ? "ON" : "OFF",
              cmd->verbose ? "ON" : "OFF");
@@ -203,11 +212,10 @@ cmd_parse_dst_list (const char* dst_list,
 }
 
 // General defaults
-static const char* cmd_inc_addr_default     = "0.0.0.0";
-static const char* cmd_ctrl_addr_default    = "127.0.0.1";
+static const char  cmd_inc_addr_default[]   = "0.0.0.0";
+static const char  cmd_ctrl_addr_default[]  = "127.0.0.1";
+static const char  cmd_fifo_name_default[]  = "/tmp/glbd.fifo";
 static const ulong cmd_min_threads          = 1;
-static const bool  cmd_src_tracking_default = false;
-static const bool  cmd_verbose_default      = false;
 
 glb_cmd_t*
 glb_cmd_parse (int argc, char* argv[])
@@ -221,31 +229,38 @@ glb_cmd_parse (int argc, char* argv[])
     uint16_t    inc_port;
 
     // Set defaults
-//    if (!inet_aton (cmd_inc_addr_default,  &tmp.inc_addr))  abort();
-//    if (!inet_aton (cmd_ctrl_addr_default, &tmp.ctrl_addr)) abort();
+    tmp.ctrl_set     = false;
+    tmp.fifo_name    = cmd_fifo_name_default;
     tmp.n_threads    = cmd_min_threads;
-    tmp.src_tracking = cmd_src_tracking_default;
-    tmp.verbose      = cmd_verbose_default;
+    tmp.src_tracking = false;
+    tmp.verbose      = false;
+    tmp.daemonize    = false;
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "c:ht:svV", cmd_options, &opt_idx))
+    while ((opt = getopt_long (argc, argv, "c:dfht:svV", cmd_options, &opt_idx))
            != -1) {
         switch (opt) {
         case '?':
         case CMD_OPT_HELP:
             glb_cmd_help(stdout, argv[0]);
+            exit (-1);
             break;
         case CMD_OPT_CONTROL:
             if (cmd_parse_addr (&tmp.ctrl_addr, optarg, cmd_ctrl_addr_default))
                 return NULL;
+            tmp.ctrl_set = true;
+            break;
+        case CMD_OPT_FIFO:
+            tmp.fifo_name = optarg;
             break;
         case CMD_OPT_N_THREADS:
-            tmp.n_threads = strtoul (optarg, &endptr, 10);
+            tmp.n_threads = strtol (optarg, &endptr, 10);
             if ((*endptr != '\0' && *endptr != ' ') || errno) {
                 fprintf (stderr, "Bad n_threads value: %s. Integer expected.\n",
                          optarg);
                 return NULL;
             }
+            if (tmp.n_threads<cmd_min_threads) tmp.n_threads = cmd_min_threads;
             break;
         case CMD_OPT_SRC_TRACKING:
             tmp.src_tracking = true;
@@ -255,6 +270,10 @@ glb_cmd_parse (int argc, char* argv[])
             glb_verbose = true;
             break;
         case CMD_OPT_VERSION:
+            printf ("%s v%s\n", PACKAGE, VERSION);
+            break;
+        case CMD_OPT_DAEMON:
+            tmp.daemonize = true;
         default:
             fprintf (stderr, "Option '%s' not supported yet. Ignoring.\n",
                      cmd_options[opt].name);
@@ -273,11 +292,6 @@ glb_cmd_parse (int argc, char* argv[])
     }
     inc_port = glb_socket_addr_get_port (&tmp.inc_addr);
 
-    // if control address was not specified
-    if (!glb_socket_addr_get_port (&tmp.ctrl_addr)) {
-        glb_socket_addr_init (&tmp.ctrl_addr, cmd_ctrl_addr_default,
-                              inc_port + 1);
-    }
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;
 
@@ -288,8 +302,11 @@ glb_cmd_parse (int argc, char* argv[])
     if (ret) {
         ret->inc_addr  = tmp.inc_addr;
         ret->ctrl_addr = tmp.ctrl_addr;
+        ret->ctrl_set  = tmp.ctrl_set;
+        ret->fifo_name = tmp.fifo_name;
         ret->n_threads = tmp.n_threads;
         ret->verbose   = tmp.verbose;
+        ret->daemonize = tmp.daemonize;
         ret->src_tracking = tmp.src_tracking;
     }
 

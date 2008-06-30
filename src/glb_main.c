@@ -10,6 +10,7 @@
 #include "glb_router.h"
 #include "glb_pool.h"
 #include "glb_listener.h"
+#include "glb_control.h"
 
 bool  glb_verbose = false;
 
@@ -19,6 +20,7 @@ int main (int argc, char* argv[])
     glb_router_t*   router;
     glb_pool_t*     pool;
     glb_listener_t* listener;
+    glb_ctrl_t*     ctrl;
 
     if (!cmd) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");
@@ -45,13 +47,23 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    while (1) {
-        char stats[1024];
+    if (cmd->ctrl_set) {
+        ctrl = glb_ctrl_create (router, cmd->fifo_name, &cmd->ctrl_addr);
+    } else {
+        ctrl = glb_ctrl_create (router, cmd->fifo_name, NULL);
+    }
+    if (!ctrl) {
+        fprintf (stderr, "Failed to create control thread. Exiting.\n");
+        exit (EXIT_FAILURE);
+    }
 
-        glb_router_print_stats (router, stats, 1024);
+    while (1) {
+        char stats[BUFSIZ];
+
+        glb_router_print_stats (router, stats, BUFSIZ);
         puts (stats);
 
-        glb_pool_print_stats (pool, stats, 1024);
+        glb_pool_print_stats (pool, stats, BUFSIZ);
         puts (stats);
 
         sleep (5);
