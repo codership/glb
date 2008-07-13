@@ -1,7 +1,53 @@
 # Copyright (C) 2007 Codership Oy <info@codership.com>
   
 glb is a simple TCP connection balancer made with scalabiloity and
-performance in mind. It was inspired by pen.
+performance in mind. It was inspired by pen, but unlike pen its
+functionality is limited only to balancing generic TCP connections.
+
+Features:
+ - list of backend servers is configurable in runtime.
+ - supports server "draining", i.e. does not allocate new connections to
+   server, but does not kill existing ones, waiting for them to end
+   gracefully.
+ - glb is multithreaded, so it can utilize multiple CPU cores. In fact even
+   on a single core CPU two threads may lower latencies a bit.
+
+COMMAND LINE OPTIONS:
+
+See output of the --help option.
+
+RUNTIME MANAGEMENT:
+
+To add/modify/delete backend server:
+send server specification in the form <IP address>:<port>:<weight> where
+weight is an integer to the daemon. Connections are distributed proportionally
+to the weight. Weight of 0 means drain the server. Negative weight means delete
+the server completely (all connections to that server are closed immediately).
+This works both on socket connection and on FIFO file.
+
+To see the stats:
+send "getstat" command to the daemon. This works only on socket connection
+since it implies response.
+
+Example (here glbd is listening at 127.0.0.1:4444):
+$ echo "192.168.0.1:3307:5" | nc -q 1 127.0.0.1 4444
+OK
+$ echo "192.168.0.2:3307:5" | nc -q 1 127.0.0.1 4444
+OK
+$ echo "getstat" | nc -q 1 127.0.0.1 4444
+Router:
+----------------------------------------------------
+   Address       : weight usage conns
+192.168.0.1:3307 :   5     5.00   0
+192.168.0.2:3307 :   5     5.00   0
+----------------------------------------------------
+Destinations: 2, total connections: 0 
+
+"usage" here is some dimensionless measure of how much destination is used.
+Ranges from weight (totally unused) to 0 (completely used)
+
+
+DISCLAIMER:
 
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY, to the extent permitted by law; without even the

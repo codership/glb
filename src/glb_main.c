@@ -7,6 +7,7 @@
 #include <unistd.h> // for sleep()
 
 #include "glb_cmd.h"
+#include "glb_log.h"
 #include "glb_router.h"
 #include "glb_pool.h"
 #include "glb_listener.h"
@@ -29,21 +30,26 @@ int main (int argc, char* argv[])
 
     glb_cmd_print (stdout, cmd);
 
+    if (glb_log_init (cmd->daemonize ? GLB_LOG_SYSLOG : GLB_LOG_PRINTF)) {
+        fprintf (stderr, "Failed to initialize logger. Aborting.\n");
+        exit (EXIT_FAILURE);
+    }
+
     router = glb_router_create (cmd->n_dst, cmd->dst);
     if (!router) {
-        fprintf (stderr, "Failed to create router. Exiting.\n");
+        glb_log_fatal ("Failed to create router. Exiting.\n");
         exit (EXIT_FAILURE);
     }
 
     pool = glb_pool_create (cmd->n_threads, router);
     if (!pool) {
-        fprintf (stderr, "Failed to create thread pool. Exiting.\n");
+        glb_log_fatal ("Failed to create thread pool. Exiting.\n");
         exit (EXIT_FAILURE);
     }
 
     listener = glb_listener_create (&cmd->inc_addr, router, pool);
     if (!listener) {
-        fprintf (stderr, "Failed to create connection listener. Exiting.\n");
+        glb_log_fatal ("Failed to create connection listener. Exiting.\n");
         exit (EXIT_FAILURE);
     }
 
@@ -53,11 +59,11 @@ int main (int argc, char* argv[])
         ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, NULL);
     }
     if (!ctrl) {
-        fprintf (stderr, "Failed to create control thread. Exiting.\n");
+        glb_log_fatal ("Failed to create control thread. Exiting.\n");
         exit (EXIT_FAILURE);
     }
 
-    while (1) {
+    while (!cmd->daemonize) {
         char stats[BUFSIZ];
 
         glb_router_print_stats (router, stats, BUFSIZ);

@@ -275,6 +275,7 @@ err:
 extern void
 glb_ctrl_destroy (glb_ctrl_t* ctrl)
 {
+    if (ctrl->fifo) close (ctrl->fifo);
     remove (ctrl->fifo_name);
     perror ("glb_ctrl_destroy() not implemented");
 }
