@@ -7,6 +7,8 @@
 #ifndef _glb_log_h_
 #define _glb_log_h_
 
+#include <stdlib.h>
+
 typedef enum glb_log_level
 {
     GLB_LOG_FATAL,

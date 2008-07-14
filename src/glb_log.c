@@ -26,7 +26,7 @@ glb_log (glb_log_level_t level,
     ssize_t len = 0;
 
     // just omit function name for now
-    len = snprintf (buf, buf_len, "%s: %d: ", file, line);
+    len = snprintf (buf, buf_len, "%s:%d: ", file, line);
     if (len < 0) abort();
 
     if (buf_len > (size_t)len) {
@@ -68,15 +68,16 @@ glb_log (glb_log_level_t level,
 
         switch (level)
         {
-        case GLB_LOG_FATAL:   lvl = "FATAL:   "; out = stderr; break;
-        case GLB_LOG_ERROR:   lvl = "ERROR:   "; out = stderr; break;
-        case GLB_LOG_WARNING: lvl = "WARNING: "; out = stderr; break;
-        case GLB_LOG_INFO:    lvl = "INFO:    "; break;
-        case GLB_LOG_DEBUG:   lvl = "DEBUG:   "; break;
-        default:              lvl = "UNKNOWN: "; break;
+        case GLB_LOG_FATAL:   lvl = "FATAL:  "; out = stderr; break;
+        case GLB_LOG_ERROR:   lvl = "ERROR:  "; out = stderr; break;
+        case GLB_LOG_WARNING: lvl = "WARNING:"; out = stderr; break;
+        case GLB_LOG_INFO:    lvl = "INFO:   "; break;
+        case GLB_LOG_DEBUG:   lvl = "DEBUG:  "; break;
+        default:              lvl = "UNKNOWN:"; break;
         }
 
-        fprintf (out, "%s%s", lvl, buf);
+        fprintf (out, "%s%s\n", lvl, buf);
+        return;
     }
     default:
         abort();

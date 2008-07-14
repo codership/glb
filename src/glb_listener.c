@@ -7,7 +7,10 @@
 #include <pthread.h>
 #include <assert.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
+#include "glb_log.h"
 #include "glb_listener.h"
 
 extern bool glb_verbose;
@@ -40,7 +43,8 @@ listener_thread (void* arg)
 
         ret = select (listener->sock + 1, &fds, NULL, NULL, NULL);
         if (ret < 0) {
-            perror ("error waiting for connections");
+            glb_log_error ("error waiting for connections: %d (%s)",
+                           errno, strerror (errno));
             FD_SET (listener->sock, &fds);
             goto err; //?
         }
@@ -51,20 +55,23 @@ listener_thread (void* arg)
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
         if (client_sock < 0) {
-            perror ("Listener: failed to accept connection");
+            glb_log_error ("Listener: failed to accept connection: %d (%s)",
+                           errno, strerror (errno));
             goto err;
         }
 
         server_sock = glb_router_connect (listener->router, &server);
         if (server_sock < 0) {
-            perror ("Listener: failed to connect to destination");
+            glb_log_error("Listener: failed to connect to destination: %d (%s)",
+                          errno, strerror(errno));
             goto err1;
         }
 
         ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
                                  &server);
         if (ret < 0) {
-            perror ("Listener: failed to add connection to pool");
+            glb_log_error ("Listener: failed to add connection to pool: "
+                           "%d (%s)", errno, strerror (errno));
             goto err2;
         }
 
@@ -97,12 +104,13 @@ glb_listener_create (glb_sockaddr_t* addr,
     int sock = glb_socket_create (addr);
 
     if (sock < 0) {
-        perror ("Failed to create listening socket");
+        glb_log_error ("Failed to create listening socket: %d (%s)",
+                       errno, strerror (errno));
         return NULL;
     }
 
     if (listen (sock, 10)) { // what should be the queue length?
-        perror ("listen() failed");
+        glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
         return NULL;
     }
 
@@ -113,7 +121,8 @@ glb_listener_create (glb_sockaddr_t* addr,
         ret->pool   = pool;
 
         if (pthread_create (&ret->thread, NULL, listener_thread, ret)) {
-            perror ("Failed to launch listen thread");
+            glb_log_error ("Failed to launch listener thread: %d (%s)",
+                           errno, strerror (errno));
             close (sock);
             free (ret);
             ret = NULL;
@@ -125,6 +134,6 @@ glb_listener_create (glb_sockaddr_t* addr,
 extern void
 glb_listener_destroy (glb_listener_t* listener)
 {
-    perror ("glb_listener_destroy() not implemented");
+    glb_log_error ("glb_listener_destroy() not implemented");
 }
 

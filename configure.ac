@@ -18,7 +18,7 @@ AC_ARG_ENABLE(debug,
 	      enable_debug="no")
 if test "$enable_debug" == "yes"
 then
-    CFLAGS="-g -O0 -fno-inline "
+    CFLAGS="-g -O1 -fno-inline "
 else
     CFLAGS=${CFLAGS:-" -O3 -mtune=i686 "}
     CFLAGS="$CFLAGS -DNDEBUG "

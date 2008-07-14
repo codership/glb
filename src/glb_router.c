@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <unistd.h> // for close()
 
+#include "glb_log.h"
 #include "glb_socket.h"
 #include "glb_router.h"
 
@@ -80,8 +81,9 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
     // not found in the list, add destination, but first check weight
     if (dst->weight < 0) {
-        fprintf (stderr, "WARNING: Command to remove inexisting destination: ");
-        glb_dst_print (stderr, dst);
+        char tmp[128];
+        glb_dst_print (tmp, 128, dst);
+        glb_log_warn ("Command to remove inexisting destination: %s", tmp);
         i = -EADDRNOTAVAIL;
         goto out;
     }
@@ -139,6 +141,12 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
     }
 
     return ret;
+}
+
+void
+glb_router_destroy (glb_router_t* router)
+{
+    router_cleanup (router);
 }
 
 // find a ready destination with minimal usage

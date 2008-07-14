@@ -22,6 +22,8 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "glb_log.h"
+#include "glb_signal.h"
 #include "glb_control.h"
 
 extern bool glb_verbose;
@@ -110,15 +112,16 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         glb_dst_t dst;
 
         if (glb_dst_parse (&dst, req) < 0) {
-            fprintf (stderr, "Ctrl: malformed change destination request: %s\n",
-                     req);
+            glb_log_info ("Ctrl: malformed change destination request: %s\n",
+                          req);
             ctrl_respond (ctrl, fd, "Error\n");
             return 0;
         }
 
         if (glb_router_change_dst (ctrl->router, &dst) < 0) {
-            fprintf (stderr, "Ctrl: failed to apply destination change: ");
-            glb_dst_print (stderr, &dst);
+            char tmp[128];
+            glb_dst_print (tmp, 128, &dst);
+            glb_log_info ("Ctrl: failed to apply destination change: %s", tmp);
             ctrl_respond (ctrl, fd, "Error\n");
             return 0;
         }
@@ -137,24 +140,26 @@ ctrl_thread (void* arg)
 {
     glb_ctrl_t* ctrl = arg;
 
-    while (1) {
+    while (!glb_terminate) {
         long            ret;
         int             client_sock;
         struct sockaddr client;
         socklen_t       client_size;
         fd_set          fds = ctrl->fds;
+        struct timeval  timeout = { 1, 0 };
 
-        ret = select (ctrl->fd_max + 1, &fds, NULL, NULL, NULL);
+        ret = select (ctrl->fd_max + 1, &fds, NULL, NULL, &timeout);
         if (ret < 0) {
             perror ("error waiting for connections");
             goto err; //?
         }
-        assert (1 <= ret);
+        else if (0 == ret) continue;
 
         if (ctrl->inet_sock > 0 && FD_ISSET (ctrl->inet_sock, &fds)) {
             client_sock = accept (ctrl->inet_sock, &client, &client_size);
             if (client_sock < 0) {
-                perror ("Ctrl: failed to accept connection");
+                glb_log_error ("Ctrl: failed to accept connection: %d (%s)",
+                               errno, strerror (errno));
                 goto err;
             }
 
@@ -190,7 +195,7 @@ glb_ctrl_create (glb_router_t*         router,
                  const glb_sockaddr_t* inet_addr)
 {
     glb_ctrl_t* ret = NULL;
-    int inet_sock = -1;
+    int inet_sock = 0;
     int fifo;
     const char* fifo_name;
 
@@ -199,39 +204,42 @@ glb_ctrl_create (glb_router_t*         router,
 
     fifo_name = strdup (name); // for future cleanup
     if (!fifo_name) {
-        perror ("Ctrl: strdup()");
+        glb_log_error ("Ctrl: strdup(): %d (%s)", errno, strerror (errno));
         return NULL;
     }
 
     if (mkfifo (fifo_name, S_IRUSR | S_IWUSR)) {
-        fprintf (stderr, "FIFO '%s' already exists. Check that no other "
-                 "glbd instance is running and delete it "
-                 "or specify another name with --fifo option\n", fifo_name);
+        glb_log_error ("FIFO '%s' already exists. Check that no other "
+                       "glbd instance is running and delete it "
+                       "or specify another name with --fifo option.",
+                       fifo_name);
         goto err;
     }
 
     fifo = open (fifo_name, O_RDWR);
     if (fifo < 0) {
-        perror ("Ctrl: failed to open FIFO file");
+        glb_log_error ("Ctrl: failed to open FIFO file: %d (%s)",
+                       errno, strerror (errno));
         goto err;
     }
 
     if (inet_addr) {
         inet_sock = glb_socket_create (inet_addr);
         if (inet_sock < 0) {
-            perror ("Ctrl: failed to create listening socket");
+            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
+                           errno, strerror (errno));
             goto err1;
         }
 
         if (listen (inet_sock, 10)) { // what should be the queue length?
-            perror ("Ctrl: listen() failed");
+            glb_log_error ("Ctrl: listen() failed: %d (%s)",
+                           errno, strerror (errno));
             goto err2;
         }
     }
 
     ret = calloc (1, sizeof (glb_ctrl_t));
     if (ret) {
-        pthread_t tmp;
         ret->router    = router;
         ret->pool      = pool;
         ret->fifo_name = fifo_name;
@@ -251,8 +259,8 @@ glb_ctrl_create (glb_router_t*         router,
         printf ("Ctrl: fd_max = %d\n", ret->fd_max);
         printf ("Ctrl: ctrl object: %p\n", ret);
 #endif
-        if (pthread_create (&tmp, NULL, ctrl_thread, ret)) {
-            perror ("Failed to launch ctrl thread");
+        if (pthread_create (&ret->thread, NULL, ctrl_thread, ret)) {
+            glb_log_error ("Failed to launch ctrl thread.");
             free (ret);
             goto err2;
         }
@@ -275,8 +283,11 @@ err:
 extern void
 glb_ctrl_destroy (glb_ctrl_t* ctrl)
 {
+    pthread_join (ctrl->thread, NULL);
     if (ctrl->fifo) close (ctrl->fifo);
+    if (ctrl->inet_sock) close (ctrl->inet_sock);
     remove (ctrl->fifo_name);
-    perror ("glb_ctrl_destroy() not implemented");
+    free ((char*)ctrl->fifo_name);
+    free (ctrl);
 }
 

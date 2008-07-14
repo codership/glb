@@ -527,6 +527,12 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
 extern void
 glb_pool_destroy (glb_pool_t* pool)
 {
+    long i;
+    for (i = 0; i < pool->n_pools; i++) {
+        pool_t* p = &pool->pool[i];
+        pthread_join (p->thread, NULL);
+    }
+    // TODO: proper resource deallocation
     fprintf (stderr, "glb_pool_destroy() not implemented yet!");
 }
 

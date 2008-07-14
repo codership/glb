@@ -41,10 +41,11 @@ glb_dst_is_equal (const glb_dst_t* d1, const glb_dst_t* d2)
 }
 
 static inline void
-glb_dst_print (FILE* out, const glb_dst_t* dst)
+glb_dst_print (char* buf, size_t buf_len, const glb_dst_t* dst)
 {
-    fprintf (out, "%s,\tw: %lu\n",
-             glb_socket_addr_to_string(&dst->addr), dst->weight);
+    snprintf (buf, buf_len, "%s,\tw: %lu",
+              glb_socket_addr_to_string(&dst->addr), dst->weight);
+    buf[buf_len - 1] = '\0';
 }
 
 #endif // _glb_dst_h_

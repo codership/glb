@@ -8,6 +8,8 @@
 
 #include "glb_cmd.h"
 #include "glb_log.h"
+#include "glb_signal.h"
+#include "glb_daemon.h"
 #include "glb_router.h"
 #include "glb_pool.h"
 #include "glb_listener.h"
@@ -30,26 +32,30 @@ int main (int argc, char* argv[])
 
     glb_cmd_print (stdout, cmd);
 
-    if (glb_log_init (cmd->daemonize ? GLB_LOG_SYSLOG : GLB_LOG_PRINTF)) {
+    if (glb_log_init (GLB_LOG_PRINTF)) {
         fprintf (stderr, "Failed to initialize logger. Aborting.\n");
         exit (EXIT_FAILURE);
     }
 
+    glb_signal_set_handler();
+
+    if (cmd->daemonize) glb_daemon();
+
     router = glb_router_create (cmd->n_dst, cmd->dst);
     if (!router) {
-        glb_log_fatal ("Failed to create router. Exiting.\n");
+        glb_log_fatal ("Failed to create router. Exiting.");
         exit (EXIT_FAILURE);
     }
 
     pool = glb_pool_create (cmd->n_threads, router);
     if (!pool) {
-        glb_log_fatal ("Failed to create thread pool. Exiting.\n");
+        glb_log_fatal ("Failed to create thread pool. Exiting.");
         exit (EXIT_FAILURE);
     }
 
     listener = glb_listener_create (&cmd->inc_addr, router, pool);
     if (!listener) {
-        glb_log_fatal ("Failed to create connection listener. Exiting.\n");
+        glb_log_fatal ("Failed to create connection listener. Exiting.");
         exit (EXIT_FAILURE);
     }
 
@@ -59,20 +65,35 @@ int main (int argc, char* argv[])
         ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, NULL);
     }
     if (!ctrl) {
-        glb_log_fatal ("Failed to create control thread. Exiting.\n");
+        glb_log_fatal ("Failed to create control thread. Exiting.");
         exit (EXIT_FAILURE);
     }
 
-    while (!cmd->daemonize) {
-        char stats[BUFSIZ];
+    if (!cmd->daemonize) {
+        glb_log_info ("Started.");
+    }
 
-        glb_router_print_stats (router, stats, BUFSIZ);
-        puts (stats);
+    while (!glb_terminate) {
 
-        glb_pool_print_stats (pool, stats, BUFSIZ);
-        puts (stats);
+        if (!cmd->daemonize) {
+            char stats[BUFSIZ];
+
+            glb_router_print_stats (router, stats, BUFSIZ);
+            puts (stats);
+
+            glb_pool_print_stats (pool, stats, BUFSIZ);
+            puts (stats);
+        }
 
         sleep (5);
+    }
+
+    // cleanup
+    glb_ctrl_destroy (ctrl); // removes FIFO file
+    // everything else is automatically closed/removed on program exit.
+
+    if (!cmd->daemonize) {
+        glb_log_info ("Exit.");
     }
 
     return 0;

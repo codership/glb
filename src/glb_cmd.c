@@ -18,6 +18,7 @@ extern char* optarg;
 #define OA optional_argument
 
 #include "../config.h" // for version
+#include "glb_log.h"
 #include "glb_cmd.h"
 #include "glb_socket.h"
 
@@ -101,14 +102,16 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
     fprintf (out, "Control address:  %s\n",
              cmd->ctrl_set ? glb_socket_addr_to_string (&cmd->ctrl_addr) :
              "none");
-    fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s\n",
+    fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s, "
+             "daemon: %s\n",
              cmd->n_threads, cmd->src_tracking ? "ON" : "OFF",
-             cmd->verbose ? "ON" : "OFF");
+             cmd->verbose ? "ON" : "OFF", cmd->daemonize ? "YES" : "NO");
     fprintf (out, "Destinations: %lu\n", (ulong)cmd->n_dst);
 
     for (i = 0; i < cmd->n_dst; i++) {
-        fprintf (out, "  %2lu: ", i);
-        glb_dst_print (out, &cmd->dst[i]);
+        char tmp[128];
+        glb_dst_print (tmp, 128, &cmd->dst[i]);
+        fprintf (out, "  %2lu: %s\n", i, tmp);
     }
 }
 
@@ -262,9 +265,6 @@ glb_cmd_parse (int argc, char* argv[])
             }
             if (tmp.n_threads<cmd_min_threads) tmp.n_threads = cmd_min_threads;
             break;
-        case CMD_OPT_SRC_TRACKING:
-            tmp.src_tracking = true;
-            break;
         case CMD_OPT_VERBOSE:
             tmp.verbose = true;
             glb_verbose = true;
@@ -274,9 +274,12 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_DAEMON:
             tmp.daemonize = true;
+            break;
+        case CMD_OPT_SRC_TRACKING:
+            tmp.src_tracking = true;
         default:
-            fprintf (stderr, "Option '%s' not supported yet. Ignoring.\n",
-                     cmd_options[opt].name);
+            glb_log_warn ("Option '%s'(%d) not supported yet. Ignoring.\n",
+                     cmd_options[opt].name, opt);
         }
     }
 
@@ -298,6 +301,8 @@ glb_cmd_parse (int argc, char* argv[])
     // parse destination list
     if (++optind < argc) dst_list = argv[optind];
     ret = cmd_parse_dst_list (dst_list, inc_port);
+
+    if (tmp.daemonize) tmp.verbose = false;
 
     if (ret) {
         ret->inc_addr  = tmp.inc_addr;
