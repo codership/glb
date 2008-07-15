@@ -53,13 +53,14 @@ $ echo "getstat" | nc -q 1 127.0.0.1 4444
 Router:
 ----------------------------------------------------
    Address       : weight usage conns
-192.168.0.1:3307 :   5     5.00   0
-192.168.0.2:3307 :   5     5.00   0
+192.168.0.1:3307 :   5     0.00   0
+192.168.0.2:3307 :   5     0.00   0
 ----------------------------------------------------
 Destinations: 2, total connections: 0 
 
-"usage" here is some dimensionless measure of how much destination is used.
-Ranges from weight (totally unused) to 0 (completely used)
+'usage' here is some dimensionless metric of how much destination is staffed
+with connections (relative to weight). Ranges from 0 (totally unused) to 1.0
+(very busy). Router tries to keep 'usage' equal on all destinations.
 
 
 ADDRESS CONVENTIONS:
