@@ -1,5 +1,15 @@
 # Copyright (C) 2007 Codership Oy <info@codership.com>
   
+DISCLAIMER:
+===========
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+See COPYING for license details.
+
+ABOUT:
+======
 glb is a simple TCP connection balancer made with scalabiloity and
 performance in mind. It was inspired by pen, but unlike pen its
 functionality is limited only to balancing generic TCP connections.
@@ -13,17 +23,22 @@ Features:
    on a single core CPU two threads may lower latencies a bit.
 
 COMMAND LINE OPTIONS:
-
+=====================
 See output of the --help option.
 
 RUNTIME MANAGEMENT:
+===================
+Runtime management can be done either through FIFO file, or network socket.
+By default network socket is not opened; address and port to listen at must
+be explicitely specified with -c option.
 
 To add/modify/delete backend server:
-send server specification in the form <IP address>:<port>:<weight> where
+send server specification in the form <IP address>:<port>[:weight] where
 weight is an integer to the daemon. Connections are distributed proportionally
-to the weight. Weight of 0 means drain the server. Negative weight means delete
-the server completely (all connections to that server are closed immediately).
-This works both on socket connection and on FIFO file.
+to the weight. Default weight is 1. Weight of 0 means drain the server.
+Negative weight means delete the server completely (all connections to that
+server are closed immediately). This works both on socket connection and on
+FIFO file.
 
 To see the stats:
 send "getstat" command to the daemon. This works only on socket connection
@@ -47,10 +62,13 @@ Destinations: 2, total connections: 0
 Ranges from weight (totally unused) to 0 (completely used)
 
 
-DISCLAIMER:
+ADDRESS CONVENTIONS:
+====================
+All network addresses are specified in the form IP|HOSTNAME:PORT:WEIGHT.
+Depending on the context some parts can be optional, in that case they can be
+omitted. For example address to listen for client connections can be specified
+either as HOSTNAME:PORT or just PORT. In the latter case glbd will listen for
+client connections on all interfaces. Backend servers can be specified as
+HOSTNAME1,HOSTNAME2,HOSTNAME3. In that case incoming port number will be used
+for PORT value and 1 will be used for WEIGHT value.
 
-This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
-implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-See COPYING for license details.

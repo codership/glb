@@ -14,27 +14,10 @@ glbd_SOURCES = \
 	glb_pool.c     \
 	glb_listener.c \
 	glb_control.c  \
-	glb_main.c
-
-#glbd_INCLUDES =     \
-#	
+	glb_main.c     \
+	*.h
 
 .PHONY: all clean
-
-#%.o: %.cc $(INCS)
-#	g++ $(CFLAGS) -c $<
-
-
-#$(BIN): $(OBJS)
-#	g++ -o $@ $(OBJS) $(LDFLAGS)
-
-#all: $(BIN)
-
-#clean:
-#	rm -rf *.o $(BIN)
-
-#TAGS: $(SRCS) $(INCS)
-#	etags *.cc *.h
 
 tags: TAGS
 
