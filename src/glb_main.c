@@ -39,7 +39,10 @@ int main (int argc, char* argv[])
 
     glb_signal_set_handler();
 
-    if (cmd->daemonize) glb_daemon();
+    if (cmd->daemonize) {
+        glb_daemon_start();
+        // at this point we're a child process
+    }
 
     router = glb_router_create (cmd->n_dst, cmd->dst);
     if (!router) {
@@ -69,7 +72,8 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    if (!cmd->daemonize) {
+    if (cmd->daemonize) {
+        glb_daemon_ok (); // Tell parent that daemon successfully started
         glb_log_info ("Started.");
     }
 
@@ -92,7 +96,7 @@ int main (int argc, char* argv[])
     glb_ctrl_destroy (ctrl); // removes FIFO file
     // everything else is automatically closed/removed on program exit.
 
-    if (!cmd->daemonize) {
+    if (cmd->daemonize) {
         glb_log_info ("Exit.");
     }
 

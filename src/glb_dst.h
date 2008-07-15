@@ -43,7 +43,7 @@ glb_dst_is_equal (const glb_dst_t* d1, const glb_dst_t* d2)
 static inline void
 glb_dst_print (char* buf, size_t buf_len, const glb_dst_t* dst)
 {
-    snprintf (buf, buf_len, "%s,\tw: %lu",
+    snprintf (buf, buf_len, "%s, w: %ld",
               glb_socket_addr_to_string(&dst->addr), dst->weight);
     buf[buf_len - 1] = '\0';
 }

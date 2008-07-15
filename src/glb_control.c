@@ -78,6 +78,7 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
     size_t  req_size = 0;
     ssize_t ret;
 
+    memset (req, '\0', BUFSIZ); // just in case
     do {
         ret = read (fd, req + req_size, BUFSIZ);
         if (ret > 0) req_size += ret;
@@ -94,7 +95,6 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
     assert (req_size > 0);
 
     // Cut any trailing crap (newlines, whitespace etc.)
-    req[BUFSIZ - 1] = '\0'; // just in case
     for (ret = strlen(req) - 1; ret >= 0; ret--) {
         if (!(isalnum(req[ret]) || ispunct(req[ret]))) {
             req[ret] = '\0';

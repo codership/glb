@@ -8,6 +8,9 @@
 #define _glb_daemon_h_
 
 extern void
-glb_daemon();
+glb_daemon_start();
+
+extern void
+glb_daemon_ok();
 
 #endif // _glb_daemon_h_

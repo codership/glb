@@ -19,7 +19,7 @@ signal_handler(int signum)
     case SIGCHLD:
         glb_log_fatal ("Child unexpectedly terminated.");
         exit (EXIT_FAILURE);
-    case SIGUSR1: // used by child to report OK
+    case GLB_SIGNAL_OK: // used by child to report OK
         exit (EXIT_SUCCESS);
     case SIGHUP:
     case SIGTERM:
@@ -38,7 +38,7 @@ signal_handler(int signum)
 void
 glb_signal_set_handler()
 {
-    signal (SIGUSR1, signal_handler);
+    signal (GLB_SIGNAL_OK, signal_handler);
     signal (SIGCHLD, signal_handler);
     signal (SIGHUP,  signal_handler);
     signal (SIGTERM, signal_handler);

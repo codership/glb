@@ -21,14 +21,17 @@
 #include <signal.h>
 
 #include "glb_log.h"
+#include "glb_signal.h"
 #include "glb_daemon.h"
 
 /* Change this to the user under which to run */
 #define RUN_AS_USER "daemon"
 
-void glb_daemon()
+#define CHILD_OK_TIMEOUT 5
+
+void glb_daemon_start()
 {
-    pid_t pid, sid, parent;
+    pid_t pid, sid;
 
     /* already a daemon */
     if (getppid() == 1) return;
@@ -37,7 +40,7 @@ void glb_daemon()
     if (getuid() == 0 || geteuid() == 0) {
         struct passwd *pw = getpwnam(RUN_AS_USER);
         if ( pw ) {
-            syslog(LOG_NOTICE, "setting user to " RUN_AS_USER);
+            glb_log_info ("Setting user to '%s'", RUN_AS_USER);
             setuid(pw->pw_uid);
         }
     }
@@ -45,24 +48,22 @@ void glb_daemon()
     /* Fork off the parent process */
     pid = fork();
     if (pid < 0) {
-        syslog(LOG_ERR, "unable to fork daemon, code=%d (%s)",
-                errno, strerror(errno));
+        glb_log_fatal ("Unable to fork daemon: %d (%s)",
+                       errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     /* If we got a good PID, then we can exit the parent process. */
     if (pid > 0) {
-        /* Wait for confirmation from the child via SIGUSR1, or
-           for two seconds to elapse (SIGALRM).  pause() should not return. */
-        alarm(2);
+        /* Wait for confirmation from the child via GLB_SIGNAL_OK, or
+           for SIGALRM.  If pause() returns - it means timeout. */
+        alarm(CHILD_OK_TIMEOUT);
         pause();
-
+        glb_log_fatal ("Timeout waiting for child process confirmation.");
         exit (EXIT_FAILURE);
     }
 
     /* At this point we are executing as the child process */
-    if (glb_log_init (GLB_LOG_SYSLOG)) exit (EXIT_FAILURE);
-    parent = getppid();
 
     /* Cancel certain signals */
 //    signal(SIGCHLD,SIG_DFL); /* A child process dies */
@@ -91,11 +92,20 @@ void glb_daemon()
         exit(EXIT_FAILURE);
     }
 
+    if (glb_log_init (GLB_LOG_SYSLOG)) exit (EXIT_FAILURE);
+
     /* Redirect standard files to /dev/null */
     freopen( "/dev/null", "r", stdin);
     freopen( "/dev/null", "w", stdout);
     freopen( "/dev/null", "w", stderr);
+}
 
-    /* Tell the parent process that we are A-okay */
-    kill(parent, SIGUSR1);
+void
+glb_daemon_ok ()
+{
+    pid_t parent;
+
+    /* Notify the parent process that we are A-okay */
+    parent = getppid();
+    kill(parent, GLB_SIGNAL_OK);
 }
