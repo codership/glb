@@ -10,7 +10,7 @@ See COPYING for license details.
 
 ABOUT:
 ======
-glb is a simple TCP connection balancer made with scalabiloity and
+glb is a simple TCP connection balancer made with scalability and
 performance in mind. It was inspired by pen, but unlike pen its
 functionality is limited only to balancing generic TCP connections.
 
@@ -30,7 +30,7 @@ RUNTIME MANAGEMENT:
 ===================
 Runtime management can be done either through FIFO file, or network socket.
 By default network socket is not opened; address and port to listen at must
-be explicitely specified with -c option.
+be explicitly specified with -c option.
 
 To add/modify/delete backend server:
 send server specification in the form <IP address>:<port>[:weight] where
