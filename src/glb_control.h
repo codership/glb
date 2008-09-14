@@ -16,7 +16,9 @@ typedef struct glb_ctrl glb_ctrl_t;
 /*!
  * Creates control thread
  * @param router
- * @param unix_name
+ * @param port
+ *        default destination port
+ * @param fifo_name
  *        unix socket name
  * @param inet_addr
  *        interface address for ctrl form another host, may be NULL
@@ -24,6 +26,7 @@ typedef struct glb_ctrl glb_ctrl_t;
 extern glb_ctrl_t*
 glb_ctrl_create (glb_router_t*         router,
                  glb_pool_t*           pool,
+                 uint16_t              port,
                  const char*           fifo_name,
                  const glb_sockaddr_t* inet_addr);
 

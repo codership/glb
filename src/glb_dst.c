@@ -21,13 +21,13 @@ static const long      dst_default_weight = 1;
 // parses addr:port:weight string, stores in dst
 // returns number of parsed fields or negative error code
 long
-glb_dst_parse (glb_dst_t* dst, const char* s)
+glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
 {
     const char* token;
     char*       endptr;
     char        addr_str[dst_ip_len_max + 1] = { 0, };
     ptrdiff_t   addr_len;
-    ulong       port = 0;
+    ulong       port = default_port;
     long        ret  = 0;
 
     dst->weight = dst_default_weight;
@@ -56,13 +56,12 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     port = strtoul (token, &endptr, 10);
     if (*endptr != dst_separator  &&
         *endptr != '\0') {
-        // port field doesn't consist only of numbers
-        perror ("1");
+        perror ("Port field doesn't consist only of numbers");
         return -EINVAL;
     }
     if (port > dst_port_max) {
         // value of 0 means no setting, don't check
-        perror ("2");
+        perror ("Port value exceeds maximum port number");
         return -EINVAL;
     }
 
@@ -75,15 +74,14 @@ glb_dst_parse (glb_dst_t* dst, const char* s)
     token = endptr + 1;
     dst->weight = strtoul (token, &endptr, 10);
     if (*endptr != '\0') {
-        // weight field doesn't consist only of numbers
-        perror ("3");
+        perror ("Weight field doesn't consist only of numbers");
         return -EINVAL;
     }
     ret = 3;
 
 end:
     if (glb_socket_addr_init (&dst->addr, addr_str, port)) {
-        perror ("4");
+        perror ("glb_socket_addr_init()");
         return -EINVAL;
     }
 

@@ -26,12 +26,18 @@ typedef struct glb_dst
  * @return number of fields parsed or negative error code
  */
 extern long
-glb_dst_parse (glb_dst_t* dst, const char* str);
+glb_dst_parse (glb_dst_t* dst, const char* str, uint16_t default_port);
 
 static inline void
 glb_dst_set_port (glb_dst_t* dst, uint16_t port)
 {
     glb_socket_addr_set_port (&dst->addr, port);
+}
+
+static inline void
+glb_dst_set_weight (glb_dst_t* dst, long weight)
+{
+    dst->weight = weight;
 }
 
 static inline bool

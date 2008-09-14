@@ -24,6 +24,7 @@ int main (int argc, char* argv[])
     glb_pool_t*     pool;
     glb_listener_t* listener;
     glb_ctrl_t*     ctrl;
+    uint16_t        inc_port;
 
     if (!cmd) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");
@@ -62,10 +63,12 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
+    inc_port = glb_socket_addr_get_port (&cmd->inc_addr);
     if (cmd->ctrl_set) {
-        ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, &cmd->ctrl_addr);
+        ctrl = glb_ctrl_create (router, pool, inc_port, cmd->fifo_name,
+                                &cmd->ctrl_addr);
     } else {
-        ctrl = glb_ctrl_create (router, pool, cmd->fifo_name, NULL);
+        ctrl = glb_ctrl_create (router, pool, inc_port, cmd->fifo_name, NULL);
     }
     if (!ctrl) {
         glb_log_fatal ("Failed to create control thread. Exiting.");

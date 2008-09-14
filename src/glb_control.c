@@ -40,6 +40,7 @@ struct glb_ctrl
     glb_pool_t*   pool;
     int           fd_max;
     fd_set        fds;
+    uint16_t      default_port;
 };
 
 static void
@@ -111,7 +112,7 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
     else { // change destiantion request
         glb_dst_t dst;
 
-        if (glb_dst_parse (&dst, req) < 0) {
+        if (glb_dst_parse (&dst, req, ctrl->default_port) < 0) {
             glb_log_info ("Ctrl: malformed change destination request: %s\n",
                           req);
             ctrl_respond (ctrl, fd, "Error\n");
@@ -191,6 +192,7 @@ ctrl_thread (void* arg)
 glb_ctrl_t*
 glb_ctrl_create (glb_router_t*         router,
                  glb_pool_t*           pool,
+                 uint16_t              port,
                  const char*           name,
                  const glb_sockaddr_t* inet_addr)
 {
@@ -240,12 +242,13 @@ glb_ctrl_create (glb_router_t*         router,
 
     ret = calloc (1, sizeof (glb_ctrl_t));
     if (ret) {
-        ret->router    = router;
-        ret->pool      = pool;
-        ret->fifo_name = fifo_name;
-        ret->fifo      = fifo;
-        ret->inet_sock = inet_sock;
-        ret->fd_max    = fifo > inet_sock ? fifo : inet_sock;
+        ret->router       = router;
+        ret->pool         = pool;
+        ret->fifo_name    = fifo_name;
+        ret->fifo         = fifo;
+        ret->inet_sock    = inet_sock;
+        ret->fd_max       = fifo > inet_sock ? fifo : inet_sock;
+        ret->default_port = port;
 
         FD_ZERO (&ret->fds);
         FD_SET  (ret->fifo, &ret->fds);

@@ -2,4 +2,3 @@
  - Doesn't handle SIGPIPE
  - splice() refuses to read from socket returning with EINVAL.
    Apparently special kernel support is needed: tcp_splice_read()
- 

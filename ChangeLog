@@ -1,0 +1,6 @@
+2008-09-14 alex
+- Fixed a problem with default port when adding destinations during runtime.
+- Changed from comma-separated destination list to space-separated
+  destination list, hence bumped minor version.
+2008-07-15 alex
+- Initial release.

@@ -183,9 +183,9 @@ cmd_parse_dst_list (const char* dst_list[],
 
             strncpy (dst_str, dst_list[i], dst_len);
 
-            switch (glb_dst_parse (&ret->dst[i], dst_str)) {
+            switch (glb_dst_parse (&ret->dst[i], dst_str, default_port)) {
             case 1:
-                glb_dst_set_port (&ret->dst[i], default_port);
+                // default port is assigned glb_dst_parse()
             case 2:
                 // default weight is assigned glb_dst_parse()
             case 3:
