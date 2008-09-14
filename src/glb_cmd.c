@@ -85,8 +85,8 @@ glb_cmd_help (FILE* out, const char* progname)
              "  [IP:]PORT               "
              "where to listen for incoming TCP connections\n");
     fprintf (out, "DESTINATION_LIST:\n"
-             "  [H1[:P1[:W1]]][,H2[:P2[:W2]]]... "
-             " - a comma separated list of destinations\n"
+             "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
+             " - a space-separated list of destinations\n"
              "                          in the form address:port:weight\n");
     exit (EXIT_FAILURE);
 }
@@ -159,42 +159,29 @@ cmd_parse_addr (glb_sockaddr_t* addr,
 
 // parses comma separated list of destinations, reallocates and fills conf
 static glb_cmd_t*
-cmd_parse_dst_list (const char* dst_list,
+cmd_parse_dst_list (const char* dst_list[],
+                    size_t      n_dst,
                     ulong       default_port)
 {
     glb_cmd_t*   ret   = NULL;
-    const char*  next  = dst_list;
-    size_t       n_dst = 0, i;
+    size_t       i;
     const size_t max_dst_len = 256; // addr:port:weight\0
     char         dst_str[max_dst_len + 1] = { 0, };
     ptrdiff_t    dst_len;
-
-    // find out how many destinations
-    while (next) {
-        n_dst++;
-        next = strchr (next, cmd_list_separator);
-        if (next) next++; // skip separator
-    }
 
     ret = calloc (sizeof(*ret) + n_dst * sizeof(glb_dst_t), 1);
     if (ret) {
         for (i = 0; i < n_dst; i++) {
 
-            if ((next = strchr (dst_list, cmd_list_separator))) {
-                dst_len = next - dst_list;
-            }
-            else {
-                dst_len = strlen (dst_list);
-            }
+            dst_len = strlen (dst_list[i]);
 
             if (dst_len > max_dst_len) {
-                fprintf (stderr, "Destination spec too long: %s\n", dst_list);
+                fprintf (stderr, "Destination spec too long: %s\n",dst_list[i]);
                 free (ret);
                 return NULL;
             }
 
-            strncpy (dst_str, dst_list, dst_len);
-            dst_list = next + 1;
+            strncpy (dst_str, dst_list[i], dst_len);
 
             switch (glb_dst_parse (&ret->dst[i], dst_str)) {
             case 1:
@@ -223,13 +210,13 @@ static const ulong cmd_min_threads          = 1;
 glb_cmd_t*
 glb_cmd_parse (int argc, char* argv[])
 {
-    glb_cmd_t   tmp = {{ 0 }}; // initialize to 0
-    glb_cmd_t*  ret = NULL;
-    const char* dst_list = NULL;
-    long        opt = 0;
-    int         opt_idx = 0;
-    char*       endptr;
-    uint16_t    inc_port;
+    glb_cmd_t    tmp = {{ 0 }}; // initialize to 0
+    glb_cmd_t*   ret = NULL;
+    const char** dst_list = NULL;
+    long         opt = 0;
+    int          opt_idx = 0;
+    char*        endptr;
+    uint16_t     inc_port;
 
     // Set defaults
     tmp.ctrl_set     = false;
@@ -299,8 +286,9 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp.n_threads) tmp.n_threads = 1;
 
     // parse destination list
-    if (++optind < argc) dst_list = argv[optind];
-    ret = cmd_parse_dst_list (dst_list, inc_port);
+    if (++optind < argc) dst_list = (const char**) &(argv[optind]);
+    assert (argc >= optind);
+    ret = cmd_parse_dst_list (dst_list, argc - optind, inc_port);
 
     if (tmp.daemonize) tmp.verbose = false;
 
