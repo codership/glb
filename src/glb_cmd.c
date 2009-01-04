@@ -165,25 +165,12 @@ cmd_parse_dst_list (const char* dst_list[],
 {
     glb_cmd_t*   ret   = NULL;
     size_t       i;
-    const size_t max_dst_len = 256; // addr:port:weight\0
-    char         dst_str[max_dst_len + 1] = { 0, };
-    ptrdiff_t    dst_len;
 
     ret = calloc (sizeof(*ret) + n_dst * sizeof(glb_dst_t), 1);
     if (ret) {
         for (i = 0; i < n_dst; i++) {
-
-            dst_len = strlen (dst_list[i]);
-
-            if (dst_len > max_dst_len) {
-                fprintf (stderr, "Destination spec too long: %s\n",dst_list[i]);
-                free (ret);
-                return NULL;
-            }
-
-            strncpy (dst_str, dst_list[i], dst_len);
-
-            switch (glb_dst_parse (&ret->dst[i], dst_str, default_port)) {
+        
+            switch (glb_dst_parse (&ret->dst[i], dst_list[i], default_port)) {
             case 1:
                 // default port is assigned glb_dst_parse()
             case 2:
@@ -191,7 +178,7 @@ cmd_parse_dst_list (const char* dst_list[],
             case 3:
                 break;
             default: // error parsing destination
-                fprintf (stderr, "Invalid destination spec: %s\n", dst_str);
+                fprintf (stderr, "Invalid destination spec: %s\n", dst_list[i]);
                 free (ret);
                 return NULL;
             }
