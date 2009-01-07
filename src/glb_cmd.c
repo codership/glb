@@ -157,7 +157,7 @@ cmd_parse_addr (glb_sockaddr_t* addr,
     return glb_socket_addr_init (addr, addr_str, port);
 }
 
-// parses comma separated list of destinations, reallocates and fills conf
+// parses array list of destinations
 static glb_cmd_t*
 cmd_parse_dst_list (const char* dst_list[],
                     size_t      n_dst,
