@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h> // for close()
+#include <time.h>
 
 #include "glb_log.h"
 #include "glb_socket.h"
@@ -21,9 +22,9 @@ typedef struct router_dst
 {
     glb_dst_t dst;
     double    weight;
-    long      conns; // how many connections use this destination
-    double    usage; // usage measure: weight/(conns + 1) - bigger wins
-    bool      ready; // if destinaiton accepts connecitons
+    long      conns;  // how many connections use this destination
+    double    usage;  // usage measure: weight/(conns + 1) - bigger wins
+    time_t    failed; // last time connection to this destination failed
 } router_dst_t;
 
 struct glb_router
@@ -101,7 +102,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     d->weight = dst->weight;
     d->conns  = 0;
     d->usage  = d->weight / (d->conns + 1);
-    d->ready  = true;
+    d->failed = 0;
 
 out:
     assert (router->n_dst >= 0);
@@ -149,6 +150,9 @@ glb_router_destroy (glb_router_t* router)
     router_cleanup (router);
 }
 
+// seconds (should be > 1 due to time_t precision)
+static const double DST_RETRY_INTERVAL = 2.0;
+
 // find a ready destination with minimal usage
 static router_dst_t*
 router_choose_dst (glb_router_t* router)
@@ -158,10 +162,13 @@ router_choose_dst (glb_router_t* router)
     if (router->n_dst > 0) {
         double max_usage = 0.0;
         int    i;
+        time_t now = time(NULL);
 
         for (i = 0; i < router->n_dst; i++) {
             router_dst_t* d = &router->dst[i];
-            if (d->ready && d->usage > max_usage) {
+
+            if (d->usage > max_usage &&
+                difftime (now, d->failed) > DST_RETRY_INTERVAL) {
                 ret = d;
                 max_usage = d->usage;
             }
@@ -180,11 +187,10 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
     while ((dst = router_choose_dst (router))) {
         if (connect (sock, (struct sockaddr*)&dst->dst.addr,
                      sizeof (dst->dst.addr))) {
-            // connect failed, mark destination bad
+            // connect failed, update destination failed mark
             fprintf (stderr, "Router: failed to connect to %s\n",
                      glb_socket_addr_to_string (&dst->dst.addr));
-            dst->ready = false;
-            return -1;
+            dst->failed = time(NULL);
         }
         else {
             // success, update stats
@@ -196,17 +202,6 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
     }
 
     return -1;
-}
-
-// reset ready flag on destinations
-// (TODO: associate a timestamp with a flag, don't reset right away)
-static void
-router_reset_dst (glb_router_t* router)
-{
-    long i;
-    for (i = 0; i < router->n_dst; i++) {
-        router->dst[i].ready = true;
-    }
 }
 
 // returns error code
@@ -229,7 +224,6 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
 
     // attmept to connect until we run out of destinations
     ret = router_connect_dst (router, sock, dst_addr);
-    router_reset_dst(router);
 
     // avoid socket leak
     if (ret < 0) {

@@ -1,3 +1,6 @@
+2009-02-10 alex
+- Fixed non-workign destination failover, failed destinations are retried
+  every 2 seconds. Version 0.6.2
 2009-01-07 alex
 - Fixed silly destination list parsing bug. Version 0.6.1.
 2008-09-14 alex
