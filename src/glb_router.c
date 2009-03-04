@@ -183,13 +183,16 @@ static int
 router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 {
     router_dst_t* dst;
+    int error = 1;
+
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router))) {
         if (connect (sock, (struct sockaddr*)&dst->dst.addr,
                      sizeof (dst->dst.addr))) {
+	    error = errno;
             // connect failed, update destination failed mark
-            fprintf (stderr, "Router: failed to connect to %s\n",
-                     glb_socket_addr_to_string (&dst->dst.addr));
+            fprintf (stderr, "Router: failed to connect to %s: %s\n",
+                     glb_socket_addr_to_string (&dst->dst.addr), strerror(error));
             dst->failed = time(NULL);
         }
         else {
@@ -201,7 +204,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
         }
     }
 
-    return -1;
+    return -error; // all attempts failed, return last errno
 }
 
 // returns error code
@@ -214,7 +217,7 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
     sock = glb_socket_create (&router->sock_out);
     if (sock < 0) {
         perror ("Router: glb_socket_create");
-        goto out;
+        return sock;
     }
 
     if (pthread_mutex_lock (&router->lock)) {
@@ -232,8 +235,8 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
         sock = ret;
     }
 
-out:
     pthread_mutex_unlock (&router->lock);
+
     return sock;
 }
 
