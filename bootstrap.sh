@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# This script bootraps the build process for the freshly checked
+# This script bootstraps the build process for the freshly checked
 # working copy
 
 LOG=$0.log
@@ -8,7 +8,7 @@ LOG=$0.log
 run_prog()
 {
     echo -n "Running $1... "
-    $* 1>$LOG 2>&1 && echo "Ok" && rm -f $LOG || echo "Failed. See $LOG"
+    $* 1>$LOG 2>&1 && echo "Ok" && rm -f $LOG || (echo "Failed. See $LOG"; exit 1)
 }
 
 # Make aclocal to search for m4 macros in /usr/local
@@ -17,7 +17,7 @@ then
     ACLOCAL_OPTS=" -I /usr/local/share/aclocal "
 fi
 
-if test -x "$(which autoreconf)"
+if test -x $(which autoreconf)
 then
     export ACLOCAL="aclocal $ACLOCAL_OPTS"
     run_prog autoreconf -fisv

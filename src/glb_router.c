@@ -295,7 +295,8 @@ glb_router_print_stats (glb_router_t* router, char* buf, size_t buf_len)
 
         len += snprintf (buf + len, buf_len - len, "%s : %6ld %9.3f %6ld\n",
                          glb_socket_addr_to_string(&d->dst.addr),
-                         d->dst.weight, 1.0 - (d->usage/d->weight), d->conns);
+                         d->dst.weight, 1.0 - (2*d->usage / (d->weight + 1)),
+			 d->conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';
             return (len - 1);
