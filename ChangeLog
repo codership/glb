@@ -3,7 +3,7 @@
   (unused) to 1.0 (overloaded). Weight 0.0 automatically means usage 1.0,
   before that it was 'nan'. Version 0.6.3.
 2009-02-10 alex
-- Fixed non-workign destination failover, failed destinations are retried
+- Fixed non-working destination failover, failed destinations are retried
   every 2 seconds. Version 0.6.2.
 2009-01-07 alex
 - Fixed silly destination list parsing bug. Version 0.6.1.
