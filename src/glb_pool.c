@@ -4,8 +4,8 @@
  * $Id$
  */
 
-#include <stdlib.h>
-#include <sys/select.h> // for select() and FD_SET
+//d#include <stdlib.h>
+//d#include <sys/select.h> // for select() and FD_SET
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,10 +15,23 @@
 #include <assert.h>
 #include <sys/time.h>
 
+#ifndef USE_EPOLL
+    #ifndef USE_POLL
+        #error "Neither USE_POLL nor USE_EPOLL defined!"
+    #else
+        #include <poll.h>
+        typedef struct pollfd pollfd_t;
+    #endif
+#else
+    #include <sys/epoll.h>
+    typedef struct epoll_event pollfd_t;
+#endif
+
 #ifdef GLB_USE_SPLICE
 #include <fcntl.h>
 #endif
 
+#include "glb_log.h"
 #include "glb_pool.h"
 
 extern bool glb_verbose;
@@ -39,23 +52,27 @@ typedef struct pool_ctl
 
 typedef struct pool_stats
 {
-    size_t recv_bytes;
-    size_t n_recv;
-    size_t send_bytes;
-    size_t n_send;
-    size_t sel_reads;
-    size_t sel_writes;
-    size_t n_select;
+    ulong recv_bytes;
+    ulong n_recv;
+    ulong send_bytes;
+    ulong n_send;
+    ulong conns_opened;
+    ulong conns_closed;
+    ulong sel_reads;
+    ulong sel_writes;
+    ulong n_select;
 } pool_stats_t;
 
 #ifdef GLB_POOL_STATS
-static pool_stats_t zero_stats = { 0, };
+static const pool_stats_t zero_stats = { 0, };
 #endif
 
 typedef struct pool_conn_end
 {
     bool            inc;      // to differentiate between the ends
     int             sock;     // fd of connection
+    int             fds_idx;  // index in the file descriptor set (for poll())
+    uint32_t        events;   // events waited by descriptor
     size_t          sent;
     size_t          total;
     glb_sockaddr_t  dst_addr; // destinaiton id
@@ -64,6 +81,9 @@ typedef struct pool_conn_end
 #endif
     uint8_t         buf[];    // has pool_buf_size
 } pool_conn_end_t;
+
+#define POOL_MAX_FD (1 << 16) // highest possible file descriptor + 1
+                              // only affects the map size
 
 // We want to allocate memory for both ends in one malloc() call and have it
 // nicely aligned. This is presumably a page multiple and
@@ -77,18 +97,21 @@ typedef struct pool
     pthread_t       thread;
     pthread_mutex_t lock;
     pthread_cond_t  cond;
-    int             ctl_recv; // receive commands - pool thread
-    int             ctl_send; // send commands to pool - other function
+    int             ctl_recv; // fd to receive commands in pool thread
+    int             ctl_send; // fd to send commands to pool - other function
     volatile ulong  n_conns;  // how many connecitons this pool serves
-    fd_set          fds_read;
-    fd_set          fds_write;
+#ifdef USE_EPOLL
+    int             epoll_fd;
+#endif
+    pollfd_t*       pollfds;
+    size_t          pollfds_len;
     int             fd_max;
-    int             fd_min;
+//d    int             fd_min;
     glb_router_t*   router;
 #ifdef GLB_POOL_STATS
     volatile pool_stats_t stats;
 #endif
-    pool_conn_end_t* route_map[FD_SETSIZE]; // looking for connection ctx by fd
+    pool_conn_end_t* route_map[ POOL_MAX_FD ]; // connection ctx look-up by fd
 } pool_t;
 
 struct glb_pool
@@ -99,25 +122,160 @@ struct glb_pool
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
+typedef enum pool_fd_ops
+{
+#ifdef USE_EPOLL
+    POOL_FD_READ  = EPOLLIN,
+    POOL_FD_WRITE = EPOLLOUT,
+#else // POLL
+    POOL_FD_READ  = POLLIN,
+    POOL_FD_WRITE = POLLOUT,
+#endif // POLL
+    POOL_FD_RW    = POOL_FD_READ | POOL_FD_WRITE
+} pool_fd_ops_t;
+
+//#define FD_SETSIZE 1024; // leater get it from select.h
+
+static const pollfd_t zero_pollfd = { 0, };
+
+/*!
+ * @return negative error code or the index of file descriptor in the set
+ */
+static inline long
+pool_fds_add (pool_t* pool, int fd, pool_fd_ops_t events)
+{
+    int ret;
+
+    assert (pool->fd_max <= pool->pollfds_len);
+
+    if (pool->fd_max == pool->pollfds_len) { // allocate more memory
+        void*  tmp;
+        size_t tmp_len = pool->pollfds_len + FD_SETSIZE;
+
+        tmp = realloc (pool->pollfds, tmp_len * sizeof(pollfd_t));
+        if (NULL == tmp) {
+            glb_log_fatal ("Failed to (re)allocate %d pollfds: %d (%s)",
+                           tmp_len, ENOMEM, strerror(ENOMEM));
+            return -ENOMEM;
+        }
+
+        memset (((pollfd_t*)tmp) + pool->fd_max, 0,
+                (tmp_len - pool->fd_max) * sizeof(pollfd_t));
+
+        pool->pollfds = tmp;
+        pool->pollfds_len = tmp_len;        
+    }
+
+#ifdef USE_EPOLL
+    struct epoll_event add_event = { .events = events, { .fd = fd }};
+
+    ret = epoll_ctl (pool->epoll_fd, EPOLL_CTL_ADD, fd, &add_event);
+    if (ret) {
+        glb_log_error ("epoll_ctl (%d, EPOLL_CTL_ADD, %d, %p) failed: %d (%s)",
+                       pool->epoll_fd, fd, &add_event, errno,
+                       strerror (errno));
+        return -errno;
+    }
+#else // POLL
+    pool->pollfds[pool->fd_max].fd = fd;        
+    pool->pollfds[pool->fd_max].events = events;
+#endif // POLL
+
+    ret = pool->fd_max;
+
+    pool->fd_max++; // track how many descriptors are there
+
+    return ret;
+}
+
+// returns corresponding pool_conn_end_t*
+static inline pool_conn_end_t*
+pool_conn_end_by_fd (pool_t* pool, int fd)
+{
+    // map point to the other end, but that's enough
+    register pool_conn_end_t* other_end = pool->route_map[fd];
+    if (other_end->inc) {
+        return other_end + 1;
+    } else {
+        return other_end - 1;
+    }
+}
+
+// remove file descriptor from file descriptor set
+static inline long
+pool_fds_del (pool_t* pool, pool_conn_end_t* end)
+{
+#ifdef USE_EPOLL
+    long ret = epoll_ctl (pool->epoll_fd, EPOLL_CTL_DEL, end->sock, NULL);
+    if (ret) {
+        glb_log_error ("epoll_ctl (%d, EPOLL_CTL_DEL, %d, %p) failed: %d (%s)",
+                       pool->epoll_fd, end->sock, NULL,
+                       errno, strerror (errno));
+        return -errno;
+    }
+#else // POLL
+    assert (end->fds_idx < pool->fd_max);
+
+    /*
+     * pay attention here: the last pollfd that we're moving may have not been
+     * checked yet
+     */
+
+    // copy the last pollfd in place of the deleted
+    pool->pollfds[end->fds_idx] = pool->pollfds[pool->fd_max - 1];
+    // from this pollfd find its fd and from route_map by fd find its
+    // pool_coon_end struct and in that struct update fds_idx to point at
+    // a new position.
+    pool_conn_end_by_fd(pool, pool->pollfds[end->fds_idx].fd)->fds_idx =
+        end->fds_idx;
+    // zero-up the last pollfd
+    pool->pollfds[pool->fd_max - 1] = zero_pollfd;
+#endif // POLL
+    pool->fd_max--;
+    
+    return 0;
+}
+
+static inline void
+pool_fds_set_events (pool_t* pool, pool_conn_end_t* end)
+{
+#ifdef USE_EPOLL
+    struct epoll_event event = { .events = end->events, .data = { 0, } };
+    int ret;
+    ret = epoll_ctl (pool->epoll_fd, EPOLL_CTL_MOD, end->sock, &event);
+    assert (0 == ret);
+#else // POLL
+    pool->pollfds[end->fds_idx].events = end->events;
+#endif // POLL
+}
+
+static inline long
+pool_fds_wait (pool_t* pool)
+{
+#ifdef USE_EPOLL
+    return epoll_wait (pool->epoll_fd, pool->pollfds, pool->fd_max, -1); 
+#else // POLL
+    return poll (pool->pollfds, pool->fd_max, -1);
+#endif // POLL
+}
+
 // performs necessary magic (adds end-to-end mapping, alters fd_max and fd_min)
 // when new file descriptor is added to fd_set
 static inline void
 pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
 {
-    assert (end1->sock < FD_SETSIZE);
-    assert (NULL == pool->route_map[end1->sock]);
+    end1->fds_idx = pool_fds_add (pool, end1->sock, POOL_FD_READ);
+    if (end1->fds_idx < 0) abort();
+    end1->events = POOL_FD_READ;
     pool->route_map[end1->sock] = end2;
-    if (end1->sock > pool->fd_max) pool->fd_max = end1->sock;
-    if (end1->sock < pool->fd_min) pool->fd_min = end1->sock;
-    FD_SET (end1->sock, &pool->fds_read);
 }
 
 // removing traces of connection end - reverse to what pool_set_conn_end() did
 static inline void
-pool_reset_conn_end (pool_t* pool, int fd)
+pool_reset_conn_end (pool_t* pool, pool_conn_end_t* end)
 {
+#if 0 //d
     int i;
-
     FD_CLR (fd, &pool->fds_read);
     FD_CLR (fd, &pool->fds_write);
     pool->route_map[fd] = NULL;
@@ -136,8 +294,10 @@ pool_reset_conn_end (pool_t* pool, int fd)
         }
         pool->fd_min = i;
     }
-
-    close (fd);
+#endif
+    pool_fds_del (pool, end);
+    close (end->sock);
+    pool->route_map[end->sock] = NULL;
 }
 
 static void
@@ -163,16 +323,16 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     close (src->splice[0]); close (src->splice[1]);
 #endif
 
+    pool_reset_conn_end (pool, src);
+    pool_reset_conn_end (pool, dst);
+
     if (dst->inc) {
         free (dst); // frees both ends
     }
     else {
         assert (src->inc);
-        free (src);
+        free (src); // frees both ends
     }
-
-    pool_reset_conn_end (pool, src_fd);
-    pool_reset_conn_end (pool, dst_fd);
 }
 
 static void
@@ -197,30 +357,46 @@ pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
 {
     const glb_sockaddr_t* dst = ctl->data;
     int fd;
+    int count = pool->fd_max - 1; // ctl_recv is not in route_map
 
-    for (fd = pool->fd_min; fd <= pool->fd_max; fd++) {
+    for (fd = 0; count; fd++) {
         pool_conn_end_t* end = pool->route_map[fd];
 
-        if (end && glb_socket_addr_is_equal(&end->dst_addr, dst)) {
-            // remove conn, but don't try to notify router 'cause it's already
-            // dropped this destination
-            pool_remove_conn (pool, fd, false);
+        assert (fd < POOL_MAX_FD);
+
+        if (end) {
+            count--;
+            if (glb_socket_addr_is_equal(&end->dst_addr, dst)) {
+                // remove conn, but don't try to notify router 'cause it's
+                // already
+                // dropped this destination
+                pool_remove_conn (pool, fd, false);
+                count--; // 1 connection means 2 file descriptors
+            }
         }
     }
 }
 
 static long
-pool_handle_ctl (pool_t* pool, pool_ctl_t* ctl)
+pool_handle_ctl (pool_t* pool)
 {
-    switch (ctl->code) {
+    pool_ctl_t ctl;
+    long       ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
+
+    if (sizeof(ctl) != ret) { // incomplete ctl read, should neve happen
+        perror ("Pool: incomplete read from ctl");
+        abort();
+    }
+
+    switch (ctl.code) {
     case POOL_CTL_ADD_CONN:
-        pool_handle_add_conn (pool, ctl);
+        pool_handle_add_conn (pool, &ctl);
         break;
     case POOL_CTL_DROP_DST:
-        pool_handle_drop_dst (pool, ctl);
+        pool_handle_drop_dst (pool, &ctl);
         break;
     default: // nothing else is implemented
-        fprintf (stderr, "Unsupported CTL: %d\n", ctl->code);
+        glb_log_warn ("Unsupported CTL: %d\n", ctl.code);
     }
 
     // Notify ctl sender
@@ -235,6 +411,7 @@ static inline ssize_t
 pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
 {
     ssize_t ret;
+    uint32_t dst_events = dst->events;
 
 #ifndef GLB_USE_SPLICE
     ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
@@ -249,42 +426,51 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
         pool->stats.send_bytes += ret;
 #endif
         dst->sent += ret;
-        if (dst->sent == dst->total) { // all data sent, reset pointers
+        if (dst->sent == dst->total) {    // all data sent, reset pointers
             dst->sent =  dst->total = 0;
-            FD_CLR (dst->sock, &pool->fds_write);
+            dst_events ^= POOL_FD_WRITE;      // clear WRITE flag
         }
         else {
 //            perror ("Pool: incomplete send");
-            FD_SET (dst->sock, &pool->fds_write);
+            dst_events |= POOL_FD_WRITE;      // set WRITE flag
         }
+
         if (reset_fds_read && (dst->total < pool_buf_size)) {
-            // some space exists in the buffer,
-            // reestablish src_fd in pool->fds_read
-            int src_sock = pool->route_map[dst->sock]->sock;
-            FD_SET (src_sock, &pool->fds_read);
+            // some space exists in the buffer, reestablish READ flag in src
+            pool_conn_end_t* src = pool->route_map[dst->sock];
+            if (!(src->events & POOL_FD_READ)) {
+                src->events |= POOL_FD_READ;
+                pool_fds_set_events (pool, src);
+            }
         }
     }
     else {
-        switch (errno) {
+        ret = -errno;
+        switch (-ret) {
         case ESPIPE:
         case EBUSY:
         case EINTR:
         case ENOBUFS:
         case EAGAIN:
-            FD_SET (dst->sock, &pool->fds_write);
+            dst_events |= POOL_FD_WRITE;
             ret = 0; // pretend nothing happened
             break;
         case EPIPE:
             pool_remove_conn(pool, dst->sock, true);
             break;
         default:
-            perror ("Pool: send failed");
-            printf ("ALARM!!! missed case: errno = %d\n", errno);
+            glb_log_warn ("Send failed, unhandled error: %d (%s)",
+                          -ret, strerror(-ret));
         }
     }
 #ifdef GLB_POOL_STATS
-        pool->stats.n_send++;
+    pool->stats.n_send++;
 #endif
+
+    if (dst_events != dst->events) { // events changed
+        dst->events = dst_events;
+        pool_fds_set_events (pool, dst);
+    }
 
     return ret;
 }
@@ -310,13 +496,18 @@ pool_handle_read (pool_t* pool, int src_fd)
             dst->total += ret;
             // now try to send whatever we have
             // (since we're here, we're in fds_read, no need to reset)
+            // ??? check this statement once more
             if (pool_send_data (pool, dst, false) < 0) {
                 // probably don't care what error is
                 perror ("pool_handle_read(): sending data");
             }
             if (dst->total == pool_buf_size) {
                 // no space for next read, remove from fds_read
-                FD_CLR (src_fd, &pool->fds_read);
+                pool_conn_end_t* src = pool->route_map[dst->sock];
+                if (src->events & POOL_FD_READ) {
+                    src->events ^= POOL_FD_READ;
+                    pool_fds_set_events (pool, src);
+                }
             }
 #ifdef GLB_POOL_STATS
             pool->stats.recv_bytes += ret;
@@ -325,11 +516,14 @@ pool_handle_read (pool_t* pool, int src_fd)
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
                 pool_remove_conn (pool, src_fd, true);
-                ret = -1;
+                ret = -EPIPE;
             }
             else { // some other error
-                if (errno != EAGAIN)
-                    perror ("pool_handle_read(): receiving data");
+                if (errno != EAGAIN) {
+                    ret = -errno;
+                    glb_log_warn ("receiving data: %zd (%s)",
+                                  -ret, strerror(-ret));
+                }
             }
         }
 #ifdef GLB_POOL_STATS
@@ -356,6 +550,74 @@ pool_handle_write (pool_t* pool, int dst_fd)
     return 0;
 }
 
+// returns on error or after handling ctl - the latter may cause changes in
+// file descriptors.
+static inline long
+pool_handle_events (pool_t* pool, long count)
+{
+    long idx;
+#ifdef USE_EPOLL
+    for (idx = 0; idx < count; idx++) {
+        pollfd_t* pfd = pool->pollfds + idx;
+        if (pfd->events & POOL_FD_READ) {
+#ifdef GLB_POOL_STATS
+            pool->stats.sel_reads++;
+#endif
+            if (pfd->data.fd != pool->ctl_recv) { // normal read
+                int ret = pool_handle_read (pool, pfd->data.fd);
+                if (ret < 0) return ret;
+            }
+            else {                                // ctl read
+                return pool_handle_ctl (pool);
+            }
+        }
+        if (pfd->events & POOL_FD_WRITE) {
+#ifdef GLB_POOL_STATS
+            pool->stats.sel_writes++;
+#endif
+            assert (pfd->data.fd != pool->ctl_recv);
+            int ret = pool_handle_write (pool, pfd->data.fd);
+            if (ret < 0) return ret;
+        }
+    }
+#else // POLL
+    if (pool->pollfds[0].revents & POOL_FD_READ) {
+#ifdef GLB_POOL_STATS
+            pool->stats.sel_reads++;
+#endif
+        return pool_handle_ctl (pool);
+    }
+    for (idx = 1; count > 0; idx++)
+    {
+        pollfd_t* pfd = pool->pollfds + idx;
+
+        assert (idx < pool->fd_max);
+
+        if (pfd->revents & pfd->events) {
+            if (pfd->revents & POOL_FD_READ) {
+#ifdef GLB_POOL_STATS
+                pool->stats.sel_reads++;
+#endif
+                int ret = pool_handle_read (pool, pfd->fd);
+                if (ret < 0) return ret;
+            }
+            if (pfd->revents & POOL_FD_WRITE) {
+#ifdef GLB_POOL_STATS
+                pool->stats.sel_writes++;
+#endif
+                int ret = pool_handle_write (pool, pfd->fd);
+                if (ret < 0) return ret;
+            }
+            count--;
+        }
+        else {
+            assert (0 == pfd->revents);
+        }
+    }
+#endif // POLL
+    return 0;
+}
+
 static void*
 pool_thread (void* arg)
 {
@@ -367,73 +629,22 @@ pool_thread (void* arg)
 
     while (1) {
         long ret;
-        fd_set fds_read, fds_write;
+//d        fd_set fds_read, fds_write;
 
-        fds_read  = pool->fds_read;
-        fds_write = pool->fds_write;
-        ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, NULL);
+//d        fds_read  = pool->fds_read;
+//d        fds_write = pool->fds_write;
+//d        ret = select (pool->fd_max+1, &fds_read, &fds_write, NULL, NULL);
+#ifdef USE_EPOLL
+        ret = epoll_wait (pool->epoll_fd, pool->pollfds, pool->fd_max, -1); 
+#else // POLL
+        ret = poll (pool->pollfds, pool->fd_max, -1);
+#endif // POLL
 
-        if (ret > 0) { // we have some input
-            long count = ret;
-            int  fd    = pool->fd_min;
-            // first, check ctl pipe
-            if (FD_ISSET (pool->ctl_recv, &fds_read)) {
-                pool_ctl_t ctl;
-
-                ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
-                if (sizeof(ctl) == ret) { // complete ctl read
-                    pool_handle_ctl (pool, &ctl);
-                }
-                else { // should never happen!
-                    perror ("Pool: incomplete read from ctl");
-                    abort();
-                }
+        if (ret > 0) {
 #ifdef GLB_POOL_STATS
-                pool->stats.sel_reads++;
+            pool->stats.n_select++;
 #endif
-                /*
-                 * pool->ctl_recv can theoretically get between fd_min and
-                 * fd_max.
-                 * For simplicity we want to assume that it is not set when
-                 * processing normal fds
-                 * also set of connections could be modified by ctl,
-                 * so start over
-                 */
-                goto end;
-            }
-
-            assert (!FD_ISSET (pool->ctl_recv, &fds_read));
-
-            // check remaining connections
-            while (count) {
-                assert (fd <= pool->fd_max);
-
-                while (NULL == pool->route_map[fd]) fd++;
-
-                /*
-                 * If pool_handle_read() or pool_handle_write() below
-                 * return error, this is most likely because connection was
-                 * closed. In that case cleanup has happend and fd set has
-                 * changed. Break out of the loop to start over again. 
-                 */ 
-                if (FD_ISSET (fd, &fds_read)) {
-#ifdef GLB_POOL_STATS
-                    pool->stats.sel_reads++;
-#endif
-                    if (pool_handle_read (pool, fd) < 0) goto end;
-                    count--;
-                }
-
-                if (FD_ISSET (fd, &fds_write)) {
-#ifdef GLB_POOL_STATS
-                    pool->stats.sel_writes++;
-#endif
-                    if (pool_handle_write (pool, fd) < 0) goto end;
-                    count--;
-                }
-
-                fd++;
-            }
+            pool_handle_events (pool, ret);
         }
         else if (-1 == ret) {
             perror ("select() failed");
@@ -443,14 +654,30 @@ pool_thread (void* arg)
             // timed out
             //printf ("Thread %ld is idle\n", pool->id);
         }
-    end:
-#ifdef GLB_POOL_STATS
-        pool->stats.n_select++;
-#endif
-        continue;
     }
 
     return NULL;
+}
+
+// initialize file descriptor set with ctl_recv descriptor
+static long
+pool_fds_init (pool_t* pool, int ctl_fd)
+{
+    pool->fd_max = 0;
+//d    pool->fd_min = pool->fd_max;
+
+#ifdef USE_EPOLL
+    pool->epoll_fd = epoll_create(FD_SETSIZE);
+    if (pool->epoll_fd < 0) {
+        glb_log_fatal ("epoll_create(%d) failed: %d (%s)",
+                       FD_SETSIZE, errno, strerror(errno));
+        return -errno;
+    }
+#endif
+
+    pool->pollfds_len = 0;
+
+    return pool_fds_add (pool, ctl_fd, POOL_FD_READ);
 }
 
 static long
@@ -474,11 +701,12 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
     pool->ctl_recv = pipe_fds[0];
     pool->ctl_send = pipe_fds[1];
 
-    FD_ZERO (&pool->fds_read);
-    FD_ZERO (&pool->fds_write);
-    FD_SET  (pool->ctl_recv, &pool->fds_read);
-    pool->fd_max = pool->ctl_recv;
-    pool->fd_min = pool->fd_max;
+    ret = pool_fds_init (pool, pool->ctl_recv);
+    if (ret < 0) {
+        return ret;
+    }
+//d    pool->fd_max = pool->ctl_recv; delete
+//d    pool->fd_min = pool->fd_max;   delete
 
     // this, together with pthread_mutex_lock() in the beginning of
     // pool_thread() avoids possible race in access to pool->thread
@@ -554,7 +782,7 @@ pool_get_pool (glb_pool_t* pool)
 }
 
 // Sends ctl and waits for confirmation from the pool thread
-extern ssize_t
+static ssize_t
 pool_send_ctl (pool_t* p, pool_ctl_t* ctl)
 {
     ssize_t ret;
@@ -572,7 +800,7 @@ pool_send_ctl (pool_t* p, pool_ctl_t* ctl)
     return ret;
 }
 
-extern long
+long
 glb_pool_add_conn (glb_pool_t*     pool,
                    int             inc_sock,
                    int             dst_sock,

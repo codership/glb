@@ -117,8 +117,8 @@ fi
 # If we want checks to pass we have to put this at the very end.
 CFLAGS="$CFLAGS -Wall -Werror -DUSE_$POLL "
 AC_SUBST(CFLAGS)
-CXXFLAGS="$CFLAGS $CXXFLAGS"
-AC_SUBST(CXXFLAGS)
+#CXXFLAGS="$CFLAGS $CXXFLAGS"
+#AC_SUBST(CXXFLAGS)
 
 AC_MSG_NOTICE([----------------------])
 AC_MSG_NOTICE([poll method used: $POLL])
