@@ -427,7 +427,7 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
                   dst->total - dst->sent, SPLICE_F_NONBLOCK);
 #endif
 
-    if (ret > 0) {
+    if (ret >= 0) {
 #ifdef GLB_POOL_STATS
         pool->stats.send_bytes += ret;
 #endif
@@ -436,7 +436,7 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
             dst->sent =  dst->total = 0;
             dst_events ^= POOL_FD_WRITE;      // clear WRITE flag
         }
-        else {
+        else {                                // there is unsent data left
             dst_events |= POOL_FD_WRITE;      // set   WRITE flag
         }
 

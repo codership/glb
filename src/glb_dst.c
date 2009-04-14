@@ -12,11 +12,11 @@
 #include "glb_dst.h"
 
 // Some constants
-static const int       dst_separator  = ':';
-static const ptrdiff_t dst_ip_len_max = 256;
-static const ptrdiff_t dst_ip_len_min = 1;
-static const ulong     dst_port_max   = (1 << 16) - 1;
-static const long      dst_default_weight = 1;
+#define dst_separator      ':'
+#define dst_ip_len_max     256
+#define dst_ip_len_min     1
+#define dst_port_max       ((1 << 16) - 1)
+#define dst_default_weight 1
 
 // parses addr:port:weight string, stores in dst
 // returns number of parsed fields or negative error code

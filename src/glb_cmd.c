@@ -51,9 +51,8 @@ static option_t cmd_options[] =
 };
 
 // Some constants
-static const int  cmd_list_separator = ',';
-static const long cmd_ip_len_max     = 256;
-static const long cmd_port_max       = (1<<16) - 1;
+#define cmd_ip_len_max     256
+#define cmd_port_max       ((1<<16) - 1)
 
 void
 glb_cmd_help (FILE* out, const char* progname)
