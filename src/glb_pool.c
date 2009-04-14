@@ -414,9 +414,9 @@ pool_handle_ctl (pool_t* pool)
 }
 
 static inline ssize_t
-pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
+pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
 {
-    ssize_t ret;
+    ssize_t  ret;
     uint32_t dst_events = dst->events;
 
 #ifndef GLB_USE_SPLICE
@@ -432,22 +432,19 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, bool reset_fds_read)
         pool->stats.send_bytes += ret;
 #endif
         dst->sent += ret;
-        if (dst->sent == dst->total) {    // all data sent, reset pointers
+        if (dst->sent == dst->total) {        // all data sent, reset pointers
             dst->sent =  dst->total = 0;
             dst_events ^= POOL_FD_WRITE;      // clear WRITE flag
         }
         else {
-//            perror ("Pool: incomplete send");
-            dst_events |= POOL_FD_WRITE;      // set WRITE flag
+            dst_events |= POOL_FD_WRITE;      // set   WRITE flag
         }
 
-        if (reset_fds_read && (dst->total < pool_buf_size)) {
+        if (src && !(src->events & POOL_FD_READ) &&
+            (dst->total < pool_buf_size)) {
             // some space exists in the buffer, reestablish READ flag in src
-            pool_conn_end_t* src = pool->route_map[dst->sock];
-            if (!(src->events & POOL_FD_READ)) {
-                src->events |= POOL_FD_READ;
-                pool_fds_set_events (pool, src);
-            }
+            src->events |= POOL_FD_READ;
+            pool_fds_set_events (pool, src);
         }
     }
     else {
@@ -501,19 +498,20 @@ pool_handle_read (pool_t* pool, int src_fd)
         if (ret > 0) {
             dst->total += ret;
             // now try to send whatever we have
-            // (since we're here, we're in fds_read, no need to reset)
-            // ??? check this statement once more
-            if (pool_send_data (pool, dst, false) < 0) {
-                // probably don't care what error is
-                perror ("pool_handle_read(): sending data");
+            // (since we're here, POOL_FD_READ on src is not cleared, no need
+            // to set it once again)
+            ssize_t send_err;
+            if ((send_err = pool_send_data (pool, dst, NULL)) < 0) {
+                glb_log_warn ("pool_send_data(): %zd (%s)",
+                              -send_err, strerror(-send_err));
             }
+
             if (dst->total == pool_buf_size) {
-                // no space for next read, remove from fds_read
+                // no space for next read, clear POOL_FD_READ
                 pool_conn_end_t* src = pool->route_map[dst->sock];
-                if (src->events & POOL_FD_READ) {
-                    src->events ^= POOL_FD_READ;
-                    pool_fds_set_events (pool, src);
-                }
+                assert (src->events & POOL_FD_READ);
+                src->events ^= POOL_FD_READ;
+                pool_fds_set_events (pool, src);
             }
 #ifdef GLB_POOL_STATS
             pool->stats.recv_bytes += ret;
@@ -542,15 +540,17 @@ pool_handle_read (pool_t* pool, int src_fd)
 static inline ssize_t
 pool_handle_write (pool_t* pool, int dst_fd)
 {
-    register int     src_fd = pool->route_map[dst_fd]->sock;
-    pool_conn_end_t* dst    = pool->route_map[src_fd];
+    pool_conn_end_t* src = pool->route_map[dst_fd];
+    pool_conn_end_t* dst = pool->route_map[src->sock];
 
     if (dst->total) {
+        ssize_t send_err;
         assert (dst->total > dst->sent);
-        // if (dst->total == pool_buf_size), source was removed from fds_read
-        if (pool_send_data (pool, dst, (dst->total == pool_buf_size)) < 0) {
-            // probably don't care what error is
-            perror ("pool_handle_read(): sending data error");
+        // if (dst->total == pool_buf_size), it is likely that POOL_FD_FLAG
+        // is cleared on src
+        if ((send_err = pool_send_data (pool, dst, src)) < 0) {
+            glb_log_warn ("pool_send_data(): %zd (%s)",
+                          -send_err, strerror(-send_err));
         }
     }
     return 0;
