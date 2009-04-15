@@ -39,6 +39,7 @@ typedef enum pool_ctl_code
     POOL_CTL_ADD_CONN,
     POOL_CTL_DROP_DST,
     POOL_CTL_SHUTDOWN,
+    POOL_CTL_STATS,
     POOL_CTL_MAX
 } pool_ctl_code_t;
 
@@ -47,23 +48,6 @@ typedef struct pool_ctl
     pool_ctl_code_t code;
     void*           data;
 } pool_ctl_t;
-
-typedef struct pool_stats
-{
-    ulong recv_bytes;
-    ulong n_recv;
-    ulong send_bytes;
-    ulong n_send;
-    ulong conns_opened;
-    ulong conns_closed;
-    ulong sel_reads;
-    ulong sel_writes;
-    ulong n_select;
-} pool_stats_t;
-
-#ifdef GLB_POOL_STATS
-static const pool_stats_t zero_stats = { 0, };
-#endif
 
 typedef struct pool_conn_end
 {
@@ -92,23 +76,22 @@ typedef struct pool_conn_end
 
 typedef struct pool
 {
-    long            id;
-    pthread_t       thread;
-    pthread_mutex_t lock;
-    pthread_cond_t  cond;
-    int             ctl_recv; // fd to receive commands in pool thread
-    int             ctl_send; // fd to send commands to pool - other function
-    volatile ulong  n_conns;  // how many connecitons this pool serves
+    long             id;
+    pthread_t        thread;
+    pthread_mutex_t  lock;
+    pthread_cond_t   cond;
+    int              ctl_recv; // fd to receive commands in pool thread
+    int              ctl_send; // fd to send commands to pool - other function
+    volatile ulong   n_conns;  // how many connecitons this pool serves
 #ifdef USE_EPOLL
-    int             epoll_fd;
+    int              epoll_fd;
 #endif
-    pollfd_t*       pollfds;
-    size_t          pollfds_len;
-    int             fd_max;
-    glb_router_t*   router;
-#ifdef GLB_POOL_STATS
-    volatile pool_stats_t stats;
-#endif
+    pollfd_t*        pollfds;
+    size_t           pollfds_len;
+    int              fd_max;
+    glb_router_t*    router;
+    glb_pool_stats_t stats;
+
     pool_conn_end_t* route_map[ POOL_MAX_FD ]; // connection ctx look-up by fd
 } pool_t;
 
@@ -311,9 +294,6 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     pool_reset_conn_end (pool, dst);
     pool_reset_conn_end (pool, src);
 
-//d    pool->route_map[dst->sock] = NULL;
-//d    pool->route_map[src->sock] = NULL;
-
     if (dst->inc) {
         free (dst); // frees both ends
     }
@@ -363,6 +343,14 @@ pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
     }
 }
 
+static inline void
+pool_handle_stats (pool_t* pool, pool_ctl_t* ctl)
+{
+    glb_pool_stats_t* stats = ctl->data;
+    glb_pool_stats_add (stats, &pool->stats);
+    pool->stats = glb_zero_stats;
+}
+
 #define GLB_MUTEX_LOCK(mtx)                                             \
 {                                                                       \
     int ret;                                                            \
@@ -385,9 +373,14 @@ static long
 pool_handle_ctl (pool_t* pool)
 {
     pool_ctl_t ctl;
-    long       ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
+    register long ret;
 
-    if (sizeof(ctl) != ret) { // incomplete ctl read, should neve happen
+    // remove ctls from poll count to get only traffic polls
+    pool->stats.n_polls--;
+
+    ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
+
+    if (sizeof(ctl) != ret) { // incomplete ctl read, should never happen
         glb_log_fatal ("Incomplete read from ctl, errno: %d (%s)",
                        errno, strerror (errno));
         abort();
@@ -399,6 +392,9 @@ pool_handle_ctl (pool_t* pool)
         break;
     case POOL_CTL_DROP_DST:
         pool_handle_drop_dst (pool, &ctl);
+        break;
+    case POOL_CTL_STATS:
+        pool_handle_stats    (pool, &ctl);
         break;
     default: // nothing else is implemented
         glb_log_warn ("Unsupported CTL: %d\n", ctl.code);
@@ -427,9 +423,8 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
 #endif
 
     if (ret > 0) {
-#ifdef GLB_POOL_STATS
         pool->stats.send_bytes += ret;
-#endif
+
         dst->sent += ret;
         if (dst->sent == dst->total) {        // all data sent, reset pointers
             dst->sent  =  dst->total = 0;
@@ -470,9 +465,8 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
                           -ret, strerror(-ret));
         }
     }
-#ifdef GLB_POOL_STATS
+
     pool->stats.n_send++;
-#endif
 
     if (dst_events != dst->events) { // events changed
         glb_log_debug ("Old flags on %s: %s %s", dst->inc ? "client":"server",
@@ -526,9 +520,7 @@ pool_handle_read (pool_t* pool, int src_fd)
                 pool_fds_set_events (pool, src);
             }
 
-#ifdef GLB_POOL_STATS
             pool->stats.recv_bytes += ret;
-#endif
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
@@ -544,9 +536,8 @@ pool_handle_read (pool_t* pool, int src_fd)
                 }
             }
         }
-#ifdef GLB_POOL_STATS
+
         pool->stats.n_recv++;
-#endif
     }
     return ret;
 }
@@ -583,11 +574,12 @@ pool_handle_events (pool_t* pool, long count)
     for (idx = 0; idx < count; idx++) {
         pollfd_t* pfd = pool->pollfds + idx;
         if (pfd->events & POOL_FD_READ) {
-#ifdef GLB_POOL_STATS
-            pool->stats.sel_reads++;
-#endif
+
             if (pfd->data.fd != pool->ctl_recv) { // normal read
-                long ret = pool_handle_read (pool, pfd->data.fd);
+                register long ret;
+                pool->stats.poll_reads++;
+
+                ret = pool_handle_read (pool, pfd->data.fd);
                 if (ret < 0) return ret;
             }
             else {                                // ctl read
@@ -595,19 +587,16 @@ pool_handle_events (pool_t* pool, long count)
             }
         }
         if (pfd->events & POOL_FD_WRITE) {
-#ifdef GLB_POOL_STATS
-            pool->stats.sel_writes++;
-#endif
+            register long ret;
+            pool->stats.poll_writes++;
+
             assert (pfd->data.fd != pool->ctl_recv);
-            long ret = pool_handle_write (pool, pfd->data.fd);
+            ret = pool_handle_write (pool, pfd->data.fd);
             if (ret < 0) return ret;
         }
     }
 #else // POLL
     if (pool->pollfds[0].revents & POOL_FD_READ) { // first, check ctl socket
-#ifdef GLB_POOL_STATS
-            pool->stats.sel_reads++;
-#endif
         return pool_handle_ctl (pool);
     }
 
@@ -623,16 +612,16 @@ pool_handle_events (pool_t* pool, long count)
             register ulong revents = pfd->revents & pfd->events;
 
             if (revents & POOL_FD_READ) {
-#ifdef GLB_POOL_STATS
-                pool->stats.sel_reads++;
-#endif
-                long ret = pool_handle_read (pool, pfd->fd);
+                register long ret;
+                pool->stats.poll_reads++;
+
+                ret = pool_handle_read (pool, pfd->fd);
                 if (ret < 0) return ret;
             }
             if (revents & POOL_FD_WRITE) {
-#ifdef GLB_POOL_STATS
-                pool->stats.sel_writes++;
-#endif
+                register long ret;
+                pool->stats.poll_writes++;
+
                 long ret = pool_handle_write (pool, pfd->fd);
                 if (ret < 0) return ret;
             }
@@ -656,16 +645,13 @@ pool_thread (void* arg)
         long ret;
 
         ret = pool_fds_wait (pool);
-//d        glb_log_debug (    "pool_fds_wait() returned:      %.5f",
-//d                       glb_time_now());
 
         if (ret > 0) {
-#ifdef GLB_POOL_STATS
-            pool->stats.n_select++;
-#endif
+
+            pool->stats.n_polls++;
+
             pool_handle_events (pool, ret);
-//d            glb_log_debug ("pool_handle_events() returned: %.5f",
-//d                           glb_time_now());
+
         }
         else if (ret < 0) {
             glb_log_error ("pool_fds_wait() failed: %d (%s)",
@@ -864,22 +850,36 @@ glb_pool_add_conn (glb_pool_t*     pool,
     return ret;
 }
 
-long
-glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
+// returns 0 minus how many ctls failed
+static inline long
+pool_bcast_ctl (glb_pool_t* pool, pool_ctl_t* ctl)
 {
-    pool_ctl_t drop_dst_ctl = { POOL_CTL_DROP_DST, (void*)dst };
     ulong i;
     long ret = 0;
 
     GLB_MUTEX_LOCK (&pool->lock);
 
     for (i = 0; i < pool->n_pools; i++) {
-        ret -= (pool_send_ctl (&pool->pool[i], &drop_dst_ctl) < 0);
+        ret -= (pool_send_ctl (&pool->pool[i], ctl) < 0);
     }
 
     GLB_MUTEX_UNLOCK (&pool->lock);
 
     return ret;
+}
+
+long
+glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
+{
+    pool_ctl_t drop_dst_ctl = { POOL_CTL_DROP_DST, (void*)dst };
+    return pool_bcast_ctl (pool, &drop_dst_ctl);
+}
+
+long
+glb_pool_get_stats (glb_pool_t* pool, glb_pool_stats_t* stats)
+{
+    pool_ctl_t stats_ctl = { POOL_CTL_STATS, (void*)stats };
+    return pool_bcast_ctl (pool, &stats_ctl);
 }
 
 size_t
@@ -913,12 +913,12 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
         "Pool %2ld: conns: %5ld, selects: %9zu (%9.2f sel/sec)\n"
         "recv   : %9zuB %9zuR %9zuS %9.2fB/R %9.2fB/sec %9.2fR/S %9.2fR/sec\n"
         "send   : %9zuB %9zuW %9zuS %9.2fB/W %9.2fB/sec %9.2fW/S %9.2fW/sec\n",
-         i, pool->pool[i].n_conns, s.n_select, (double)s.n_select/elapsed,
-         s.recv_bytes,s.n_recv,s.sel_reads,(double)s.recv_bytes/s.n_recv,
-         (double)s.recv_bytes/elapsed,(double)s.n_recv/s.n_select,
+         i, pool->pool[i].n_conns, s.n_polls, (double)s.n_polls/elapsed,
+         s.recv_bytes,s.n_recv,s.poll_reads,(double)s.recv_bytes/s.n_recv,
+         (double)s.recv_bytes/elapsed,(double)s.n_recv/s.n_polls,
          (double)s.n_recv/elapsed,
-         s.send_bytes,s.n_send,s.sel_writes,(double)s.send_bytes/s.n_send,
-         (double)s.send_bytes/elapsed,(double)s.n_send/s.n_select,
+         s.send_bytes,s.n_send,s.poll_writes,(double)s.send_bytes/s.n_send,
+         (double)s.send_bytes/elapsed,(double)s.n_send/s.n_polls,
          (double)s.n_send/elapsed
         );
         if (len == buf_len) {

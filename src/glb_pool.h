@@ -9,6 +9,7 @@
 
 #include "glb_socket.h"
 #include "glb_router.h"
+#include "glb_pool_stats.h"
 
 typedef struct glb_pool glb_pool_t;
 
@@ -29,6 +30,9 @@ glb_pool_add_conn (glb_pool_t*     pool,
 // Closes all connecitons to a given destination
 extern long
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst);
+
+extern long
+glb_pool_get_stats (glb_pool_t* pool, glb_pool_stats_t* stats);
 
 extern size_t
 glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len);
