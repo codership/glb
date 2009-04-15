@@ -51,9 +51,12 @@ glb_log_init (glb_log_type_t log_type);
         glb_log (GLB_LOG_INFO, __FILE__, __PRETTY_FUNCTION__, __LINE__,\
                  format, ## __VA_ARGS__, NULL)
 
+#ifdef NDEBUG
+#define glb_log_debug(format, ...)
+#else  // DEBUG
 #define glb_log_debug(format, ...) \
         glb_log (GLB_LOG_DEBUG, __FILE__, __PRETTY_FUNCTION__, __LINE__,\
                  format, ## __VA_ARGS__, NULL)
-
+#endif // DEBUG
 
 #endif // _glb_log_h_
