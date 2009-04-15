@@ -19,8 +19,12 @@ Features:
  - supports server "draining", i.e. does not allocate new connections to
    server, but does not kill existing ones, waiting for them to end
    gracefully.
- - glb is multithreaded, so it can utilize multiple CPU cores. In fact even
-   on a single core CPU two threads may lower latencies a bit.
+ - can use epoll API provided by Linux version 2.6 and higher for ultimate
+   routing performance.
+ - glb is multithreaded, so it can utilize multiple CPU cores. Also, if your
+   OS does not support epoll API, consider using several threads even on a
+   single clore machine as it will lessen poll() overhead proportionally and
+   can improve overall performance by a factor of 2 or more.
 
 COMMAND LINE OPTIONS:
 =====================

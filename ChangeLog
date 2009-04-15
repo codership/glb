@@ -1,3 +1,7 @@
+2009-04-15 alex
+- Refactored to use poll/epoll API instead of select(). This allows for more
+  than FD_SETSIZE/2 concurrent connections and is considerably faster in case
+  of epoll. Version 0.7.0.
 2009-03-12 alex
 - Cosmetic changes to the output: usage now ranges strictly from 0.0
   (unused) to 1.0 (overloaded). Weight 0.0 automatically means usage 1.0,

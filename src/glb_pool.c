@@ -11,7 +11,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
-#include <sys/time.h>
 
 #ifndef USE_EPOLL
     #ifndef USE_POLL
@@ -29,6 +28,7 @@
 #include <fcntl.h>
 #endif
 
+#include "glb_time.h"
 #include "glb_log.h"
 #include "glb_pool.h"
 
@@ -86,9 +86,9 @@ typedef struct pool_conn_end
 // We want to allocate memory for both ends in one malloc() call and have it
 // nicely aligned. This is presumably a page multiple and
 // should be enough for two ethernet frames (what about jumbo?)
-#define pool_conn_size (BUFSIZ << 2)
-#define pool_buf_size  (pool_conn_size/2 - sizeof(pool_conn_end_t))
-#define pool_end_size  (pool_buf_size + sizeof(pool_conn_end_t))
+#define pool_end_size  (BUFSIZ)
+#define pool_conn_size (pool_end_size << 2)
+#define pool_buf_size  (pool_end_size - sizeof(pool_conn_end_t))
 
 typedef struct pool
 {
@@ -116,7 +116,7 @@ struct glb_pool
 {
     pthread_mutex_t lock;
     ulong           n_pools;
-    struct timeval  begin;
+    glb_time_t      begin;
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
@@ -195,9 +195,9 @@ pool_conn_end_by_fd (pool_t* pool, int fd)
     // map points to the other end, but that's enough
     register pool_conn_end_t* other_end = pool->route_map[fd];
     if (other_end->inc) {
-        return (void*)other_end + pool_end_size;
+        return (pool_conn_end_t*)((uint8_t*)other_end + pool_end_size);
     } else {
-        return (void*)other_end - pool_end_size;
+        return (pool_conn_end_t*)((uint8_t*)other_end - pool_end_size);
     }
 }
 
@@ -291,13 +291,13 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     int              dst_fd = dst->sock;
     pool_conn_end_t* src    = pool->route_map[dst_fd];
 
-    pool->n_conns--;
-
-    if (glb_verbose) {
-        fprintf (stderr, "Pool %ld: disconnecting from %s "
-                 "(total pool connections: %ld)\n", pool->id,
-                 glb_socket_addr_to_string (&dst->dst_addr), pool->n_conns);
+#ifndef NDEBUG
+    if (notify_router && !src->inc) {
+        glb_log_warn ("Connection close from server");
     }
+#endif
+
+    pool->n_conns--;
 
     if (notify_router)
         glb_router_disconnect (pool->router, &dst->dst_addr);
@@ -327,16 +327,15 @@ static void
 pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
 {
     pool_conn_end_t* inc_end = ctl->data;
-    pool_conn_end_t* dst_end = ctl->data + pool_conn_size/2;
+    pool_conn_end_t* dst_end = ctl->data + pool_end_size;
 
     pool_set_conn_end (pool, inc_end, dst_end);
     pool_set_conn_end (pool, dst_end, inc_end);
 
     pool->n_conns++; // increment connection count
     if (glb_verbose) {
-        fprintf (stderr,
-                 "Pool %ld: added connection, (total pool connections: %ld)\n",
-                 pool->id, pool->n_conns);
+        glb_log_info ("Pool %ld: added connection, "
+                      "(total pool connections: %ld)", pool->id, pool->n_conns);
     }
 }
 
@@ -356,8 +355,7 @@ pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
             count--;
             if (glb_socket_addr_is_equal(&end->dst_addr, dst)) {
                 // remove conn, but don't try to notify router 'cause it's
-                // already
-                // dropped this destination
+                // already dropped this destination
                 pool_remove_conn (pool, fd, false);
                 count--; // 1 connection means 2 file descriptors
             }
@@ -365,19 +363,19 @@ pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
     }
 }
 
-#define GLB_MUTEX_LOCK(mutex)                                           \
+#define GLB_MUTEX_LOCK(mtx)                                             \
 {                                                                       \
     int ret;                                                            \
-    if ((ret = pthread_mutex_lock (mutex))) {                           \
+    if ((ret = pthread_mutex_lock (mtx))) {                             \
         glb_log_fatal ("Failed to lock mutex: %d (%s)", ret, strerror(ret));\
         abort();                                                        \
     }                                                                   \
 }
 
-#define GLB_MUTEX_UNLOCK(mutex)                                         \
+#define GLB_MUTEX_UNLOCK(mtx)                                           \
 {                                                                       \
     int ret;                                                            \
-    if ((ret = pthread_mutex_unlock (mutex))) {                         \
+    if ((ret = pthread_mutex_unlock (mtx))) {                           \
         glb_log_fatal ("Failed to unlock mutex: %d (%s)", ret, strerror(ret));\
         abort();                                                        \
     }                                                                   \
@@ -390,7 +388,8 @@ pool_handle_ctl (pool_t* pool)
     long       ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
 
     if (sizeof(ctl) != ret) { // incomplete ctl read, should neve happen
-        perror ("Pool: incomplete read from ctl");
+        glb_log_fatal ("Incomplete read from ctl, errno: %d (%s)",
+                       errno, strerror (errno));
         abort();
     }
 
@@ -427,16 +426,19 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
                   dst->total - dst->sent, SPLICE_F_NONBLOCK);
 #endif
 
-    if (ret >= 0) {
+    if (ret > 0) {
 #ifdef GLB_POOL_STATS
         pool->stats.send_bytes += ret;
 #endif
         dst->sent += ret;
         if (dst->sent == dst->total) {        // all data sent, reset pointers
-            dst->sent =  dst->total = 0;
-            dst_events ^= POOL_FD_WRITE;      // clear WRITE flag
+            dst->sent  =  dst->total = 0;
+            dst_events &= ~POOL_FD_WRITE;     // clear WRITE flag
         }
         else {                                // there is unsent data left
+            glb_log_debug ("Setting WRITE flag on %s: sent = %zu, total = "
+                           "%zu, bufsiz = %zu", dst->inc ? "client" : "server",
+                           dst->sent, dst->total,pool_buf_size);
             dst_events |= POOL_FD_WRITE;      // set   WRITE flag
         }
 
@@ -455,14 +457,16 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
         case EINTR:
         case ENOBUFS:
         case EAGAIN:
+            glb_log_debug ("Send data error: %d (%s)", -ret, strerror(-ret));
             dst_events |= POOL_FD_WRITE;
             ret = 0; // pretend nothing happened
             break;
         case EPIPE:
+            glb_log_debug ("pool_remove_conn() from pool_send_data()");
             pool_remove_conn(pool, dst->sock, true);
             break;
         default:
-            glb_log_warn ("Send failed, unhandled error: %d (%s)",
+            glb_log_warn ("Send data failed, unhandled error: %d (%s)",
                           -ret, strerror(-ret));
         }
     }
@@ -471,8 +475,14 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
 #endif
 
     if (dst_events != dst->events) { // events changed
+        glb_log_debug ("Old flags on %s: %s %s", dst->inc ? "client":"server",
+                       dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
+                       dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
         dst->events = dst_events;
         pool_fds_set_events (pool, dst);
+        glb_log_debug ("New flags on %s: %s %s", dst->inc ? "client":"server",
+                       dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
+                       dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
     }
 
     return ret;
@@ -484,6 +494,8 @@ pool_handle_read (pool_t* pool, int src_fd)
 {
     ssize_t ret = 0;
     pool_conn_end_t* dst = pool->route_map[src_fd];
+
+//    glb_log_debug ("pool_handle_read()");
 
     // first, try read data from source, if there's enough space
     if (dst->total < pool_buf_size) {
@@ -497,7 +509,7 @@ pool_handle_read (pool_t* pool, int src_fd)
 #endif
         if (ret > 0) {
             dst->total += ret;
-            // now try to send whatever we have
+            // now try to send whatever we have received so far
             // (since we're here, POOL_FD_READ on src is not cleared, no need
             // to set it once again)
             ssize_t send_err;
@@ -510,22 +522,24 @@ pool_handle_read (pool_t* pool, int src_fd)
                 // no space for next read, clear POOL_FD_READ
                 pool_conn_end_t* src = pool->route_map[dst->sock];
                 assert (src->events & POOL_FD_READ);
-                src->events ^= POOL_FD_READ;
+                src->events &= ~POOL_FD_READ;
                 pool_fds_set_events (pool, src);
             }
+
 #ifdef GLB_POOL_STATS
             pool->stats.recv_bytes += ret;
 #endif
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
+//               glb_log_debug ("pool_remove_conn() from pool_handle_read()");
                 pool_remove_conn (pool, src_fd, true);
                 ret = -EPIPE;
             }
             else { // some other error
                 if (errno != EAGAIN) {
                     ret = -errno;
-                    glb_log_warn ("receiving data: %zd (%s)",
+                    glb_log_warn ("pool_handle_read(): %zd (%s)",
                                   -ret, strerror(-ret));
                 }
             }
@@ -543,11 +557,14 @@ pool_handle_write (pool_t* pool, int dst_fd)
     pool_conn_end_t* src = pool->route_map[dst_fd];
     pool_conn_end_t* dst = pool->route_map[src->sock];
 
+    glb_log_debug ("pool_handle_write() to %s: %zu",
+                   dst->inc ? "client" : "server", dst->total - dst->sent);
+
     if (dst->total) {
         ssize_t send_err;
+
         assert (dst->total > dst->sent);
-        // if (dst->total == pool_buf_size), it is likely that POOL_FD_FLAG
-        // is cleared on src
+
         if ((send_err = pool_send_data (pool, dst, src)) < 0) {
             glb_log_warn ("pool_send_data(): %zd (%s)",
                           -send_err, strerror(-send_err));
@@ -639,20 +656,24 @@ pool_thread (void* arg)
         long ret;
 
         ret = pool_fds_wait (pool);
+//d        glb_log_debug (    "pool_fds_wait() returned:      %.5f",
+//d                       glb_time_now());
 
         if (ret > 0) {
 #ifdef GLB_POOL_STATS
             pool->stats.n_select++;
 #endif
             pool_handle_events (pool, ret);
+//d            glb_log_debug ("pool_handle_events() returned: %.5f",
+//d                           glb_time_now());
         }
-        else if (-1 == ret) {
-            perror ("select() failed");
+        else if (ret < 0) {
+            glb_log_error ("pool_fds_wait() failed: %d (%s)",
+                           errno, strerror(errno));
         }
         else {
-            perror ("select() returned 0!");
-            // timed out
-            //printf ("Thread %ld is idle\n", pool->id);
+            glb_log_error ("pool_fds_wait() interrupted: %d (%s)",
+                           errno, strerror(errno));
         }
     }
 
@@ -693,7 +714,9 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
 
     ret = pipe(pipe_fds);
     if (ret) {
-        perror ("Failed to open control pipe");
+        ret = errno;
+        glb_log_fatal ("Failed to open control pipe: %d (%s)",
+                       ret, strerror(ret));
         return -ret;
     }
 
@@ -711,7 +734,8 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
     ret = pthread_create (&pool->thread, NULL, pool_thread, pool);
     GLB_MUTEX_UNLOCK (&pool->lock);
     if (ret) {
-        perror ("Failed to create thread");
+        glb_log_fatal ("Failed to create pool thread: %d (%s)",
+                       ret, strerror(ret));
         return -ret;
     }
 
@@ -734,17 +758,18 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
 
         for (i = 0; i < n_pools; i++) {
             if ((err = pool_init(&ret->pool[i], i, router))) {
-                fprintf (stderr, "Failed to initialize pool %ld\n", i);
+                glb_log_fatal ("Failed to initialize pool %ld.", i);
                 abort();
             }
         }
     }
     else {
-        fprintf (stderr, "Could not allocate memory for %zu pools\n", n_pools);
+        glb_log_fatal ("Could not allocate memory for %zu pools.",
+                       n_pools);
         abort();
     }
 
-    gettimeofday (&ret->begin, NULL);
+    ret->begin = glb_time_now();
 
     return ret;
 }
@@ -758,7 +783,7 @@ glb_pool_destroy (glb_pool_t* pool)
         pthread_join (p->thread, NULL);
     }
     // TODO: proper resource deallocation
-    fprintf (stderr, "glb_pool_destroy() not implemented yet!");
+    glb_log_warn ("glb_pool_destroy() not implemented yet!");
 }
 
 // finds the least busy pool
@@ -787,7 +812,7 @@ pool_send_ctl (pool_t* p, pool_ctl_t* ctl)
     GLB_MUTEX_LOCK (&p->lock);
     ret = write (p->ctl_send, ctl, sizeof (*ctl));
     if (ret != sizeof (*ctl)) {
-        perror ("Sending ctl failed");
+        glb_log_error ("Sending ctl failed: %d (%s)", errno, strerror(errno));
         if (ret > 0) abort(); // partial ctl was sent, don't know what to do
     }
     else ret = 0;
@@ -812,7 +837,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
     route = malloc (pool_conn_size);
     if (route) {
         pool_conn_end_t* inc_end = route;
-        pool_conn_end_t* dst_end = route + pool_conn_size / 2;
+        pool_conn_end_t* dst_end = route + pool_end_size;
         pool_ctl_t       add_conn_ctl = { POOL_CTL_ADD_CONN, route };
 
         inc_end->inc      = true;
@@ -860,10 +885,10 @@ glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
 size_t
 glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 {
-    size_t len = 0;
-    long i;
-    struct timeval now;
-    double         seconds;
+    size_t     len = 0;
+    long       i;
+    glb_time_t now;
+    double     elapsed;
 
 #ifndef GLB_POOL_STATS
     len += snprintf (buf + len, buf_len - len, "Pool: connections per thread:");
@@ -875,9 +900,8 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 
     GLB_MUTEX_LOCK (&pool->lock);
 
-    gettimeofday (&now, NULL);
-    seconds = now.tv_sec - pool->begin.tv_sec +
-        (now.tv_usec - pool->begin.tv_usec) * 1.0e-06;
+    now     = glb_time_now ();
+    elapsed = now - pool->begin;
 
     for (i = 0; i < pool->n_pools; i++) {
 #ifdef GLB_POOL_STATS
@@ -889,13 +913,13 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
         "Pool %2ld: conns: %5ld, selects: %9zu (%9.2f sel/sec)\n"
         "recv   : %9zuB %9zuR %9zuS %9.2fB/R %9.2fB/sec %9.2fR/S %9.2fR/sec\n"
         "send   : %9zuB %9zuW %9zuS %9.2fB/W %9.2fB/sec %9.2fW/S %9.2fW/sec\n",
-         i, pool->pool[i].n_conns, s.n_select, (double)s.n_select/seconds,
+         i, pool->pool[i].n_conns, s.n_select, (double)s.n_select/elapsed,
          s.recv_bytes,s.n_recv,s.sel_reads,(double)s.recv_bytes/s.n_recv,
-         (double)s.recv_bytes/seconds,(double)s.n_recv/s.n_select,
-         (double)s.n_recv/seconds,
+         (double)s.recv_bytes/elapsed,(double)s.n_recv/s.n_select,
+         (double)s.n_recv/elapsed,
          s.send_bytes,s.n_send,s.sel_writes,(double)s.send_bytes/s.n_send,
-         (double)s.send_bytes/seconds,(double)s.n_send/s.n_select,
-         (double)s.n_send/seconds
+         (double)s.send_bytes/elapsed,(double)s.n_send/s.n_select,
+         (double)s.n_send/elapsed
         );
         if (len == buf_len) {
             buf[len - 1] = '\0';
