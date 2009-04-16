@@ -21,7 +21,6 @@ extern bool glb_verbose;
 typedef struct router_dst
 {
     glb_dst_t dst;
-    double    weight;
     long      conns;  // how many connections use this destination
     double    usage;  // usage measure: weight/(conns + 1) - bigger wins
     time_t    failed; // last time connection to this destination failed
@@ -34,6 +33,12 @@ struct glb_router
     long            n_dst;
     router_dst_t*   dst;
 };
+
+static const double router_div_prot = 1.0e-09;
+static inline double
+router_dst_usage (router_dst_t* d)
+{ return (d->dst.weight / (d->conns + router_div_prot)); }
+
 
 long
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
@@ -72,8 +77,8 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
             else if (d->dst.weight != dst->weight) {
                 // update weight and usage
                 d->dst.weight = dst->weight;
-                d->weight     = dst->weight;
-                d->usage      = d->weight / (d->conns + 1);
+//                d->weight     = dst->weight;
+                d->usage      = router_dst_usage (d);
             }
             goto out;
         }
@@ -99,9 +104,9 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     d = router->dst + router->n_dst;
     router->n_dst++;
     d->dst    = *dst;
-    d->weight = dst->weight;
+//    d->weight = dst->weight;
     d->conns  = 0;
-    d->usage  = d->weight / (d->conns + 1);
+    d->usage  = router_dst_usage(d);
     d->failed = 0;
 
 out:
@@ -198,7 +203,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
         else {
             // success, update stats
             dst->conns++;
-            dst->usage = dst->weight / (dst->conns + 1);
+            dst->usage = router_dst_usage(dst);
             *addr = dst->dst.addr;
             return 0;
         }
@@ -254,7 +259,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
         router_dst_t* d = &router->dst[i];
         if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
             d->conns--;
-            d->usage = d->weight / (d->conns + 1);
+            d->usage = router_dst_usage(d);
             break;
         }
     }
@@ -268,7 +273,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
 }
 
 size_t
-glb_router_print_stats (glb_router_t* router, char* buf, size_t buf_len)
+glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 {
     size_t len = 0;
     long   total_conns = 0;
@@ -293,9 +298,9 @@ glb_router_print_stats (glb_router_t* router, char* buf, size_t buf_len)
 
         total_conns += d->conns;
 
-        len += snprintf (buf + len, buf_len - len, "%s : %6ld %9.3f %6ld\n",
+        len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f %5ld\n",
                          glb_socket_addr_to_string(&d->dst.addr),
-                         d->dst.weight, 1.0 - (2*d->usage / (d->weight + 1)),
+                         d->dst.weight, 1.0/(d->usage + 1.0),
 			 d->conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';

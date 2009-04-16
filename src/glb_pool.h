@@ -31,10 +31,10 @@ glb_pool_add_conn (glb_pool_t*     pool,
 extern long
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst);
 
-extern long
-glb_pool_get_stats (glb_pool_t* pool, glb_pool_stats_t* stats);
-
-extern size_t
+extern ssize_t
 glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len);
+
+extern ssize_t
+glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len);
 
 #endif // _glb_pool_h_

@@ -85,10 +85,10 @@ int main (int argc, char* argv[])
         if (!cmd->daemonize) {
             char stats[BUFSIZ];
 
-            glb_router_print_stats (router, stats, BUFSIZ);
+            glb_router_print_info (router, stats, BUFSIZ);
             puts (stats);
 
-            glb_pool_print_stats (pool, stats, BUFSIZ);
+            glb_pool_print_info (pool, stats, BUFSIZ);
             puts (stats);
         }
 

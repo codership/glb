@@ -42,6 +42,6 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
 
 // Returns the length of the string
 extern size_t
-glb_router_print_stats (glb_router_t* router, char* buf, size_t buf_len);
+glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len);
 
 #endif // _glb_router_h_

@@ -268,6 +268,15 @@ glb_cmd_parse (int argc, char* argv[])
     }
     inc_port = glb_socket_addr_get_port (&tmp.inc_addr);
 
+    // if control address was not specified
+    if (!tmp.ctrl_set) {
+        char port[6] = { 0, };
+        snprintf (port, 5, "%hu", inc_port + 1);
+        if (cmd_parse_addr (&tmp.ctrl_addr, port, cmd_ctrl_addr_default))
+            return NULL;
+        tmp.ctrl_set = true;
+    }
+
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;
 

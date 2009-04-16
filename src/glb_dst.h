@@ -16,9 +16,9 @@
 typedef struct glb_dst
 {
     glb_sockaddr_t addr;         // destination address in prepared form
-    long           weight;       // >0: connection allocation weight (def: 1)
+    double         weight;       // >0: connection allocation weight (def: 1)
                                  //  0: no new conns, but keep existing (drain)
-                                 // -1: discard destination entirely
+                                 // <0: discard destination entirely
 } glb_dst_t;
 
 /*!
@@ -35,7 +35,7 @@ glb_dst_set_port (glb_dst_t* dst, uint16_t port)
 }
 
 static inline void
-glb_dst_set_weight (glb_dst_t* dst, long weight)
+glb_dst_set_weight (glb_dst_t* dst, double weight)
 {
     dst->weight = weight;
 }
@@ -49,7 +49,7 @@ glb_dst_is_equal (const glb_dst_t* d1, const glb_dst_t* d2)
 static inline void
 glb_dst_print (char* buf, size_t buf_len, const glb_dst_t* dst)
 {
-    snprintf (buf, buf_len, "%s, w: %ld",
+    snprintf (buf, buf_len, "%s, w: %5.3f",
               glb_socket_addr_to_string(&dst->addr), dst->weight);
     buf[buf_len - 1] = '\0';
 }

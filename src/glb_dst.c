@@ -16,7 +16,7 @@
 #define dst_ip_len_max     256
 #define dst_ip_len_min     1
 #define dst_port_max       ((1 << 16) - 1)
-#define dst_default_weight 1
+#define dst_default_weight 1.0
 
 // parses addr:port:weight string, stores in dst
 // returns number of parsed fields or negative error code
@@ -72,7 +72,7 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
     // parse weight
     assert (*endptr == dst_separator);
     token = endptr + 1;
-    dst->weight = strtoul (token, &endptr, 10);
+    dst->weight = strtod (token, &endptr);
     if (*endptr != '\0') {
         perror ("Weight field doesn't consist only of numbers");
         return -EINVAL;

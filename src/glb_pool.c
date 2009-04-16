@@ -99,7 +99,8 @@ struct glb_pool
 {
     pthread_mutex_t lock;
     ulong           n_pools;
-    glb_time_t      begin;
+    glb_time_t      last_info;
+    glb_time_t      last_stats;
     pool_t          pool[];  // pool array, can't be changed in runtime
 };
 
@@ -281,6 +282,7 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
 #endif
 
     pool->n_conns--;
+    pool->stats.conns_closed++;
 
     if (notify_router)
         glb_router_disconnect (pool->router, &dst->dst_addr);
@@ -313,6 +315,8 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     pool_set_conn_end (pool, dst_end, inc_end);
 
     pool->n_conns++; // increment connection count
+    pool->stats.conns_opened++;
+
     if (glb_verbose) {
         glb_log_info ("Pool %ld: added connection, "
                       "(total pool connections: %ld)", pool->id, pool->n_conns);
@@ -347,6 +351,7 @@ static inline void
 pool_handle_stats (pool_t* pool, pool_ctl_t* ctl)
 {
     glb_pool_stats_t* stats = ctl->data;
+    pool->stats.n_conns = pool->n_conns;
     glb_pool_stats_add (stats, &pool->stats);
     pool->stats = glb_zero_stats;
 }
@@ -424,6 +429,7 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
 
     if (ret > 0) {
         pool->stats.send_bytes += ret;
+        pool->stats.tx_bytes   += dst->inc * ret;
 
         dst->sent += ret;
         if (dst->sent == dst->total) {        // all data sent, reset pointers
@@ -521,6 +527,9 @@ pool_handle_read (pool_t* pool, int src_fd)
             }
 
             pool->stats.recv_bytes += ret;
+
+            // increment only if it's coming from incoming interface
+            pool->stats.rx_bytes   += (!dst->inc) * ret;
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
@@ -694,6 +703,7 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
 
     pool->id     = id;
     pool->router = router;
+    pool->stats  = glb_zero_stats;
 
     pthread_mutex_init (&pool->lock, NULL);
     pthread_cond_init  (&pool->cond, NULL);
@@ -755,7 +765,8 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
         abort();
     }
 
-    ret->begin = glb_time_now();
+    ret->last_info  = glb_time_now();
+    ret->last_stats = ret->last_info;
 
     return ret;
 }
@@ -850,7 +861,7 @@ glb_pool_add_conn (glb_pool_t*     pool,
     return ret;
 }
 
-// returns 0 minus how many ctls failed
+// Sends the same ctl to all pools. Returns 0 minus how many ctls failed
 static inline long
 pool_bcast_ctl (glb_pool_t* pool, pool_ctl_t* ctl)
 {
@@ -875,15 +886,40 @@ glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
     return pool_bcast_ctl (pool, &drop_dst_ctl);
 }
 
-long
-glb_pool_get_stats (glb_pool_t* pool, glb_pool_stats_t* stats)
+ssize_t
+glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 {
-    pool_ctl_t stats_ctl = { POOL_CTL_STATS, (void*)stats };
-    return pool_bcast_ctl (pool, &stats_ctl);
+    glb_pool_stats_t stats = glb_zero_stats;
+    pool_ctl_t stats_ctl   = { POOL_CTL_STATS, (void*)&stats };
+    ssize_t    ret;
+    glb_time_t now = glb_time_now();
+
+    ret = pool_bcast_ctl (pool, &stats_ctl);
+    if (!ret) {
+        double elapsed = now - pool->last_stats;
+        ret = snprintf (buf, buf_len, "in: %lu out: %lu "
+                        "recv: %lu / %lu send: %lu / %lu "
+                        "conns: %lu / %lu poll: %lu / %lu / %lu "
+                        "elapsed: %.5f\n",
+                        stats.rx_bytes, stats.tx_bytes,
+                        stats.recv_bytes, stats.n_recv,
+                        stats.send_bytes, stats.n_send,
+                        stats.conns_opened, stats.n_conns,
+                        stats.poll_reads, stats.poll_writes, stats.n_polls,
+                        elapsed);
+    }
+    else {
+        assert (ret < 0);
+        glb_log_error ("Failed to get stats from %d thread pools.", ret);
+    }
+
+    pool->last_stats = now;
+
+    return ret;
 }
 
-size_t
-glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
+ssize_t
+glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 {
     size_t     len = 0;
     long       i;
@@ -901,7 +937,7 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
     GLB_MUTEX_LOCK (&pool->lock);
 
     now     = glb_time_now ();
-    elapsed = now - pool->begin;
+    elapsed = now - pool->last_info;
 
     for (i = 0; i < pool->n_pools; i++) {
 #ifdef GLB_POOL_STATS
@@ -943,7 +979,7 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
         return (len - 1);
     }
 
-    pool->begin = now;
+    pool->last_info = now;
 
     return len;
 }

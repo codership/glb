@@ -28,6 +28,7 @@
 
 extern bool glb_verbose;
 
+static const char ctrl_getinfo_cmd[] = "getinfo";
 static const char ctrl_getstat_cmd[] = "getstat";
 
 struct glb_ctrl
@@ -104,8 +105,13 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         }
     }
 
-    if (!strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
-        glb_router_print_stats (ctrl->router, req, sizeof(req));
+    if (!strncasecmp (ctrl_getinfo_cmd, req, strlen(ctrl_getinfo_cmd))) {
+        glb_router_print_info (ctrl->router, req, sizeof(req));
+        ctrl_respond (ctrl, fd, req);
+        return 0;
+    }
+    else if (!strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
+        glb_pool_print_stats (ctrl->pool, req, sizeof(req));
         ctrl_respond (ctrl, fd, req);
         return 0;
     }
@@ -128,7 +134,7 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         }
         ctrl_respond (ctrl, fd, "OK\n");
 
-        if (dst.weight < 0) {
+        if (dst.weight < 0.0) {
             // destination was removed from router, drop all connections to it
             glb_pool_drop_dst (ctrl->pool, &dst.addr);
         }

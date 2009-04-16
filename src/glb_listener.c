@@ -43,7 +43,7 @@ listener_thread (void* arg)
 
         ret = select (listener->sock + 1, &fds, NULL, NULL, NULL);
         if (ret < 0) {
-            glb_log_error ("error waiting for connections: %d (%s)",
+            glb_log_error ("Error waiting for connections: %d (%s)",
                            errno, strerror (errno));
             FD_SET (listener->sock, &fds);
             goto err; //?
@@ -55,14 +55,14 @@ listener_thread (void* arg)
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
         if (client_sock < 0) {
-            glb_log_error ("Listener: failed to accept connection: %d (%s)",
+            glb_log_error ("Failed to accept connection: %d (%s)",
                            errno, strerror (errno));
             goto err;
         }
 
         server_sock = glb_router_connect (listener->router, &server);
         if (server_sock < 0) {
-            glb_log_error("Listener: failed to connect to destination: %d (%s)",
+            glb_log_error("Failed to connect to destination: %d (%s)",
                           errno, strerror(errno));
             goto err1;
         }
@@ -70,16 +70,16 @@ listener_thread (void* arg)
         ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
                                  &server);
         if (ret < 0) {
-            glb_log_error ("Listener: failed to add connection to pool: "
+            glb_log_error ("Failed to add connection to pool: "
                            "%d (%s)", errno, strerror (errno));
             goto err2;
         }
 
         if (glb_verbose) {
-            fprintf (stderr, "Listener: accepted connection from %s ",
-                     glb_socket_addr_to_string (&client));
-            fprintf (stderr, "to %s\n",
-                     glb_socket_addr_to_string (&server));
+            glb_log_info ("Accepted connection from %s ",
+                          glb_socket_addr_to_string (&client));
+            glb_log_info ("to %s\n",
+                          glb_socket_addr_to_string (&server));
         }
         continue;
 
