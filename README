@@ -53,12 +53,12 @@ $ echo "192.168.0.1:3307:5" | nc -q 1 127.0.0.1 4444
 OK
 $ echo "192.168.0.2:3307:5" | nc -q 1 127.0.0.1 4444
 OK
-$ echo "getstat" | nc -q 1 127.0.0.1 4444
+$ echo "getinfo" | nc -q 1 127.0.0.1 4444
 Router:
 ----------------------------------------------------
-   Address       : weight usage conns
-192.168.0.1:3307 :   5     0.00   0
-192.168.0.2:3307 :   5     0.00   0
+   Address       : weight   usage  conns
+192.168.0.1:3307 :  5.000   0.000    0
+192.168.0.2:3307 :  5.000   0.000    0
 ----------------------------------------------------
 Destinations: 2, total connections: 0 
 
@@ -76,4 +76,37 @@ either as HOSTNAME:PORT or just PORT. In the latter case glbd will listen for
 client connections on all interfaces. Backend servers can be specified as
 HOSTNAME1,HOSTNAME2,HOSTNAME3. In that case incoming port number will be used
 for PORT value and 1 will be used for WEIGHT value.
+
+
+PERFORMANCE STATISTICS:
+=======================
+GLB allows to query raw performance statistics through control socket using
+'getstat' command. The client can use these data to obtain useful information,
+e.g. average number of reads per poll() call.
+
+$ echo "getstat" | nc -q 1 127.0.0.1 4444
+in: 6930 out: 102728 recv: 109658 / 45 send: 109658 / 45 conns: 0 / 4 poll: 45 / 0 / 45 elapsed: 1.03428
+
+Statistics line consists of fields separated by spaces for ease of parsing in
+scripts. A few description fields are added to assist in human reading. Value
+fields are all even and go as follows:
+
+  2  - number of bytes received on incoming interface (client requests)
+  4  - number of bytes sent from incoming inteface (server responses)
+  6  - number of bytes passed through recv() call
+  8  - number of recv() calls
+  10 - number of bytes passed through recv() call
+  12 - number of recv() calls
+  14 - number of created connections
+  16 - number of current connections
+  18 - number of read-ready file descriptors returned by poll()/epoll_wait()
+  20 - number of write-ready file descriptors returned by poll()/epoll_wait()
+  22 - number of times poll()/epoll_wait() triggered
+  24 - time elapsed since last statistics report (seconds)
+  
+All values except for 16 and 24 are totals accumulated since the last report.
+In order to obtain some variable rate it must be divided by the elapsed time.
+On 32-bit architectures the values are stored in 4-byte integers and can
+overflow if too much time elapsed, so the first statistics report in the series
+may need to be discarded.
 
