@@ -16,11 +16,14 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h>
+
+// unfotunately I see no way to use glb_pool.c polling code in here
+// so it is yet another implementation
+#include <poll.h>
+typedef struct pollfd pollfd_t;
 
 #include "glb_log.h"
 #include "glb_signal.h"
@@ -31,6 +34,13 @@ extern bool glb_verbose;
 static const char ctrl_getinfo_cmd[] = "getinfo";
 static const char ctrl_getstat_cmd[] = "getstat";
 
+typedef enum ctrl_fd
+{
+    CTRL_FIFO = 0,
+    CTRL_LISTEN,
+    CTRL_MAX = 32 // max 30 simultaneous control connections
+} ctrl_fd_t;
+
 struct glb_ctrl
 {
     pthread_t     thread;
@@ -40,28 +50,51 @@ struct glb_ctrl
     glb_router_t* router;
     glb_pool_t*   pool;
     int           fd_max;
-    fd_set        fds;
+    pollfd_t      fds[CTRL_MAX];
     uint16_t      default_port;
 };
 
 static void
 ctrl_add_client (glb_ctrl_t* ctrl, int fd)
 {
-    assert (ctrl->fd_max != fd);
-    FD_SET (fd, &ctrl->fds);
-    if (fd > ctrl->fd_max) ctrl->fd_max = fd;
+    assert (ctrl->fd_max < CTRL_MAX);
+
+    ctrl->fds[ctrl->fd_max].fd      = fd;
+    ctrl->fds[ctrl->fd_max].events  = POLLIN;
+    ctrl->fds[ctrl->fd_max].revents = 0;
+
+    ctrl->fd_max++;
+
+    if (CTRL_MAX == ctrl->fd_max) // no more clients
+        ctrl->fds[CTRL_LISTEN].events = 0;
 }
 
 static void
 ctrl_del_client (glb_ctrl_t* ctrl, int fd)
 {
-    assert (ctrl->fd_max >= fd);
-    FD_CLR (fd, &ctrl->fds);
-    if (fd == ctrl->fd_max) { // find next highest fd
-        while (!FD_ISSET (ctrl->fd_max, &ctrl->fds)) ctrl->fd_max--;
+    int idx;
+
+    assert (CTRL_MAX >= ctrl->fd_max);
+    assert (ctrl->fd_max > CTRL_LISTEN);
+
+    for (idx = 1; idx < ctrl->fd_max; idx++) {
+        if (fd == ctrl->fds[idx].fd) {
+            close (ctrl->fds[idx].fd);
+            ctrl->fd_max--;
+            ctrl->fds[idx] = ctrl->fds[ctrl->fd_max];
+            ctrl->fds[ctrl->fd_max].fd      = 0;
+            ctrl->fds[ctrl->fd_max].events  = 0;
+            ctrl->fds[ctrl->fd_max].revents = 0;
+            break;
+        }
     }
-    assert (ctrl->fd_max < fd);
-    close (fd);
+
+    if (!(ctrl->fd_max < CTRL_MAX)) {
+        glb_log_fatal ("Failed to cleanup the client conneciton.");
+        abort();
+    };
+
+    ctrl->fds[CTRL_LISTEN].events = POLLIN;
 }
 
 static inline void
@@ -132,14 +165,23 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
             ctrl_respond (ctrl, fd, "Error\n");
             return 0;
         }
-        ctrl_respond (ctrl, fd, "OK\n");
+
+        ctrl_respond (ctrl, fd, "Ok\n");
 
         if (dst.weight < 0.0) {
             // destination was removed from router, drop all connections to it
             glb_pool_drop_dst (ctrl->pool, &dst.addr);
         }
+
         return 0;
     }
+}
+
+// returns true if fd is ready to read
+static inline bool
+ctrl_fd_isset (glb_ctrl_t* ctrl, int idx)
+{
+    return (ctrl->fds[idx].revents & POLLIN);
 }
 
 static void*
@@ -148,22 +190,25 @@ ctrl_thread (void* arg)
     glb_ctrl_t* ctrl = arg;
 
     while (!glb_terminate) {
-        long            ret;
-        int             client_sock;
-        struct sockaddr client;
-        socklen_t       client_size;
-        fd_set          fds = ctrl->fds;
-        struct timeval  timeout = { 1, 0 };
+        long ret;
 
-        ret = select (ctrl->fd_max + 1, &fds, NULL, NULL, &timeout);
+        // Timeout is needed to gracefully shut down
+        ret = poll (ctrl->fds, ctrl->fd_max, 1000 /* ms */);
         if (ret < 0) {
-            perror ("error waiting for connections");
+            glb_log_error ("Error waiting for connections: %d (%s)",
+                           errno, strerror(errno));
             goto err; //?
         }
         else if (0 == ret) continue;
 
-        if (ctrl->inet_sock > 0 && FD_ISSET (ctrl->inet_sock, &fds)) {
+        if (ctrl->inet_sock > 0 && (ctrl_fd_isset (ctrl, CTRL_LISTEN))) {
+            // new network client
+            int             client_sock;
+            struct sockaddr client;
+            socklen_t       client_size;
+
             client_sock = accept (ctrl->inet_sock, &client, &client_size);
+
             if (client_sock < 0) {
                 glb_log_error ("Ctrl: failed to accept connection: %d (%s)",
                                errno, strerror (errno));
@@ -182,9 +227,9 @@ ctrl_thread (void* arg)
         else {
             int fd;
             for (fd = 1; fd <= ctrl->fd_max; fd++) { // find fd
-                if (FD_ISSET (fd, &fds)) break;
+                if (ctrl_fd_isset (ctrl, fd))
+                    if (ctrl_handle_request (ctrl, ctrl->fds[fd].fd)) goto err;
             }
-            if (ctrl_handle_request (ctrl, fd)) goto err;
             continue;
         }
 
@@ -253,21 +298,17 @@ glb_ctrl_create (glb_router_t*         router,
         ret->fifo_name    = fifo_name;
         ret->fifo         = fifo;
         ret->inet_sock    = inet_sock;
-        ret->fd_max       = fifo > inet_sock ? fifo : inet_sock;
+        ret->fd_max       = fifo > inet_sock ? 1 : 2;
         ret->default_port = port;
 
-        FD_ZERO (&ret->fds);
-        FD_SET  (ret->fifo, &ret->fds);
-        if (ret->inet_sock > 0) FD_SET (ret->inet_sock, &ret->fds);
+        ret->fds[CTRL_FIFO].fd      = ret->fifo;
+        ret->fds[CTRL_FIFO].events  = POLLIN;
 
-#if 0 // remove
-        for (fd = 0; fd < FD_SETSIZE; fd++) {
-            if (FD_ISSET (fd, &ret->fds))
-                printf ("Ctrl: set fd %d\n", fd);
+        if (ret->inet_sock > 0) {
+            ret->fds[CTRL_LISTEN].fd      = ret->inet_sock;
+            ret->fds[CTRL_LISTEN].events  = POLLIN;
         }
-        printf ("Ctrl: fd_max = %d\n", ret->fd_max);
-        printf ("Ctrl: ctrl object: %p\n", ret);
-#endif
+
         if (pthread_create (&ret->thread, NULL, ctrl_thread, ret)) {
             glb_log_error ("Failed to launch ctrl thread.");
             free (ret);

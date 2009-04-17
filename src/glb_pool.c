@@ -210,7 +210,7 @@ pool_fds_del (pool_t* pool, pool_conn_end_t* end)
     // copy the last pollfd in place of the deleted
     pool->pollfds[end->fds_idx] = pool->pollfds[pool->fd_max];
     // from this pollfd find its fd and from route_map by fd find its
-    // pool_coon_end struct and in that struct update fds_idx to point at
+    // pool_conn_end struct and in that struct update fds_idx to point at
     // a new position.
     pool_conn_end_by_fd(pool, pool->pollfds[end->fds_idx].fd)->fds_idx =
         end->fds_idx;
@@ -631,7 +631,7 @@ pool_handle_events (pool_t* pool, long count)
                 register long ret;
                 pool->stats.poll_writes++;
 
-                long ret = pool_handle_write (pool, pfd->fd);
+                ret = pool_handle_write (pool, pfd->fd);
                 if (ret < 0) return ret;
             }
             count--;

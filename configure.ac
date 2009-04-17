@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.50)
-AC_INIT(glb, 0.7.0, info@codership.com)
+AC_INIT(glb, 0.7.1, info@codership.com)
 AC_CONFIG_SRCDIR([src/glb_main.c])
 AC_CONFIG_HEADER([config.h])
 AC_CANONICAL_SYSTEM
@@ -84,7 +84,14 @@ AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gettimeofday memset strdup strcasecmp strncasecmp strtol])
 
 # Check for poll()/epoll()
-POLL="POLL"
+AC_CHECK_HEADERS([poll.h],
+                 [AC_CHECK_FUNC([poll],[POLL="POLL"],
+	                        [AC_MSG_FAILURE([*** poll() not found! ***])]
+		               )
+	         ],
+		 [AC_MSG_FAILURE([*** poll.h not found! ***])]
+		)
+
 if test "$enable_poll" == "no"
 then
     AC_CHECK_HEADERS([sys/epoll.h],
@@ -94,18 +101,6 @@ then
 				   )
 		     ]
 	            )
-fi
-
-if test "$POLL" == "POLL"
-then
-    AC_CHECK_HEADERS([poll.h],
-                     [AC_CHECK_FUNC([poll],,
-		                    [AC_MSG_FAILURE([*** poll() not found! ***])]
-			           )
-		     ],
-		     [AC_MSG_FAILURE([*** poll.h not found! ***])]
-		    )
-#     AC_CHECK_FUNC([poll],[POLL="POLL"],[AC_MSG_ERROR([*** poll() not found! ***])])
 fi
 
 if test "$enable_splice" == "yes"
