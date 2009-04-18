@@ -61,32 +61,30 @@ glb_cmd_help (FILE* out, const char* progname)
              "Usage:\n  %s [OPTIONS] LISTEN_ADDRESS "
              "[DESTINATION_LIST]\nOPTIONS:\n", progname);
     fprintf (out,
-             "  --help                  this help message\n");
+             "  --help                  this help message.\n");
     fprintf (out,
-             "  --fifo <fifo name>      name of the FIFO file for control\n");
+             "  --fifo <fifo name>      name of the FIFO file for control.\n");
     fprintf (out,
              "  --control [HOST:]PORT   "
-             "listen for control requests on this address\n"
-             "                          "
-             "(default: 127.0.0.1:<LISTEN_PORT + 1>\n");
+             "listen for control requests on this address.\n");
     fprintf (out,
              "  --threads N             "
-             "number of working threads (number of CPU cores)\n");
+             "number of working threads (connection pools).\n");
     fprintf (out,
              "  --source_tracking       "
              "turn on source tracking: route connections from one\n"
-             "                          source to the same destination\n");
+             "                          source to the same destination.\n");
     fprintf (out,
-             "  --verbose               turn on verbose reporting\n");
+             "  --verbose               turn on verbose reporting.\n");
     fprintf (out,
-             "  --version               print program version\n");
+             "  --version               print program version.\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
              "  [IP:]PORT               "
-             "where to listen for incoming TCP connections\n");
+             "where to listen for incoming TCP connections.\n");
     fprintf (out, "DESTINATION_LIST:\n"
              "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
              " - a space-separated list of destinations\n"
-             "                          in the form address:port:weight\n");
+             "                          in the form address:port:weight.\n");
     exit (EXIT_FAILURE);
 }
 
@@ -268,6 +266,7 @@ glb_cmd_parse (int argc, char* argv[])
     }
     inc_port = glb_socket_addr_get_port (&tmp.inc_addr);
 
+#if 0 // don't open socket by default for security considerations.
     // if control address was not specified
     if (!tmp.ctrl_set) {
         char port[6] = { 0, };
@@ -276,6 +275,7 @@ glb_cmd_parse (int argc, char* argv[])
             return NULL;
         tmp.ctrl_set = true;
     }
+#endif
 
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;

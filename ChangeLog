@@ -1,3 +1,10 @@
+2009-04-18 alex
+- Fixed:
+  * control thread was still using select() to listen to requests (FD_SETSIZE
+    descriptor limit).
+  * reverted "fix" which opened control socket by default for security and
+    usability considerations.
+  Version 0.7.1.
 2009-04-16 alex
 - Added machine parsable stats output on 'getstat' command
 - Fixed:
