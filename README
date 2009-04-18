@@ -95,10 +95,10 @@ fields are all even and go as follows:
   4  - number of bytes sent from incoming inteface (server responses)
   6  - number of bytes passed through recv() call
   8  - number of recv() calls
-  10 - number of bytes passed through recv() call
-  12 - number of recv() calls
+  10 - number of bytes passed through send() call (should be equal to p.6)
+  12 - number of send() calls
   14 - number of created connections
-  16 - number of current connections
+  16 - number of concurrent connections
   18 - number of read-ready file descriptors returned by poll()/epoll_wait()
   20 - number of write-ready file descriptors returned by poll()/epoll_wait()
   22 - number of times poll()/epoll_wait() triggered
