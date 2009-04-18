@@ -96,7 +96,7 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
     fprintf (out, "Incoming address: %s, ",
              glb_socket_addr_to_string (&cmd->inc_addr));
     fprintf (out, "control FIFO: %s\n", cmd->fifo_name);
-    fprintf (out, "Control address:  %s\n",
+    fprintf (out, "Control  address:  %s\n",
              cmd->ctrl_set ? glb_socket_addr_to_string (&cmd->ctrl_addr) :
              "none");
     fprintf (out, "Number of threads: %lu, source tracking: %s, verbose: %s, "
