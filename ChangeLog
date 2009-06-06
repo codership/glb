@@ -1,3 +1,10 @@
+2009-06-07 alex
+- Fixed:
+  * Off-by-one bug which threw control thread into a tight loop when using FIFO
+    control method.
+  * listener thread was still using select().
+  Version 0.7.2
+
 2009-04-18 alex
 - Fixed:
   * control thread was still using select() to listen to requests (FD_SETSIZE
@@ -5,6 +12,7 @@
   * reverted "fix" which opened control socket by default for security and
     usability considerations.
   Version 0.7.1.
+
 2009-04-16 alex
 - Added machine parsable stats output on 'getstat' command
 - Fixed:
@@ -12,22 +20,28 @@
   * usage display if weight was not 0 or 1
   * real numbers were not accepted for destination weight
   Version 0.7.0.
+
 2009-04-15 alex
 - Refactored to use poll/epoll API instead of select(). This allows for more
   than FD_SETSIZE/2 concurrent connections and is considerably faster in case
   of epoll.
+
 2009-03-12 alex
 - Cosmetic changes to the output: usage now ranges strictly from 0.0
   (unused) to 1.0 (overloaded). Weight 0.0 automatically means usage 1.0,
   before that it was 'nan'. Version 0.6.3.
+
 2009-02-10 alex
 - Fixed non-working destination failover, failed destinations are retried
   every 2 seconds. Version 0.6.2.
+
 2009-01-07 alex
 - Fixed silly destination list parsing bug. Version 0.6.1.
+
 2008-09-14 alex
 - Fixed a problem with default port when adding destinations during runtime.
 - Changed from comma-separated destination list to space-separated
   destination list, hence bumped minor version.
+
 2008-07-15 alex
 - Initial release.

@@ -12,9 +12,11 @@
 #include <assert.h>
 #include <unistd.h>
 
+#include "glb_log.h"
 #include "glb_socket.h"
 
-//static const size_t addr_string_len = 512; heh, my GCC refuses to see it as a constant! here goes type safety...
+//static const size_t addr_string_len = 512; heh, my GCC refuses to see it as
+//a constant! here goes type safety...
 #define addr_string_len 512
 static char addr_string[addr_string_len] = { 0, };
 
@@ -87,7 +89,8 @@ glb_socket_create (const struct sockaddr_in* addr)
     sock = socket (PF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
-        perror ("glb_socket_create(): socket");
+        glb_log_error ("Failed to create listening socket: %d (%s)",
+                       errno, strerror (errno));
         return -errno;
     }
 #if 0
@@ -107,7 +110,8 @@ glb_socket_create (const struct sockaddr_in* addr)
     /* Give the socket a name. */
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
-        perror ("glb_socket_create(): bind");
+        glb_log_error ("Failed to bind listening socket: %d (%s)",
+                       errno, strerror (errno));
         close (sock);
         return -errno;
     }

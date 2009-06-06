@@ -90,7 +90,7 @@ ctrl_del_client (glb_ctrl_t* ctrl, int fd)
     }
 
     if (!(ctrl->fd_max < CTRL_MAX)) {
-        glb_log_fatal ("Failed to cleanup the client conneciton.");
+        glb_log_fatal ("Failed to cleanup control connection.");
         abort();
     };
 
@@ -226,9 +226,11 @@ ctrl_thread (void* arg)
         }
         else {
             int fd;
-            for (fd = 1; fd <= ctrl->fd_max; fd++) { // find fd
-                if (ctrl_fd_isset (ctrl, fd))
+            for (fd = CTRL_FIFO; fd <= ctrl->fd_max; fd++) { // find fd
+                if (ctrl_fd_isset (ctrl, fd)) {
+                    assert (fd != CTRL_LISTEN);
                     if (ctrl_handle_request (ctrl, ctrl->fds[fd].fd)) goto err;
+                }
             }
             continue;
         }

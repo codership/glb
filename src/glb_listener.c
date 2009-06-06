@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <poll.h>
+typedef struct pollfd pollfd_t;
 
 #include "glb_log.h"
 #include "glb_listener.h"
@@ -27,11 +29,7 @@ static void*
 listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
-    fd_set fds;
-
-    // shoudl be no need to refresh the fd set
-    FD_ZERO (&fds);
-    FD_SET (listener->sock, &fds);
+    pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
 
     while (1) {
         long           ret;
@@ -41,16 +39,15 @@ listener_thread (void* arg)
         int            server_sock;
         glb_sockaddr_t server;
 
-        ret = select (listener->sock + 1, &fds, NULL, NULL, NULL);
+        ret = poll (&pollfd, 1, -1);
         if (ret < 0) {
             glb_log_error ("Error waiting for connections: %d (%s)",
                            errno, strerror (errno));
-            FD_SET (listener->sock, &fds);
             goto err; //?
         }
 
         assert (1 == ret);
-        assert (FD_ISSET (listener->sock, &fds));
+        assert (pollfd.revents & POLLIN);
 
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
