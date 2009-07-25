@@ -219,7 +219,7 @@ ctrl_thread (void* arg)
             ctrl_add_client (ctrl, client_sock);
 
             if (glb_verbose) {
-                fprintf (stderr, "Ctrl: accepted connection from %s\n",
+                glb_log_info ("Ctrl: accepted connection from %s\n",
                          glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
             }
             continue;

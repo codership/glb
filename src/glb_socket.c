@@ -57,7 +57,7 @@ glb_socket_addr_init (glb_sockaddr_t* addr,
     host = gethostbyname (hostname);
     if (host == NULL)
     {
-        fprintf (stderr, "Unknown host %s.\n", hostname);
+        glb_log_error ("Unknown host %s.\n", hostname);
         return -EINVAL;
     }
     addr->sin_addr = *(struct in_addr *) host->h_addr;

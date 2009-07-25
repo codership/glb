@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <assert.h>
 
+#include "glb_log.h"
 #include "glb_socket.h"
 #include "glb_dst.h"
 
@@ -40,7 +41,7 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
     else
         addr_len = strlen (s);
     if (addr_len > dst_ip_len_max) {
-        fprintf (stderr, "Host address too long: %s\n", s);
+        glb_log_error ("Host address too long: %s\n", s);
         return -EINVAL;
     }
 
@@ -56,12 +57,12 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
     port = strtoul (token, &endptr, 10);
     if (*endptr != dst_separator  &&
         *endptr != '\0') {
-        perror ("Port field doesn't consist only of numbers");
+        glb_log_error ("Port field doesn't consist only of numbers");
         return -EINVAL;
     }
     if (port > dst_port_max) {
         // value of 0 means no setting, don't check
-        perror ("Port value exceeds maximum port number");
+        glb_log_error ("Port value exceeds maximum port number");
         return -EINVAL;
     }
 
@@ -74,14 +75,14 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
     token = endptr + 1;
     dst->weight = strtod (token, &endptr);
     if (*endptr != '\0') {
-        perror ("Weight field doesn't consist only of numbers");
+        glb_log_error ("Weight field doesn't consist only of numbers");
         return -EINVAL;
     }
     ret = 3;
 
 end:
     if (glb_socket_addr_init (&dst->addr, addr_str, port)) {
-        perror ("glb_socket_addr_init()");
+        glb_log_error ("%s", strerror (EINVAL));
         return -EINVAL;
     }
 

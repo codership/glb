@@ -34,11 +34,10 @@ struct glb_router
     router_dst_t*   dst;
 };
 
-static const double router_div_prot = 1.0e-09;
+static const double router_div_prot = 1.0e-09; // protection against div by 0
 static inline double
 router_dst_usage (router_dst_t* d)
 { return (d->dst.weight / (d->conns + router_div_prot)); }
-
 
 long
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
@@ -48,7 +47,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     router_dst_t* d;
 
     if (pthread_mutex_lock (&router->lock)) {
-        fprintf (stderr, "Router mutex lock failed, abort.");
+        glb_log_fatal ("Router mutex lock failed, abort.");
         abort();
     }
     // try to find destination in the list
@@ -188,7 +187,8 @@ static int
 router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 {
     router_dst_t* dst;
-    int error = 1;
+    int  error    = 1;
+    bool redirect = false;
 
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router))) {
@@ -196,8 +196,9 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
                      sizeof (dst->dst.addr))) {
 	    error = errno;
             // connect failed, update destination failed mark
-            fprintf (stderr, "Router: failed to connect to %s: %s\n",
-                     glb_socket_addr_to_string (&dst->dst.addr), strerror(error));
+            glb_log_warn ("Failed to connect to %s: %s",
+                     glb_socket_addr_to_string (&dst->dst.addr),
+                     strerror(error));
             dst->failed = time(NULL);
         }
         else {
@@ -205,6 +206,10 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
             dst->conns++;
             dst->usage = router_dst_usage(dst);
             *addr = dst->dst.addr;
+            if (redirect) {
+                glb_log_warn ("Redirecting to %s",
+                              glb_socket_addr_to_string (addr));
+            }
             return 0;
         }
     }
