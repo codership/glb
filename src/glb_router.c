@@ -200,6 +200,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
                      glb_socket_addr_to_string (&dst->dst.addr),
                      strerror(error));
             dst->failed = time(NULL);
+            redirect = true;
         }
         else {
             // success, update stats
