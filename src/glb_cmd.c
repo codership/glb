@@ -106,8 +106,8 @@ glb_cmd_print (FILE* out, glb_cmd_t* cmd)
     fprintf (out, "Destinations: %lu\n", (ulong)cmd->n_dst);
 
     for (i = 0; i < cmd->n_dst; i++) {
-        char tmp[128];
-        glb_dst_print (tmp, 128, &cmd->dst[i]);
+        char tmp[256];
+        glb_dst_print (tmp, sizeof(tmp), &cmd->dst[i]);
         fprintf (out, "  %2lu: %s\n", i, tmp);
     }
 }
@@ -241,7 +241,15 @@ glb_cmd_parse (int argc, char* argv[])
             glb_verbose = true;
             break;
         case CMD_OPT_VERSION:
-            printf ("%s v%s\n", PACKAGE, VERSION);
+            printf ("%s v%s (%s)\n", PACKAGE, VERSION,
+#if defined(USE_EPOLL)
+                    "epoll"
+#elif defined(USE_POLL)
+                    "poll"
+#else
+#error "USE_POLL/USE_EPOLL undefined"
+#endif
+	    );
             break;
         case CMD_OPT_DAEMON:
             tmp.daemonize = true;
