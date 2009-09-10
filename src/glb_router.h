@@ -37,7 +37,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr);
  * weight, if weight is -1 - removes destination from the list
  * @return index of record changed or negative error code
  */
-extern long
+extern int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
 
 // Returns the length of the string

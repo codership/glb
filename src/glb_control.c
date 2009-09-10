@@ -319,7 +319,7 @@ glb_ctrl_create (glb_router_t*         router,
         return ret;
     }
     else {
-        perror ("Ctrl: malloc()");
+        glb_log_error ("Ctrl: out of memory.");
     }
 
 err2:

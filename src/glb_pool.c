@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #endif
 
+#include "glb_misc.h"
 #include "glb_time.h"
 #include "glb_log.h"
 #include "glb_pool.h"
@@ -354,24 +355,6 @@ pool_handle_stats (pool_t* pool, pool_ctl_t* ctl)
     pool->stats.n_conns = pool->n_conns;
     glb_pool_stats_add (stats, &pool->stats);
     pool->stats = glb_zero_stats;
-}
-
-#define GLB_MUTEX_LOCK(mtx)                                             \
-{                                                                       \
-    int ret;                                                            \
-    if ((ret = pthread_mutex_lock (mtx))) {                             \
-        glb_log_fatal ("Failed to lock mutex: %d (%s)", ret, strerror(ret));\
-        abort();                                                        \
-    }                                                                   \
-}
-
-#define GLB_MUTEX_UNLOCK(mtx)                                           \
-{                                                                       \
-    int ret;                                                            \
-    if ((ret = pthread_mutex_unlock (mtx))) {                           \
-        glb_log_fatal ("Failed to unlock mutex: %d (%s)", ret, strerror(ret));\
-        abort();                                                        \
-    }                                                                   \
 }
 
 static long

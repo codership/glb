@@ -9,7 +9,7 @@
 
 #include <stdlib.h>     // for ulong
 #include <stdbool.h>    // for bool
-#include <stdio.h>      // for FILE and fprintf()
+#include <stdio.h>      // for snprintf()
 
 #include "glb_socket.h"
 

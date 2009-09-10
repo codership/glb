@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "glb_log.h"
+#include "glb_misc.h"
 #include "glb_socket.h"
 #include "glb_router.h"
 
@@ -30,26 +31,35 @@ struct glb_router
 {
     glb_sockaddr_t  sock_out; // outgoing socket address
     pthread_mutex_t lock;
+    long            busy_count;
+    long            busy_wait;
+    pthread_cond_t  free;
     long            n_dst;
     router_dst_t*   dst;
 };
 
-static const double router_div_prot = 1.0e-09; // protection against div by 0
+static const  double router_div_prot = 1.0e-09; // protection against div by 0
+
 static inline double
 router_dst_usage (router_dst_t* d)
 { return (d->dst.weight / (d->conns + router_div_prot)); }
 
-long
+int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 {
-    long          i;
+    int           i;
     void*         tmp;
     router_dst_t* d;
 
-    if (pthread_mutex_lock (&router->lock)) {
-        glb_log_fatal ("Router mutex lock failed, abort.");
-        abort();
+    GLB_MUTEX_LOCK (&router->lock);
+
+    while (router->busy_count > 0) {
+        router->busy_wait++;
+        pthread_cond_wait (&router->free, &router->lock);
+        router->busy_wait--;
+        assert (router->busy_wait >= 0);
     }
+
     // try to find destination in the list
     for (i = 0; i < router->n_dst; i++) {
         d = &router->dst[i];
@@ -76,7 +86,6 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
             else if (d->dst.weight != dst->weight) {
                 // update weight and usage
                 d->dst.weight = dst->weight;
-//                d->weight     = dst->weight;
                 d->usage      = router_dst_usage (d);
             }
             goto out;
@@ -86,14 +95,15 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
     // not found in the list, add destination, but first check weight
     if (dst->weight < 0) {
-        char tmp[128];
-        glb_dst_print (tmp, 128, dst);
+        char tmp[256];
+        glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
         i = -EADDRNOTAVAIL;
         goto out;
     }
 
     tmp = realloc (router->dst, (router->n_dst + 1) * sizeof(router_dst_t));
+
     if (!tmp) {
         i = -ENOMEM;
         goto out;
@@ -103,14 +113,14 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     d = router->dst + router->n_dst;
     router->n_dst++;
     d->dst    = *dst;
-//    d->weight = dst->weight;
     d->conns  = 0;
     d->usage  = router_dst_usage(d);
     d->failed = 0;
 
 out:
     assert (router->n_dst >= 0);
-    pthread_mutex_unlock (&router->lock);
+    if (router->busy_wait > 0) pthread_cond_signal (&router->free);
+    GLB_MUTEX_UNLOCK (&router->lock);
     return i;
 }
 
@@ -118,6 +128,7 @@ static void
 router_cleanup (glb_router_t* router)
 {
     pthread_mutex_destroy (&router->lock);
+    pthread_cond_destroy (&router->free);
     if (router->dst) free (router->dst);
     free (router);
 }
@@ -131,7 +142,11 @@ glb_router_create (size_t n_dst, glb_dst_t dst[])
         long i;
 
         pthread_mutex_init (&ret->lock, NULL);
+        pthread_cond_init  (&ret->free, NULL);
+
         glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
+
+        ret->busy_count = 0;
         ret->n_dst = 0;
         ret->dst   = NULL;
 
@@ -187,15 +202,31 @@ static int
 router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 {
     router_dst_t* dst;
-    int  error    = 1;
+    int  error    = 0;
+    int  ret;
     bool redirect = false;
+
+    GLB_MUTEX_LOCK (&router->lock);
+    router->busy_count++;
 
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router))) {
-        if (connect (sock, (struct sockaddr*)&dst->dst.addr,
-                     sizeof (dst->dst.addr))) {
+        dst->conns++;
+        dst->usage = router_dst_usage(dst);
+
+        GLB_MUTEX_UNLOCK (&router->lock);
+
+        ret = connect (sock, (struct sockaddr*)&dst->dst.addr,
+                       sizeof (dst->dst.addr));
+
+        GLB_MUTEX_LOCK (&router->lock);
+
+        if (ret != 0) {
 	    error = errno;
-            // connect failed, update destination failed mark
+            // connect failed, undo usage count, update destination failed mark
+            dst->conns--;
+            assert (dst->conns >= 0);
+            dst->usage = router_dst_usage(dst);
             glb_log_warn ("Failed to connect to %s: %s",
                      glb_socket_addr_to_string (&dst->dst.addr),
                      strerror(error));
@@ -203,17 +234,21 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
             redirect = true;
         }
         else {
-            // success, update stats
-            dst->conns++;
-            dst->usage = router_dst_usage(dst);
             *addr = dst->dst.addr;
             if (redirect) {
                 glb_log_warn ("Redirecting to %s",
                               glb_socket_addr_to_string (addr));
             }
-            return 0;
         }
     }
+
+    router->busy_count--;
+    assert (router->busy_count >= 0);
+
+    if (0 == router->busy_count && 0 < router->busy_wait)
+        pthread_cond_signal (&router->free);
+
+    GLB_MUTEX_UNLOCK (&router->lock);
 
     return -error; // all attempts failed, return last errno
 }
@@ -227,13 +262,8 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
     // prepare a socket
     sock = glb_socket_create (&router->sock_out);
     if (sock < 0) {
-        perror ("Router: glb_socket_create");
+        glb_log_error ("glb_socket_create() failed");
         return sock;
-    }
-
-    if (pthread_mutex_lock (&router->lock)) {
-        perror ("Router mutex lock failed, abort.");
-        abort();
     }
 
     // attmept to connect until we run out of destinations
@@ -241,12 +271,10 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
 
     // avoid socket leak
     if (ret < 0) {
-        perror ("Router: router_connect_dst()");
+        glb_log_error ("router_connect_dst() failed");
         close (sock);
         sock = ret;
     }
-
-    pthread_mutex_unlock (&router->lock);
 
     return sock;
 }
@@ -256,10 +284,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
 {
     long i;
 
-    if (pthread_mutex_lock (&router->lock)) {
-        perror ("Router mutex lock failed, abort.");
-        abort();
-    }
+    GLB_MUTEX_LOCK (&router->lock);
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
@@ -271,11 +296,11 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     }
 
     if (i == router->n_dst) {
-        perror ("Attempt to disconnect from non-existing destination");
-        perror (glb_socket_addr_to_string(dst));
+        glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
+                      glb_socket_addr_to_string(dst));
     }
 
-    pthread_mutex_unlock (&router->lock);
+    GLB_MUTEX_UNLOCK (&router->lock);
 }
 
 size_t
@@ -294,10 +319,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
         return (len - 1);
     }
 
-    if (pthread_mutex_lock (&router->lock)) {
-        perror ("Router mutex lock failed, abort.");
-        abort();
-    }
+    GLB_MUTEX_LOCK (&router->lock);
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
@@ -316,7 +338,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     n_dst = router->n_dst;
 
-    pthread_mutex_unlock (&router->lock);
+    GLB_MUTEX_UNLOCK (&router->lock);
 
     len += snprintf (buf + len, buf_len - len,
                      "----------------------------------------------------\n"

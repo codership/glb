@@ -94,15 +94,15 @@ glb_socket_create (const struct sockaddr_in* addr)
         return -errno;
     }
 #if 0
-    /* probably a good place to spcify some socket options */
+    /* probably a good place to specify some socket options */
     if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size))) {
-        perror ("glb_socket_create(): setsockopt");
+        glb_log_error ("setsockopt() failed: %d (%s)", -errno, strerror(errno));
         close (sock);
         return -errno;
     }
 
     if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size))) {
-        perror ("glb_socket_create(): setsockopt");
+        glb_log_error ("setsockopt() failed: %d (%s)", -errno, strerror(errno));
         close (sock);
         return -errno;
     }
