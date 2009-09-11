@@ -32,7 +32,7 @@ struct glb_router
     glb_sockaddr_t  sock_out; // outgoing socket address
     pthread_mutex_t lock;
     long            busy_count;
-    long            busy_wait;
+    long            wait_count;
     pthread_cond_t  free;
     long            n_dst;
     router_dst_t*   dst;
@@ -54,10 +54,10 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     GLB_MUTEX_LOCK (&router->lock);
 
     while (router->busy_count > 0) {
-        router->busy_wait++;
+        router->wait_count++;
         pthread_cond_wait (&router->free, &router->lock);
-        router->busy_wait--;
-        assert (router->busy_wait >= 0);
+        router->wait_count--;
+        assert (router->wait_count >= 0);
     }
 
     // try to find destination in the list
@@ -119,7 +119,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
 out:
     assert (router->n_dst >= 0);
-    if (router->busy_wait > 0) pthread_cond_signal (&router->free);
+    if (router->wait_count > 0) pthread_cond_signal (&router->free);
     GLB_MUTEX_UNLOCK (&router->lock);
     return i;
 }
@@ -245,7 +245,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
     router->busy_count--;
     assert (router->busy_count >= 0);
 
-    if (0 == router->busy_count && 0 < router->busy_wait)
+    if (0 == router->busy_count && 0 < router->wait_count)
         pthread_cond_signal (&router->free);
 
     GLB_MUTEX_UNLOCK (&router->lock);
