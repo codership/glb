@@ -47,78 +47,90 @@ router_dst_usage (router_dst_t* d)
 int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 {
-    int           i;
+    long          i;
     void*         tmp;
-    router_dst_t* d;
+    router_dst_t* d = NULL;
 
     GLB_MUTEX_LOCK (&router->lock);
 
-    while (router->busy_count > 0) {
-        router->wait_count++;
-        pthread_cond_wait (&router->free, &router->lock);
-        router->wait_count--;
-        assert (router->wait_count >= 0);
-    }
-
     // try to find destination in the list
     for (i = 0; i < router->n_dst; i++) {
-        d = &router->dst[i];
-
-        if (glb_dst_is_equal(&d->dst, dst)) {
-            if (dst->weight < 0) {
-                // remove destination from the list
-                if ((i + 1) < router->n_dst) {
-                    // it is not the last, move the rest to close the gap
-                    router_dst_t* next = d + 1;
-                    size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
-                    memmove (d, next, len);
-                }
-                tmp = realloc (router->dst,
-                               (router->n_dst - 1) * sizeof(router_dst_t));
-                if (!tmp && (router->n_dst > 1)) {
-                    i = -ENOTRECOVERABLE;
-                    goto out;
-                }
-
-                router->dst = tmp;
-                router->n_dst--;
-            }
-            else if (d->dst.weight != dst->weight) {
-                // update weight and usage
-                d->dst.weight = dst->weight;
-                d->usage      = router_dst_usage (d);
-            }
-            goto out;
+        if (glb_dst_is_equal(&((&router->dst[i])->dst), dst)) {
+            d = &router->dst[i];
+            break;
         }
     }
-    assert (i == router->n_dst);
 
-    // not found in the list, add destination, but first check weight
-    if (dst->weight < 0) {
+    // sanity check
+    if (!d && dst->weight < 0) {
+        GLB_MUTEX_UNLOCK (&router->lock);
         char tmp[256];
         glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
-        i = -EADDRNOTAVAIL;
-        goto out;
+        return -EADDRNOTAVAIL;
     }
 
-    tmp = realloc (router->dst, (router->n_dst + 1) * sizeof(router_dst_t));
-
-    if (!tmp) {
-        i = -ENOMEM;
-        goto out;
+    if (!d || dst->weight < 0) {
+        // cant remove/add destination while someone's connecting
+        while (router->busy_count > 0) {
+            router->wait_count++;
+            pthread_cond_wait (&router->free, &router->lock);
+            router->wait_count--;
+            assert (router->wait_count >= 0);
+        }
     }
 
-    router->dst = tmp;
-    d = router->dst + router->n_dst;
-    router->n_dst++;
-    d->dst    = *dst;
-    d->conns  = 0;
-    d->usage  = router_dst_usage(d);
-    d->failed = 0;
+    if (!d) { // add destination to the list
 
-out:
+        assert (i == router->n_dist);
+
+        tmp = realloc (router->dst, (router->n_dst + 1) * sizeof(router_dst_t));
+
+        if (!tmp) {
+            i = -ENOMEM;
+        }
+        else {
+            router->dst = tmp;
+            d = router->dst + router->n_dst;
+            router->n_dst++;
+            d->dst    = *dst;
+            d->conns  = 0;
+            d->usage  = router_dst_usage(d);
+            d->failed = 0;
+        }
+    }
+    else if (dst->weight < 0) { // remove destination from the list
+
+        assert (d);
+        assert (i >= 0 && i < router->n_dist);
+
+        if ((i + 1) < router->n_dst) {
+            // it is not the last, move the rest to close the gap
+            router_dst_t* next = d + 1;
+            size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
+            memmove (d, next, len);
+        }
+
+        tmp = realloc (router->dst,
+                       (router->n_dst - 1) * sizeof(router_dst_t));
+
+        if (!tmp && (router->n_dst > 1)) {
+            i = -ENOMEM;
+        }
+        else {
+            router->dst = tmp;
+            router->n_dst--;
+        }
+    }
+    else if (d->dst.weight != dst->weight) {
+        // update weight and usage
+        d->dst.weight = dst->weight;
+        d->usage      = router_dst_usage (d);
+    }
+
     assert (router->n_dst >= 0);
+    assert (0 == router->busy_count);
+
     if (router->wait_count > 0) pthread_cond_signal (&router->free);
     GLB_MUTEX_UNLOCK (&router->lock);
     return i;
