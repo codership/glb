@@ -251,6 +251,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
                 glb_log_warn ("Redirecting to %s",
                               glb_socket_addr_to_string (addr));
             }
+	    break;
         }
     }
 
@@ -265,7 +266,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
     return -error; // all attempts failed, return last errno
 }
 
-// returns error code
+// returns socket number or negative error code
 int
 glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
 {
@@ -285,7 +286,7 @@ glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
     if (ret < 0) {
         glb_log_error ("router_connect_dst() failed");
         close (sock);
-        sock = ret;
+	sock = ret;
     }
 
     return sock;
