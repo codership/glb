@@ -250,6 +250,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
             if (redirect) {
                 glb_log_warn ("Redirecting to %s",
                               glb_socket_addr_to_string (addr));
+                error = 0; // return success
             }
 	    break;
         }
