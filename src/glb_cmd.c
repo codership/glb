@@ -63,6 +63,8 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  --help                  this help message.\n");
     fprintf (out,
+             "  --daemon                run as a daemon.\n");
+    fprintf (out,
              "  --fifo <fifo name>      name of the FIFO file for control.\n");
     fprintf (out,
              "  --control [HOST:]PORT   "

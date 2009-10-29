@@ -95,9 +95,13 @@ void glb_daemon_start()
     if (glb_log_init (GLB_LOG_SYSLOG)) exit (EXIT_FAILURE);
 
     /* Redirect standard files to /dev/null */
-    freopen( "/dev/null", "r", stdin);
-    freopen( "/dev/null", "w", stdout);
-    freopen( "/dev/null", "w", stderr);
+    if (NULL == freopen( "/dev/null", "r", stdin)  ||
+        NULL == freopen( "/dev/null", "w", stdout) ||
+        NULL == freopen( "/dev/null", "w", stderr)) {
+        syslog (LOG_ERR, "freopen (/dev/null) failed: %d (%s)", errno,
+                strerror (errno));
+        exit (EXIT_FAILURE);
+    }
 }
 
 void

@@ -102,7 +102,9 @@ ctrl_respond (glb_ctrl_t* ctrl, int fd, const char* resp)
 {
     if (fd != ctrl->fifo) {
         // can't respond to FIFO, as will immediately read it back
-        write (fd, resp, strlen(resp));
+        if (write (fd, resp, strlen(resp)) < strlen(resp))
+            glb_log_error ("Failed to respond to control message: %d (%s)",
+                           errno, strerror(errno));
     }
 }
 
