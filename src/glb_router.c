@@ -82,7 +82,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
     if (!d) { // add destination to the list
 
-        assert (i == router->n_dist);
+        assert (i == router->n_dst);
 
         tmp = realloc (router->dst, (router->n_dst + 1) * sizeof(router_dst_t));
 
@@ -102,7 +102,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     else if (dst->weight < 0) { // remove destination from the list
 
         assert (d);
-        assert (i >= 0 && i < router->n_dist);
+        assert (i >= 0 && i < router->n_dst);
 
         if ((i + 1) < router->n_dst) {
             // it is not the last, move the rest to close the gap
@@ -234,7 +234,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
         GLB_MUTEX_LOCK (&router->lock);
 
         if (ret != 0) {
-	    error = errno;
+            error = errno;
             // connect failed, undo usage count, update destination failed mark
             dst->conns--;
             assert (dst->conns >= 0);
@@ -252,7 +252,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
                               glb_socket_addr_to_string (addr));
                 error = 0; // return success
             }
-	    break;
+            break;
         }
     }
 

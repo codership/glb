@@ -1,3 +1,6 @@
+2009-11-04 alex 
+- Compilation cleanups for gcc-4.4.1
+
 2009-09-11 alex 
 - Router lock is no longer held while connecting. However destination table
   modification is still blocked.
