@@ -214,7 +214,7 @@ static int
 router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 {
     router_dst_t* dst;
-    int  error    = 0;
+    int  error    = EHOSTDOWN;
     int  ret;
     bool redirect = false;
 
@@ -250,11 +250,12 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
             if (redirect) {
                 glb_log_warn ("Redirecting to %s",
                               glb_socket_addr_to_string (addr));
-                error = 0; // return success
             }
-            break;
+            error = 0; // return success
+	    break;
         }
     }
+    assert(dst != 0 || error != 0);
 
     router->busy_count--;
     assert (router->busy_count >= 0);
@@ -304,6 +305,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
         router_dst_t* d = &router->dst[i];
         if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
             d->conns--;
+            assert(d->conns >= 0);
             d->usage = router_dst_usage(d);
             break;
         }
