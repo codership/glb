@@ -252,7 +252,7 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
                               glb_socket_addr_to_string (addr));
             }
             error = 0; // return success
-	    break;
+            break;
         }
     }
     assert(dst != 0 || error != 0);

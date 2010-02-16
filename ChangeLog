@@ -1,3 +1,8 @@
+2010-02-15 teemu 
+- Fixed usage counting bug when usage could become negative when all
+  destinations fail simultaneously.
+  Version 0.7.4
+
 2009-11-04 alex 
 - Compilation cleanups for gcc-4.4.1
 
