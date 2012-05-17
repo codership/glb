@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.50)
-AC_INIT(glb, 0.7.4, info@codership.com)
+AC_INIT(glb, 0.7.5, info@codership.com)
 AC_CONFIG_SRCDIR([src/glb_main.c])
 AC_CONFIG_HEADER([config.h])
 AC_CANONICAL_SYSTEM
@@ -20,7 +20,7 @@ if test "$enable_debug" == "yes"
 then
     AM_CFLAGS="-g -O0 -fno-inline"
 else
-    AM_CFLAGS="-O3 -mtune=i686"
+    AM_CFLAGS="-O3"
     AM_CPPFLAGS="-DNDEBUG"
 fi
 AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")

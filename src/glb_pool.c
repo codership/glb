@@ -906,8 +906,6 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 {
     size_t     len = 0;
     long       i;
-    glb_time_t now;
-    double     elapsed;
 
 #ifndef GLB_POOL_STATS
     len += snprintf (buf + len, buf_len - len, "Pool: connections per thread:");
@@ -919,14 +917,17 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 
     GLB_MUTEX_LOCK (&pool->lock);
 
-    now     = glb_time_now ();
-    elapsed = now - pool->last_info;
+#ifdef GLB_POOL_STATS
+    {
+    glb_time_t now = glb_time_now ();
+    double elapsed = now - pool->last_info;
+#endif
 
     for (i = 0; i < pool->n_pools; i++) {
 #ifdef GLB_POOL_STATS
-        pool_stats_t s = pool->pool[i].stats;
+        glb_pool_stats_t s = pool->pool[i].stats;
 
-        pool->pool[i].stats = zero_stats;
+        pool->pool[i].stats = glb_zero_stats;
 
         len += snprintf (buf + len, buf_len - len,
         "Pool %2ld: conns: %5ld, selects: %9zu (%9.2f sel/sec)\n"
@@ -954,6 +955,11 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 #endif
     }
 
+#ifdef GLB_POOL_STATS
+    pool->last_info = now;
+    }
+#endif
+
     GLB_MUTEX_UNLOCK (&pool->lock);
 
     len += snprintf (buf + len, buf_len - len,"\n");
@@ -961,8 +967,6 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
         buf[len - 1] = '\0';
         return (len - 1);
     }
-
-    pool->last_info = now;
 
     return len;
 }

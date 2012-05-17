@@ -1,4 +1,4 @@
-# Copyright (C) 2007 Codership Oy <info@codership.com>
+# Copyright (C) 2007-2012 Codership Oy <info@codership.com>
   
 DISCLAIMER:
 ===========
@@ -23,7 +23,7 @@ Features:
    routing performance.
  - glb is multithreaded, so it can utilize multiple CPU cores. Also, if your
    OS does not support epoll API, consider using several threads even on a
-   single clore machine as it will lessen poll() overhead proportionally and
+   single core machine as it will lessen poll() overhead proportionally and
    can improve overall performance by a factor of 2 or more.
 
 COMMAND LINE OPTIONS:
