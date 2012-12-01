@@ -1,3 +1,16 @@
+2012-11-30 alex 
+- Fixed obscure connection loss when too many connections are initiated at once.
+- Fixed segfault when -s option was specified.
+- Added TCP_NODELAY option to sockets (on by default)
+- Added start/stop script and config template to run glbd as a "service".
+- Implemented basic IP-based source tracking mechanism
+  (same IP clients directed to the same server).
+  Version 0.8.0
+
+2012-05-17 alex 
+- Fixed glb_sockaddr_t initialization + compilation cleanups.
+  Version 0.7.5
+
 2010-02-15 teemu 
 - Fixed usage counting bug when usage could become negative when all
   destinations fail simultaneously.

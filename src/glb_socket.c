@@ -4,16 +4,19 @@
  * $Id$
  */
 
+#include "glb_log.h"
+#include "glb_cmd.h"
+#include "glb_socket.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
-
-#include "glb_log.h"
-#include "glb_socket.h"
 
 //static const size_t addr_string_len = 512; heh, my GCC refuses to see it as
 //a constant! here goes type safety...
@@ -52,14 +55,14 @@ glb_socket_addr_init (glb_sockaddr_t* addr,
                       const char*     hostname,
                       uint16_t        port)
 {
-    struct hostent *host;
+    struct hostent* host = gethostbyname (hostname);
 
-    host = gethostbyname (hostname);
     if (host == NULL)
     {
         glb_log_error ("Unknown host %s.\n", hostname);
         return -EINVAL;
     }
+
     memset (addr, 0, sizeof(*addr));
     addr->sin_addr   = *(struct in_addr *) host->h_addr;
     addr->sin_port   = htons (port);
@@ -75,48 +78,115 @@ glb_socket_addr_set_port (glb_sockaddr_t* addr, uint16_t port)
 }
 
 short
-glb_socket_addr_get_port (glb_sockaddr_t* addr)
+glb_socket_addr_get_port (const glb_sockaddr_t* addr)
 {
     return ntohs (addr->sin_port);
 }
 
+#define FNV32_SEED  2166136261
+#define FNV32_PRIME 16777619
+#define ROTL32(x,r) ((x << r) | (x >> (32 - r)))
+
+static inline uint32_t
+fnv32a_mix(const void* buf, size_t buf_len)
+{
+    uint32_t ret = FNV32_SEED;
+    const uint8_t* ptr = (uint8_t*)buf;
+    const uint8_t* const end = ptr + buf_len;;
+
+    while (ptr != end)
+    {
+        ret = (ret ^ *ptr) * FNV32_PRIME;
+        ptr++;
+    }
+
+    /* mix to improve avalanche effect */
+    ret *= ROTL32(ret, 24);
+    return ret ^ ROTL32(ret, 21);
+}
+
+uint32_t
+glb_socket_addr_hash (const glb_sockaddr_t* addr)
+{
+    return fnv32a_mix (&addr->sin_addr, sizeof(addr->sin_addr));
+}
+
 int
-glb_socket_create (const struct sockaddr_in* addr)
+glb_socket_setopt (int sock, uint32_t const optflags)
+{
+    int const one  = 1;
+//    int const zero = 0;
+
+#if 0
+    size_t const buf_size = 1024;
+
+    /* probably a good place to specify some socket options */
+    if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size))) {
+        int err = errno;
+        glb_log_error ("setsockopt() failed: %d (%s)", err, strerror(err));
+        return -err;
+    }
+
+    if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size))) {
+        int err = errno;
+        glb_log_error ("setsockopt() failed: %d (%s)", err, strerror(err));
+        return -err;
+    }
+#endif
+
+    if ((optflags & GLB_SOCK_NODELAY) && glb_conf->nodelay &&
+        setsockopt(sock, SOL_TCP, TCP_NODELAY, &one, sizeof(one)))
+    {
+        int err = errno;
+        glb_log_error ("Setting TCP_NODELAY failed: %d (%s)", err, strerror(err));
+        return -err;
+    }
+
+#if defined(TCP_DEFER_ACCEPT)
+    if ((optflags & GLB_SOCK_DEFER_ACCEPT) &&
+        setsockopt(sock, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one)))
+    {
+        int err = errno;
+        glb_log_error ("Setting TCP_DEFER_ACCEPT failed: %d (%s)", err, strerror(err));
+        return -err;
+    }
+#endif /* TCP_DEFER_ACCEPT */
+
+    return 0;
+}
+
+int
+glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
 {
     int sock;
-//    size_t buf_size = 1024;
+    int err;
 
     /* Create the socket. */
     sock = socket (PF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
+        err = errno;
         glb_log_error ("Failed to create listening socket: %d (%s)",
-                       errno, strerror (errno));
-        return -errno;
-    }
-#if 0
-    /* probably a good place to specify some socket options */
-    if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size))) {
-        glb_log_error ("setsockopt() failed: %d (%s)", -errno, strerror(errno));
-        close (sock);
-        return -errno;
+                       err, strerror (err));
+        return -err;
     }
 
-    if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size))) {
-        glb_log_error ("setsockopt() failed: %d (%s)", -errno, strerror(errno));
-        close (sock);
-        return -errno;
-    }
-#endif
+    if ((err = glb_socket_setopt(sock, optflags))) goto error;
+
     /* Give the socket a name. */
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
+        err = errno;
         glb_log_error ("Failed to bind listening socket: %d (%s)",
-                       errno, strerror (errno));
-        close (sock);
-        return -errno;
+                       err, strerror (err));
+        goto error;
     }
 
     return sock;
+
+error:
+
+    close (sock);
+    return -err;
 }
 

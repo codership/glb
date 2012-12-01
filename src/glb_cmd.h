@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -7,11 +7,11 @@
 #ifndef _glb_cmd_h_
 #define _glb_cmd_h_
 
+#include "glb_dst.h"
+
 #include <stdlib.h>     // for ulong
 #include <stdbool.h>    // for bool
 #include <stdio.h>      // for FILE and fprintf()
-
-#include "glb_dst.h"
 
 typedef struct glb_cmd
 {
@@ -20,6 +20,7 @@ typedef struct glb_cmd
     bool           ctrl_set;     // was set? (false)
     const char*    fifo_name;    // FIFO file name
     long           n_threads;    // number of routing threads (1 .. oo)
+    bool           nodelay;
     bool           src_tracking; // connect to the same dst for the same src?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
@@ -27,11 +28,15 @@ typedef struct glb_cmd
     glb_dst_t      dst[];        // destination descriptions
 } glb_cmd_t;
 
-extern glb_cmd_t*
+#ifndef GLB_CMD_C
+extern const glb_cmd_t* const glb_conf;
+#endif
+
+extern void
 glb_cmd_parse (int argc, char* argv[]);
 
 extern void
-glb_cmd_print (FILE* out, glb_cmd_t* conf);
+glb_cmd_print (FILE* out, const glb_cmd_t* conf);
 
 extern void
 glb_cmd_help (FILE* out, const char* progname);

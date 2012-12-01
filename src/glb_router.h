@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -12,7 +12,7 @@
 typedef struct glb_router glb_router_t;
 
 extern glb_router_t*
-glb_router_create (size_t n_dst, glb_dst_t dst[]);
+glb_router_create (size_t n_dst, glb_dst_t const dst[]);
 
 extern void
 glb_router_destroy ();
@@ -23,7 +23,8 @@ glb_router_destroy ();
  * @return file descriptor or negative error code
  */
 extern int
-glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr);
+glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
+                    glb_sockaddr_t* dst_addr);
 
 /*!
  * Decrements connection reference count for destination

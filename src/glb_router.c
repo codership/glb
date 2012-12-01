@@ -1,8 +1,14 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
+
+#include "glb_log.h"
+#include "glb_cmd.h"
+#include "glb_misc.h"
+#include "glb_socket.h"
+#include "glb_router.h"
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -11,13 +17,6 @@
 #include <stdio.h>
 #include <unistd.h> // for close()
 #include <time.h>
-
-#include "glb_log.h"
-#include "glb_misc.h"
-#include "glb_socket.h"
-#include "glb_router.h"
-
-extern bool glb_verbose;
 
 typedef struct router_dst
 {
@@ -146,7 +145,7 @@ router_cleanup (glb_router_t* router)
 }
 
 glb_router_t*
-glb_router_create (size_t n_dst, glb_dst_t dst[])
+glb_router_create (size_t n_dst, glb_dst_t const dst[])
 {
     glb_router_t* ret = malloc (sizeof (glb_router_t));
 
@@ -186,7 +185,7 @@ static const double DST_RETRY_INTERVAL = 2.0;
 
 // find a ready destination with minimal usage
 static router_dst_t*
-router_choose_dst (glb_router_t* router)
+router_choose_dst_weight (glb_router_t* router)
 {
     router_dst_t* ret = NULL;
 
@@ -209,20 +208,71 @@ router_choose_dst (glb_router_t* router)
     return ret;
 }
 
+// find a ready destination by client source hint
+static router_dst_t*
+router_choose_dst_hint (glb_router_t* router, uint32_t hint)
+{
+    if (router->n_dst <= 0) return NULL;
+
+    /* First we attempt target predefined by hint (hint % router->n_dst).
+     * If that fails, we iterate over the rest. But for every client
+     * that falls onto that target we want to have a different iteration offset
+     * (so that they don't all failover to the same destination), hence hint
+     * is shifted, to get a fairly random (but deterministinc) offset.
+     * That's why total number of attempts is N+1 */
+
+    int      n = router->n_dst + 1;
+    uint32_t i = hint;
+    time_t now = time(NULL);
+
+    hint  = hint >> 8;
+
+    while (n > 0) {
+        i %= router->n_dst;
+
+        router_dst_t* d = &router->dst[i];
+
+        if (difftime (now, d->failed) > DST_RETRY_INTERVAL) {
+            return d;
+        }
+
+        i = hint + n;
+        n -= 1;
+    }
+
+    return NULL;
+}
+
+static inline router_dst_t*
+router_choose_dst (glb_router_t* router, uint32_t hint)
+{
+    if (!glb_conf->src_tracking) {
+        return router_choose_dst_weight (router);
+    }
+    else {
+        return router_choose_dst_hint (router, hint);
+    }
+}
+
 // connect to a best destination, possiblly failing over to a next best
 static int
-router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
+router_connect_dst (glb_router_t*         router,
+                    int                   sock,
+                    const glb_sockaddr_t* src_addr,
+                    glb_sockaddr_t*       addr)
 {
     router_dst_t* dst;
     int  error    = EHOSTDOWN;
     int  ret;
     bool redirect = false;
+    uint32_t hint = glb_conf->src_tracking ? glb_socket_addr_hash(src_addr) : 0;
 
     GLB_MUTEX_LOCK (&router->lock);
+
     router->busy_count++;
 
     // keep trying until we run out of destinations
-    while ((dst = router_choose_dst (router))) {
+    while ((dst = router_choose_dst (router, hint))) {
         dst->conns++;
         dst->usage = router_dst_usage(dst);
 
@@ -270,25 +320,26 @@ router_connect_dst (glb_router_t* router, int sock, glb_sockaddr_t* addr)
 
 // returns socket number or negative error code
 int
-glb_router_connect (glb_router_t* router, glb_sockaddr_t* dst_addr)
+glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
+                    glb_sockaddr_t* dst_addr)
 {
     int sock, ret;
 
     // prepare a socket
-    sock = glb_socket_create (&router->sock_out);
+    sock = glb_socket_create (&router->sock_out, GLB_SOCK_NODELAY);
     if (sock < 0) {
         glb_log_error ("glb_socket_create() failed");
         return sock;
     }
 
     // attmept to connect until we run out of destinations
-    ret = router_connect_dst (router, sock, dst_addr);
+    ret = router_connect_dst (router, sock, src_addr, dst_addr);
 
     // avoid socket leak
     if (ret < 0) {
         glb_log_error ("router_connect_dst() failed");
         close (sock);
-	sock = ret;
+        sock = ret;
     }
 
     return sock;
@@ -345,7 +396,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f %5ld\n",
                          glb_socket_addr_to_string(&d->dst.addr),
                          d->dst.weight, 1.0/(d->usage + 1.0),
-			 d->conns);
+                         d->conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';
             return (len - 1);

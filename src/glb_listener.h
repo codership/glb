@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -13,9 +13,9 @@
 typedef struct glb_listener glb_listener_t;
 
 extern glb_listener_t*
-glb_listener_create (glb_sockaddr_t* addr,
-                     glb_router_t*   router,
-                     glb_pool_t*     pool);
+glb_listener_create (const glb_sockaddr_t* addr,
+                     glb_router_t*         router,
+                     glb_pool_t*           pool);
 
 extern void
 glb_listener_destroy (glb_listener_t* listener);

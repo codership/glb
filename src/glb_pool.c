@@ -1,8 +1,15 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
+
+#include "glb_misc.h"
+#include "glb_time.h"
+#include "glb_log.h"
+#include "glb_pool.h"
+
+#include "glb_cmd.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -27,13 +34,6 @@
 #ifdef GLB_USE_SPLICE
 #include <fcntl.h>
 #endif
-
-#include "glb_misc.h"
-#include "glb_time.h"
-#include "glb_log.h"
-#include "glb_pool.h"
-
-extern bool glb_verbose;
 
 typedef enum pool_ctl_code
 {
@@ -110,10 +110,10 @@ typedef enum pool_fd_ops
 #ifdef USE_EPOLL
     POOL_FD_READ  = EPOLLIN,
     POOL_FD_WRITE = EPOLLOUT,
-#else // POLL
+#else /* POLL */
     POOL_FD_READ  = POLLIN,
     POOL_FD_WRITE = POLLOUT,
-#endif // POLL
+#endif /* POLL */
     POOL_FD_RW    = POOL_FD_READ | POOL_FD_WRITE
 } pool_fd_ops_t;
 
@@ -147,7 +147,7 @@ pool_fds_add (pool_t* pool, int fd, pool_fd_ops_t events)
                 (tmp_len - pool->fd_max) * sizeof(pollfd_t));
 
         pool->pollfds = tmp;
-        pool->pollfds_len = tmp_len;        
+        pool->pollfds_len = tmp_len;
     }
 
 #ifdef USE_EPOLL
@@ -161,10 +161,10 @@ pool_fds_add (pool_t* pool, int fd, pool_fd_ops_t events)
                        errno, strerror (errno));
         return -errno;
     }
-#else // POLL
-    pool->pollfds[pool->fd_max].fd = fd;        
+#else /* POLL */
+    pool->pollfds[pool->fd_max].fd = fd;
     pool->pollfds[pool->fd_max].events = events;
-#endif // POLL
+#endif /* POLL */
 
     ret = pool->fd_max;
 
@@ -191,7 +191,7 @@ static inline long
 pool_fds_del (pool_t* pool, pool_conn_end_t* end)
 {
     pool->fd_max--; // pool->fd_max is now the index of the last pollfd
-    
+
 #ifdef USE_EPOLL
     long ret = epoll_ctl (pool->epoll_fd, EPOLL_CTL_DEL, end->sock, NULL);
     if (ret) {
@@ -200,7 +200,7 @@ pool_fds_del (pool_t* pool, pool_conn_end_t* end)
                        pool->epoll_fd, end->sock, errno, strerror (errno));
         return -errno;
     }
-#else // POLL
+#else /* POLL */
     assert (end->fds_idx <= pool->fd_max);
 
     /*
@@ -217,7 +217,7 @@ pool_fds_del (pool_t* pool, pool_conn_end_t* end)
         end->fds_idx;
     // zero-up the last pollfd
     pool->pollfds[pool->fd_max] = zero_pollfd;
-#endif // POLL
+#endif /* POLL */
 
     return 0;
 }
@@ -234,9 +234,9 @@ pool_fds_set_events (pool_t* pool, pool_conn_end_t* end)
                        errno, strerror(errno));
         abort();
     }
-#else // POLL
+#else /* POLL */
     pool->pollfds[end->fds_idx].events = end->events;
-#endif // POLL
+#endif /* POLL */
 }
 
 static inline long
@@ -244,9 +244,9 @@ pool_fds_wait (pool_t* pool)
 {
 #ifdef USE_EPOLL
     return epoll_wait (pool->epoll_fd, pool->pollfds, pool->fd_max, -1); 
-#else // POLL
+#else /* POLL */
     return poll (pool->pollfds, pool->fd_max, -1);
-#endif // POLL
+#endif /* POLL */
 }
 
 // performs necessary magic (adds end-to-end mapping, alters fd_max and fd_min)
@@ -318,7 +318,7 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     pool->n_conns++; // increment connection count
     pool->stats.conns_opened++;
 
-    if (glb_verbose) {
+    if (glb_conf->verbose) {
         glb_log_info ("Pool %ld: added connection, "
                       "(total pool connections: %ld)", pool->id, pool->n_conns);
     }
@@ -587,7 +587,7 @@ pool_handle_events (pool_t* pool, long count)
             if (ret < 0) return ret;
         }
     }
-#else // POLL
+#else /* POLL */
     if (pool->pollfds[0].revents & POOL_FD_READ) { // first, check ctl socket
         return pool_handle_ctl (pool);
     }
@@ -620,7 +620,7 @@ pool_handle_events (pool_t* pool, long count)
             count--;
         }
     }
-#endif // POLL
+#endif /* POLL */
     return 0;
 }
 

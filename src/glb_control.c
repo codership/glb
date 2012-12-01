@@ -1,11 +1,17 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
 
 // keep asserts here for now
 #undef NDEBUG
+
+#include "glb_log.h"
+#include "glb_signal.h"
+#include "glb_control.h"
+
+#include "glb_cmd.h"
 
 #include <pthread.h>
 #include <assert.h>
@@ -23,13 +29,8 @@
 // unfotunately I see no way to use glb_pool.c polling code in here
 // so it is yet another implementation
 #include <poll.h>
+
 typedef struct pollfd pollfd_t;
-
-#include "glb_log.h"
-#include "glb_signal.h"
-#include "glb_control.h"
-
-extern bool glb_verbose;
 
 static const char ctrl_getinfo_cmd[] = "getinfo";
 static const char ctrl_getstat_cmd[] = "getstat";
@@ -220,7 +221,7 @@ ctrl_thread (void* arg)
             // Add to fds and wait for new events
             ctrl_add_client (ctrl, client_sock);
 
-            if (glb_verbose) {
+            if (glb_conf->verbose) {
                 glb_log_info ("Ctrl: accepted connection from %s\n",
                          glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
             }
@@ -281,7 +282,7 @@ glb_ctrl_create (glb_router_t*         router,
     }
 
     if (inet_addr) {
-        inet_sock = glb_socket_create (inet_addr);
+        inet_sock = glb_socket_create (inet_addr, GLB_SOCK_DEFER_ACCEPT);
         if (inet_sock < 0) {
             glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
                            errno, strerror (errno));

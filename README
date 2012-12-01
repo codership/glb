@@ -1,5 +1,5 @@
 # Copyright (C) 2007-2012 Codership Oy <info@codership.com>
-  
+
 DISCLAIMER:
 ===========
 This program is distributed in the hope that it will be useful, but
@@ -29,6 +29,13 @@ Features:
 COMMAND LINE OPTIONS:
 =====================
 See output of the --help option.
+
+MAXIMUM CONNECTIONS:
+====================
+Maximum connection that can be opened via glb depends on the system open file
+limit and is roughly (nofile - 6)/2, which is 509 for a standard limit of 1024.
+On Linux open file limit may be checked with 'ulimit -n' and if necessary
+increased in /etc/security/limits.conf.
 
 RUNTIME MANAGEMENT:
 ===================
@@ -103,10 +110,30 @@ fields are all even and go as follows:
   20 - number of write-ready file descriptors returned by poll()/epoll_wait()
   22 - number of times poll()/epoll_wait() triggered
   24 - time elapsed since last statistics report (seconds)
-  
+
 All values except for 16 and 24 are totals accumulated since the last report.
 In order to obtain some variable rate it must be divided by the elapsed time.
 On 32-bit architectures the values are stored in 4-byte integers and can
 overflow if too much time elapsed, so the first statistics report in the series
 may need to be discarded.
 
+
+SOURCE TRACKING CAPABILITY:
+===========================
+GLB features simple source tracking capability where connections originating
+from one address can be routed to the same destination, chosen randomly
+(address hash % number of destinations). One limitation of such schema is that
+when the destination list changes, destination choice for new connections
+changes as well while established connections naturally stay unchanged. Also
+when a destination is marked unavailable, all connections that would be routed
+to it will failover to another, randomly chosen, but deterministic choice.
+When the original target becomes available, all new connections will be routed
+back to it.
+
+In other words source tracking should be considered a best effort feature and
+will work best for short-lived connections.
+
+
+RUNNING GLBD AS A "SERVICE":
+============================
+See README in the files/ directory.

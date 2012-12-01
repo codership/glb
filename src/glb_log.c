@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -68,12 +68,12 @@ glb_log (glb_log_level_t level,
 
         switch (level)
         {
-        case GLB_LOG_FATAL:   lvl = "  FATAL:"; out = stderr; break;
-        case GLB_LOG_ERROR:   lvl = "  ERROR:"; out = stderr; break;
-        case GLB_LOG_WARNING: lvl = "WARNING:"; out = stderr; break;
-        case GLB_LOG_INFO:    lvl = "   INFO:"; break;
-        case GLB_LOG_DEBUG:   lvl = "  DEBUG:"; break;
-        default:              lvl = "UNKNOWN:"; break;
+        case GLB_LOG_FATAL:   lvl = "  FATAL: "; out = stderr; break;
+        case GLB_LOG_ERROR:   lvl = "  ERROR: "; out = stderr; break;
+        case GLB_LOG_WARNING: lvl = "WARNING: "; out = stderr; break;
+        case GLB_LOG_INFO:    lvl = "   INFO: "; break;
+        case GLB_LOG_DEBUG:   lvl = "  DEBUG: "; break;
+        default:              lvl = "UNKNOWN: "; break;
         }
 
         fprintf (out, "%s%s\n", lvl, buf);

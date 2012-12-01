@@ -1,8 +1,13 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
+
+#include "glb_listener.h"
+#include "glb_log.h"
+#include "glb_limits.h"
+#include "glb_cmd.h"
 
 #include <pthread.h>
 #include <assert.h>
@@ -10,12 +15,8 @@
 #include <errno.h>
 #include <string.h>
 #include <poll.h>
+
 typedef struct pollfd pollfd_t;
-
-#include "glb_log.h"
-#include "glb_listener.h"
-
-extern bool glb_verbose;
 
 struct glb_listener
 {
@@ -57,7 +58,10 @@ listener_thread (void* arg)
             goto err;
         }
 
-        server_sock = glb_router_connect (listener->router, &server);
+        ret = glb_socket_setopt(client_sock, GLB_SOCK_NODELAY);
+        if (ret) goto err1;
+
+        server_sock = glb_router_connect(listener->router, &client ,&server);
         if (server_sock < 0) {
             glb_log_error("Failed to connect to destination: %d (%s)",
                           errno, strerror(errno));
@@ -72,7 +76,7 @@ listener_thread (void* arg)
             goto err2;
         }
 
-        if (glb_verbose) {
+        if (glb_conf->verbose) {
             glb_log_info ("Accepted connection from %s ",
                           glb_socket_addr_to_string (&client));
             glb_log_info ("to %s\n",
@@ -93,21 +97,24 @@ listener_thread (void* arg)
 }
 
 glb_listener_t*
-glb_listener_create (glb_sockaddr_t* addr,
-                     glb_router_t*   router,
-                     glb_pool_t*     pool)
+glb_listener_create (const glb_sockaddr_t* addr,
+                     glb_router_t*         router,
+                     glb_pool_t*           pool)
 {
-    glb_listener_t* ret;
-    int sock = glb_socket_create (addr);
+    glb_listener_t* ret = NULL;
+    int sock = glb_socket_create (addr, GLB_SOCK_DEFER_ACCEPT);
+    int err = errno;
 
     if (sock < 0) {
         glb_log_error ("Failed to create listening socket: %d (%s)",
-                       errno, strerror (errno));
+                       err, strerror (err));
         return NULL;
     }
 
-    if (listen (sock, 10)) { // what should be the queue length?
-        glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
+    if (listen (sock, glb_max_conn ? glb_max_conn : (1U << 14) /* 16K */ )) {
+        err = errno;
+        glb_log_error ("listen() failed: %d (%s)", err, strerror (err));
+        close (sock);
         return NULL;
     }
 
@@ -118,13 +125,22 @@ glb_listener_create (glb_sockaddr_t* addr,
         ret->pool   = pool;
 
         if (pthread_create (&ret->thread, NULL, listener_thread, ret)) {
+            err = errno;
             glb_log_error ("Failed to launch listener thread: %d (%s)",
-                           errno, strerror (errno));
-            close (sock);
+                           err, strerror (err));
             free (ret);
             ret = NULL;
+            close (sock);
         }
     }
+    else
+    {
+        err = errno;
+        glb_log_error ("Failed to allocate listener object: %d (%s)",
+                       err, strerror (err));
+        close (sock);
+    }
+
     return ret;
 }
 
