@@ -1,6 +1,9 @@
 2012-12-01 alex 
 - Fixed privileges issue when using service script and default FIFO location.
-- Added MAX_CONN parameter to automatically adjust open files limit in OS.
+- Implemented maximum connections option which both limits maximum client
+  connections and also tries to increase OS open files limit if necessary.
+- Added MAX_CONN parameter to start/stop script.
+  Version 0.8.1
 
 2012-11-30 alex 
 - Fixed obscure connection loss when too many connections are initiated at once.

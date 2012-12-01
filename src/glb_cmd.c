@@ -224,11 +224,13 @@ glb_cmd_parse (int argc, char* argv[])
     char*        endptr;
     uint16_t     inc_port;
 
+    int const conn_limit = glb_get_conn_limit();
+
     // Set defaults
     tmp.ctrl_set     = false;
     tmp.fifo_name    = cmd_fifo_name_default;
     tmp.n_threads    = cmd_min_threads;
-    tmp.max_conn     = glb_max_conn;
+    tmp.max_conn     = conn_limit;
     tmp.nodelay      = true;
     tmp.src_tracking = false;
     tmp.verbose      = false;
@@ -323,10 +325,9 @@ glb_cmd_parse (int argc, char* argv[])
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;
 
-    if (tmp.max_conn > glb_max_conn) {
-        fprintf (stderr, "Can't set connection limit to %ld: system limit: %d."
-                 " Using system limit instead.\n", tmp.max_conn, glb_max_conn);
-        tmp.max_conn = glb_max_conn;
+    if (tmp.max_conn > conn_limit) {
+        int res = glb_set_conn_limit (tmp.max_conn);
+        if (res > 0) tmp.max_conn = res;
     }
 
     // parse destination list

@@ -68,18 +68,6 @@ wait_for_connections_to_drop() {
 	return 0
 }
 
-fix_open_files_limit() {
-	if [ -n "$1" ]; then
-		local want_limit=$(( $1 * 2 + 6 ))
-		local cur_limit=$( ulimit -n )
-		if [ $want_limit -gt $cur_limit ]; then
-			ulimit -n $want_limit && return 0
-			echo "[`date`] $prog: setting open file limit to $want_limit failed."
-			return 1
-		fi
-	fi
-}
-
 stop() {
 	[ -f "$PID_FILE" ] && PID=$(cat $PID_FILE) || PID=""
 	if [ -z "$PID" ]; then
@@ -116,9 +104,9 @@ start() {
 	echo "[`date`] $prog: starting..."
 	wait_for_connections_to_drop
 	rm -rf $CONTROL_FIFO > /dev/null
-	fix_open_files_limit "$MAX_CONN"
 	GLBD_OPTIONS="--fifo=$CONTROL_FIFO --threads=$THREADS --daemon $OTHER_OPTIONS"
-	[ -n "$CONTROL_ADDR" ] && GLBD_OPTIONS="$GLBD_OPTIONS --control $CONTROL_ADDR"
+	[ -n "$MAX_CONN" ] && GLBD_OPTIONS="$GLBD_OPTIONS --connections=$MAX_CONN"
+	[ -n "$CONTROL_ADDR" ] && GLBD_OPTIONS="$GLBD_OPTIONS --control=$CONTROL_ADDR"
 	$exec $GLBD_OPTIONS $LISTEN_ADDR $DEFAULT_TARGETS
 	PID=`pidof $exec`
 	if [ $? -ne 0 ]; then

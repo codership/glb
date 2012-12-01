@@ -103,7 +103,8 @@ glb_listener_create (glb_router_t* const router,
 {
     glb_listener_t* ret = NULL;
 
-    if (listen (sock, glb_max_conn ? glb_max_conn : (1U << 14) /* 16K */ )) {
+    if (listen (sock,
+                glb_conf->max_conn ? glb_conf->max_conn : (1U << 14)/* 16K */)){
         glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
         return NULL;
     }

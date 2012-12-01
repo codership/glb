@@ -8,6 +8,7 @@
 #undef NDEBUG
 
 #include "glb_log.h"
+#include "glb_limits.h"
 #include "glb_signal.h"
 #include "glb_control.h"
 
@@ -39,7 +40,7 @@ typedef enum ctrl_fd
 {
     CTRL_FIFO = 0,
     CTRL_LISTEN,
-    CTRL_MAX = 32 // max 30 simultaneous control connections
+    CTRL_MAX = GLB_MAX_CTRL_CONN
 } ctrl_fd_t;
 
 struct glb_ctrl
