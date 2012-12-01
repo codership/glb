@@ -20,7 +20,7 @@ if test "$enable_debug" == "yes"
 then
     AM_CFLAGS="-g -O0 -fno-inline"
 else
-    AM_CFLAGS="-O3"
+    AM_CFLAGS="-g -O3"
     AM_CPPFLAGS="-DNDEBUG"
 fi
 AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")

@@ -20,6 +20,7 @@ typedef struct glb_cmd
     bool           ctrl_set;     // was set? (false)
     const char*    fifo_name;    // FIFO file name
     long           n_threads;    // number of routing threads (1 .. oo)
+    long           max_conn;     // max allowed client connections
     bool           nodelay;
     bool           src_tracking; // connect to the same dst for the same src?
     bool           verbose;      // be verbose?

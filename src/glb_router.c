@@ -34,6 +34,7 @@ struct glb_router
     long            wait_count;
     pthread_cond_t  free;
     long            n_dst;
+    long            conns;
     router_dst_t*   dst;
 };
 
@@ -103,6 +104,8 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
         assert (d);
         assert (i >= 0 && i < router->n_dst);
 
+        router->conns -= d->conns; assert (router->conns >= 0);
+
         if ((i + 1) < router->n_dst) {
             // it is not the last, move the rest to close the gap
             router_dst_t* next = d + 1;
@@ -159,6 +162,7 @@ glb_router_create (size_t n_dst, glb_dst_t const dst[])
 
         ret->busy_count = 0;
         ret->n_dst = 0;
+        ret->conns = 0;
         ret->dst   = NULL;
 
         for (i = 0; i < n_dst; i++) {
@@ -273,7 +277,7 @@ router_connect_dst (glb_router_t*         router,
 
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router, hint))) {
-        dst->conns++;
+        dst->conns++; router->conns++;
         dst->usage = router_dst_usage(dst);
 
         GLB_MUTEX_UNLOCK (&router->lock);
@@ -286,7 +290,7 @@ router_connect_dst (glb_router_t*         router,
         if (ret != 0) {
             error = errno;
             // connect failed, undo usage count, update destination failed mark
-            dst->conns--;
+            dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
             glb_log_warn ("Failed to connect to %s: %s",
@@ -355,7 +359,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
         if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
-            d->conns--;
+            d->conns--; router->conns--;
             assert(d->conns >= 0);
             d->usage = router_dst_usage(d);
             break;
@@ -374,7 +378,8 @@ size_t
 glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 {
     size_t len = 0;
-    long   total_conns = 0;
+    long   total_conns;
+//    long   conn_check = 0;
     long   n_dst;
     long   i;
 
@@ -391,7 +396,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
 
-        total_conns += d->conns;
+//        conn_check += d->conns;
 
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f %5ld\n",
                          glb_socket_addr_to_string(&d->dst.addr),
@@ -404,13 +409,14 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     }
 
     n_dst = router->n_dst;
+    total_conns = router->conns;
 
     GLB_MUTEX_UNLOCK (&router->lock);
 
     len += snprintf (buf + len, buf_len - len,
                      "----------------------------------------------------\n"
-                     "Destinations: %ld, total connections: %ld\n",
-                     n_dst, total_conns);
+                     "Destinations: %ld, total connections: %ld of %ld max\n",
+                     n_dst, total_conns, glb_conf->max_conn);
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);

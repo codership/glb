@@ -35,6 +35,7 @@ typedef enum cmd_opt
     CMD_OPT_DAEMON       = 'd',
     CMD_OPT_FIFO         = 'f',
     CMD_OPT_HELP         = 'h',
+    CMD_OPT_MAX_CONN     = 'm',
     CMD_OPT_NODELAY      = 'n',
     CMD_OPT_SRC_TRACKING = 's',
     CMD_OPT_N_THREADS    = 't',
@@ -48,6 +49,8 @@ static option_t cmd_options[] =
     { "daemon",          NA, NULL, CMD_OPT_DAEMON        },
     { "fifo",            RA, NULL, CMD_OPT_FIFO          },
     { "help",            NA, NULL, CMD_OPT_HELP          },
+    { "max_conn",        RA, NULL, CMD_OPT_MAX_CONN      },
+    { "connections",     RA, NULL, CMD_OPT_MAX_CONN      },
     { "nodelay",         NA, NULL, CMD_OPT_NODELAY       },
     { "src_tracking",    NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "source_tracking", NA, NULL, CMD_OPT_SRC_TRACKING  },
@@ -78,6 +81,9 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  --threads N             "
              "number of working threads (connection pools).\n");
+    fprintf (out,
+             "  --max_conn N            "
+             "maximum allowed number of client connections (OS dependent).\n");
     fprintf (out,
              "  --nodelay               "
              "*DISABLE* TCP_NODELAY socket option (default: enabled).\n");
@@ -113,10 +119,10 @@ glb_cmd_print (FILE* out, const glb_cmd_t* cmd)
     fprintf (out, "Control  address:  %s\n",
              cmd->ctrl_set ? glb_socket_addr_to_string (&cmd->ctrl_addr) :
              "none");
-    fprintf (out, "Number of threads: %lu, max connections: %d, nodelay: %s, source tracking: %s, "
-             "verbose: %s, daemon: %s\n",
+    fprintf (out, "Number of threads: %ld, max connections: %ld, nodelay: %s, "
+             "source tracking: %s, verbose: %s, daemon: %s\n",
              cmd->n_threads,
-             glb_max_conn,
+             cmd->max_conn,
              cmd->nodelay ? "ON" : "OFF",
              cmd->src_tracking ? "ON" : "OFF",
              cmd->verbose ? "ON" : "OFF",
@@ -222,13 +228,14 @@ glb_cmd_parse (int argc, char* argv[])
     tmp.ctrl_set     = false;
     tmp.fifo_name    = cmd_fifo_name_default;
     tmp.n_threads    = cmd_min_threads;
+    tmp.max_conn     = glb_max_conn;
     tmp.nodelay      = true;
     tmp.src_tracking = false;
     tmp.verbose      = false;
     tmp.daemonize    = false;
 
     // parse options
-    while ((opt = getopt_long(argc, argv, "c:dfhnt:svV", cmd_options, &opt_idx))
+    while ((opt = getopt_long(argc, argv, "c:dfhnm:t:svV",cmd_options,&opt_idx))
            != -1) {
         switch (opt) {
         case '?':
@@ -255,6 +262,14 @@ glb_cmd_parse (int argc, char* argv[])
                 return;
             }
             if (tmp.n_threads<cmd_min_threads) tmp.n_threads = cmd_min_threads;
+            break;
+        case CMD_OPT_MAX_CONN:
+            tmp.max_conn = strtol (optarg, &endptr, 10);
+            if ((*endptr != '\0' && *endptr != ' ') || errno) {
+                fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
+                         optarg);
+                return;
+            }
             break;
         case CMD_OPT_VERBOSE:
             tmp.verbose = true;
@@ -308,6 +323,12 @@ glb_cmd_parse (int argc, char* argv[])
     // if number of threads was not specified
     if (!tmp.n_threads) tmp.n_threads = 1;
 
+    if (tmp.max_conn > glb_max_conn) {
+        fprintf (stderr, "Can't set connection limit to %ld: system limit: %d."
+                 " Using system limit instead.\n", tmp.max_conn, glb_max_conn);
+        tmp.max_conn = glb_max_conn;
+    }
+
     // parse destination list
     if (++optind < argc) dst_list = (const char**) &(argv[optind]);
     assert (argc >= optind);
@@ -321,6 +342,7 @@ glb_cmd_parse (int argc, char* argv[])
         glb_conf->ctrl_set  = tmp.ctrl_set;
         glb_conf->fifo_name = tmp.fifo_name;
         glb_conf->n_threads = tmp.n_threads;
+        glb_conf->max_conn  = tmp.max_conn;
         glb_conf->verbose   = tmp.verbose;
         glb_conf->daemonize = tmp.daemonize;
         glb_conf->nodelay   = tmp.nodelay;
