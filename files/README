@@ -2,8 +2,37 @@ FILES IN THIS DIRECTORY
 
 glbd.sh, glbd.cfg:
     start/stop script and configuration template to run glbd as a "service".
-    Usage:
-        glbd.sh  should be placed into /etc/init.d/glbd
-        glbd.cnf should be placed into /etc/sysconfig/glbd on Red Hat and
-                 derivative systems and /etc/default/glbd on Debian and
-                 derivatives. Read and edit to your liking.
+
+Usage:
+    glbd.sh  should be placed into /etc/init.d/glbd
+    glbd.cnf should be placed into /etc/sysconfig/glbd on Red Hat and
+             derivative systems and /etc/default/glbd on Debian and
+             derivatives. Read and edit to your liking.
+
+Examples:
+# service glbd restart
+[Sat Dec  1 13:43:52 EET 2012] glbd: restarting...
+[Sat Dec  1 13:43:52 EET 2012] glbd: stopping... done.
+[Sat Dec  1 13:43:52 EET 2012] glbd: starting...
+[Sat Dec  1 13:43:52 EET 2012] glbd: waiting for lingering sockets to clear up...
+Incoming address:         0.0.0.0:3306 , control FIFO: /var/run/glbd.fifo
+Control  address:        127.0.0.1:8011
+Number of threads: 2, max connections: 509, nodelay: ON, source tracking: OFF, verbose: OFF, daemon: YES
+Destinations: 3
+   0:       127.0.0.1:3305 , w: 1.000
+   1:       127.0.0.1:3304 , w: 1.000
+   2:       127.0.0.1:3303 , w: 1.000
+   INFO: glb_daemon.c:43: Setting user to 'daemon'
+[Sat Dec  1 13:43:53 EET 2012] glbd: started, pid=27723
+
+# service glbd remove 127.0.0.1:3304
+[Sat Dec  1 13:44:34 EET 2012] glbd: removed '127.0.0.1:3304' successfully
+
+# service glbd getinfo
+Router:
+----------------------------------------------------
+        Address       :   weight   usage   conns
+      127.0.0.1:3305  :    1.000   0.000     0
+      127.0.0.1:3303  :    1.000   0.000     0
+----------------------------------------------------
+Destinations: 2, total connections: 0

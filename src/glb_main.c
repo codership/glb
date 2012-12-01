@@ -14,7 +14,85 @@
 #include "glb_listener.h"
 #include "glb_control.h"
 
-#include <unistd.h> // for sleep()
+#include <unistd.h>    // for sleep()
+#include <sys/types.h>
+#include <sys/stat.h>  // for mkfifo()
+#include <fcntl.h>     // for open()
+#include <errno.h>
+
+/* this function is to allocate all possible resources before dropping
+ * privileges */
+static int
+allocate_resources(const glb_cmd_t* conf,
+                   int* ctrl_fifo,
+                   int* ctrl_sock,
+                   int* listen_sock)
+{
+    if (mkfifo (conf->fifo_name, S_IRUSR | S_IWUSR)) {
+        switch (errno)
+        {
+        case EEXIST:
+            glb_log_error ("FIFO '%s' already exists. Check that no other "
+                           "glbd instance is running and delete it "
+                           "or specify another name with --fifo option.",
+                           conf->fifo_name);
+            break;
+        default:
+            glb_log_error ("Could not create FIFO '%s': %d (%s)",
+                           conf->fifo_name, errno, strerror(errno));
+
+        }
+        return 1;
+    }
+
+    *ctrl_fifo = open (conf->fifo_name, O_RDWR);
+    if (*ctrl_fifo < 0) {
+        glb_log_error ("Ctrl: failed to open FIFO file: %d (%s)",
+                       errno, strerror (errno));
+        goto cleanup1;
+    }
+
+    if (conf->ctrl_set) {
+        *ctrl_sock = glb_socket_create (&conf->ctrl_addr,GLB_SOCK_DEFER_ACCEPT);
+        if (*ctrl_sock < 0) {
+            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
+                           errno, strerror (errno));
+            goto cleanup2;
+        }
+    }
+
+    *listen_sock = glb_socket_create (&conf->inc_addr, GLB_SOCK_DEFER_ACCEPT);
+    if (*listen_sock < 0) {
+        glb_log_error ("Failed to create listening socket: %d (%s)",
+                       errno, strerror (errno));
+        goto cleanup3;
+    }
+
+
+    return 0;
+
+cleanup3:
+    close (*ctrl_sock);
+    *ctrl_sock = 0;
+cleanup2:
+    close (*ctrl_fifo);
+    *ctrl_fifo = 0;
+cleanup1:
+    remove (glb_conf->fifo_name);
+
+    return 1;
+}
+
+static void
+free_resources (int const ctrl_fifo, int const ctrl_sock, int const lsock)
+{
+    if (lsock) close (lsock);
+    if (ctrl_sock) close (ctrl_sock);
+    if (ctrl_fifo) {
+        close (ctrl_fifo);
+        remove (glb_conf->fifo_name);
+    }
+}
 
 int main (int argc, char* argv[])
 {
@@ -23,6 +101,8 @@ int main (int argc, char* argv[])
     glb_listener_t* listener;
     glb_ctrl_t*     ctrl;
     uint16_t        inc_port;
+
+    int listen_sock, ctrl_fifo, ctrl_sock = 0;
 
     glb_limits_init();
 
@@ -39,6 +119,11 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
+    if (allocate_resources (glb_conf, &ctrl_fifo, &ctrl_sock, &listen_sock)) {
+        glb_log_fatal ("Failed to allocate inital resources. Aborting.\n");
+        exit (EXIT_FAILURE);
+    }
+
     glb_signal_set_handler();
 
     if (glb_conf->daemonize) {
@@ -49,33 +134,26 @@ int main (int argc, char* argv[])
     router = glb_router_create (glb_conf->n_dst, glb_conf->dst);
     if (!router) {
         glb_log_fatal ("Failed to create router. Exiting.");
-        exit (EXIT_FAILURE);
+        goto failure;
     }
 
     pool = glb_pool_create (glb_conf->n_threads, router);
     if (!pool) {
         glb_log_fatal ("Failed to create thread pool. Exiting.");
-        exit (EXIT_FAILURE);
+        goto failure;
     }
 
-    listener = glb_listener_create (&glb_conf->inc_addr, router, pool);
+    listener = glb_listener_create (router, pool, listen_sock);
     if (!listener) {
         glb_log_fatal ("Failed to create connection listener. Exiting.");
-        exit (EXIT_FAILURE);
+        goto failure;
     }
 
     inc_port = glb_socket_addr_get_port (&glb_conf->inc_addr);
-    if (glb_conf->ctrl_set) {
-        ctrl = glb_ctrl_create (router, pool, inc_port, glb_conf->fifo_name,
-                                &glb_conf->ctrl_addr);
-    } else {
-        ctrl = glb_ctrl_create (router, pool, inc_port, glb_conf->fifo_name,
-                                NULL);
-    }
-
+    ctrl = glb_ctrl_create (router, pool, inc_port, ctrl_fifo, ctrl_sock);
     if (!ctrl) {
         glb_log_fatal ("Failed to create control thread. Exiting.");
-        exit (EXIT_FAILURE);
+        goto failure;
     }
 
     if (glb_conf->daemonize) {
@@ -99,12 +177,16 @@ int main (int argc, char* argv[])
     }
 
     // cleanup
-    glb_ctrl_destroy (ctrl); // removes FIFO file
-    // everything else is automatically closed/removed on program exit.
+    glb_ctrl_destroy (ctrl);
 
     if (glb_conf->daemonize) {
         glb_log_info ("Exit.");
     }
 
+    free_resources (ctrl_fifo, ctrl_sock, listen_sock);
     return 0;
+
+failure:
+    free_resources (ctrl_fifo, ctrl_sock, listen_sock);
+    exit (EXIT_FAILURE);
 }

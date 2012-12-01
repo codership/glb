@@ -30,11 +30,10 @@
 
 prog="glbd"
 proc=glbd
-exec=/usr/sbin/glbd
-
+EXEC_PATH=/usr/local/sbin:/usr/sbin
 PID_FILE="/var/run/$prog.pid"
 CONTROL_FIFO="/var/run/$prog.fifo"
-THREADS=2
+THREADS=4
 
 if [ -f /etc/redhat-release ]
 then
@@ -69,6 +68,18 @@ wait_for_connections_to_drop() {
 	return 0
 }
 
+fix_open_files_limit() {
+	if [ -n "$1" ]; then
+		local want_limit=$(( $1 * 2 + 6 ))
+		local cur_limit=$( ulimit -n )
+		if [ $want_limit -gt $cur_limit ]; then
+			ulimit -n $want_limit && return 0
+			echo "[`date`] $prog: setting open file limit to $want_limit failed."
+			return 1
+		fi
+	fi
+}
+
 stop() {
 	[ -f "$PID_FILE" ] && PID=$(cat $PID_FILE) || PID=""
 	if [ -z "$PID" ]; then
@@ -87,6 +98,12 @@ stop() {
 }
 
 start() {
+	exec=$( PATH=$EXEC_PATH:/usr/bin:/bin which $prog | \
+	        grep -E $(echo $EXEC_PATH | sed 's/:/|/') )
+	if [ -z "$exec" ]; then
+		echo "[`date`] '$prog' not found in $EXEC_PATH."
+		exit 1
+	fi
 	[ -f "$PID_FILE" ] && PID=$(cat $PID_FILE) || PID=""
 	if [ -n "$PID" ] ; then
 		echo "[`date`] $prog: already running (PID: $PID)...";
@@ -99,6 +116,7 @@ start() {
 	echo "[`date`] $prog: starting..."
 	wait_for_connections_to_drop
 	rm -rf $CONTROL_FIFO > /dev/null
+	fix_open_files_limit "$MAX_CONN"
 	GLBD_OPTIONS="--fifo=$CONTROL_FIFO --threads=$THREADS --daemon $OTHER_OPTIONS"
 	[ -n "$CONTROL_ADDR" ] && GLBD_OPTIONS="$GLBD_OPTIONS --control $CONTROL_ADDR"
 	$exec $GLBD_OPTIONS $LISTEN_ADDR $DEFAULT_TARGETS

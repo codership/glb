@@ -18,17 +18,17 @@ typedef struct glb_ctrl glb_ctrl_t;
  * @param router
  * @param port
  *        default destination port
- * @param fifo_name
- *        unix socket name
- * @param inet_addr
- *        interface address for ctrl form another host, may be NULL
+ * @param fifo
+ *        control fifo descriptor
+ * @param sock
+ *        socket to listen at for ctrl form another host, may be 0
  */
 extern glb_ctrl_t*
-glb_ctrl_create (glb_router_t*         router,
-                 glb_pool_t*           pool,
-                 uint16_t              port,
-                 const char*           fifo_name,
-                 const glb_sockaddr_t* inet_addr);
+glb_ctrl_create (glb_router_t* router,
+                 glb_pool_t*   pool,
+                 uint16_t      port,
+                 int           fifo,
+                 int           sock);
 
 extern void
 glb_ctrl_destroy (glb_ctrl_t* ctrl);

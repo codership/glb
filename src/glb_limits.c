@@ -30,7 +30,7 @@ void glb_limits_init()
          * - fifo
          * - control socket
          * - stdin/stdout (if not in daemon mode)
-         * plus something else for sure, so let it be 6. */
+         * plus control socket connection, so let it be 6. */
         glb_max_conn = (rlp.rlim_cur - 6) / 2;
     }
     else

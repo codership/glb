@@ -121,34 +121,34 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     size_t const buf_size = 1024;
 
     /* probably a good place to specify some socket options */
-    if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size))) {
-        int err = errno;
-        glb_log_error ("setsockopt() failed: %d (%s)", err, strerror(err));
-        return -err;
+    if (setsockopt (sock, SOL_SOCKET, SO_RCVBUF, &buf_size, sizeof(buf_size)))
+    {
+        glb_log_error ("setsockopt() failed: %d (%s)", errno, strerror(errno));
+        return -errno;
     }
 
-    if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size))) {
-        int err = errno;
-        glb_log_error ("setsockopt() failed: %d (%s)", err, strerror(err));
-        return -err;
+    if (setsockopt (sock, SOL_SOCKET, SO_SNDBUF, &buf_size, sizeof(buf_size)))
+    {
+        glb_log_error ("setsockopt() failed: %d (%s)", errno, strerror(errno));
+        return -errno;
     }
 #endif
 
     if ((optflags & GLB_SOCK_NODELAY) && glb_conf->nodelay &&
         setsockopt(sock, SOL_TCP, TCP_NODELAY, &one, sizeof(one)))
     {
-        int err = errno;
-        glb_log_error ("Setting TCP_NODELAY failed: %d (%s)", err, strerror(err));
-        return -err;
+        glb_log_error ("Setting TCP_NODELAY failed: %d (%s)",
+                       errno, strerror(errno));
+        return -errno;
     }
 
 #if defined(TCP_DEFER_ACCEPT)
     if ((optflags & GLB_SOCK_DEFER_ACCEPT) &&
         setsockopt(sock, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one)))
     {
-        int err = errno;
-        glb_log_error ("Setting TCP_DEFER_ACCEPT failed: %d (%s)", err, strerror(err));
-        return -err;
+        glb_log_error ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
+                       errno, strerror(errno));
+        return -errno;
     }
 #endif /* TCP_DEFER_ACCEPT */
 
@@ -165,10 +165,10 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     sock = socket (PF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
-        err = errno;
+        err = -errno;
         glb_log_error ("Failed to create listening socket: %d (%s)",
-                       err, strerror (err));
-        return -err;
+                       -err, strerror (-err));
+        return err;
     }
 
     if ((err = glb_socket_setopt(sock, optflags))) goto error;
@@ -176,9 +176,9 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     /* Give the socket a name. */
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
-        err = errno;
+        err = -errno;
         glb_log_error ("Failed to bind listening socket: %d (%s)",
-                       err, strerror (err));
+                       -err, strerror (-err));
         goto error;
     }
 
@@ -187,6 +187,6 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
 error:
 
     close (sock);
-    return -err;
+    return err;
 }
 

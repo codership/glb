@@ -97,24 +97,14 @@ listener_thread (void* arg)
 }
 
 glb_listener_t*
-glb_listener_create (const glb_sockaddr_t* addr,
-                     glb_router_t*         router,
-                     glb_pool_t*           pool)
+glb_listener_create (glb_router_t* const router,
+                     glb_pool_t*   const pool,
+                     int           const sock)
 {
     glb_listener_t* ret = NULL;
-    int sock = glb_socket_create (addr, GLB_SOCK_DEFER_ACCEPT);
-    int err = errno;
-
-    if (sock < 0) {
-        glb_log_error ("Failed to create listening socket: %d (%s)",
-                       err, strerror (err));
-        return NULL;
-    }
 
     if (listen (sock, glb_max_conn ? glb_max_conn : (1U << 14) /* 16K */ )) {
-        err = errno;
-        glb_log_error ("listen() failed: %d (%s)", err, strerror (err));
-        close (sock);
+        glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
         return NULL;
     }
 
@@ -125,20 +115,16 @@ glb_listener_create (const glb_sockaddr_t* addr,
         ret->pool   = pool;
 
         if (pthread_create (&ret->thread, NULL, listener_thread, ret)) {
-            err = errno;
             glb_log_error ("Failed to launch listener thread: %d (%s)",
-                           err, strerror (err));
+                           errno, strerror (errno));
             free (ret);
             ret = NULL;
-            close (sock);
         }
     }
     else
     {
-        err = errno;
         glb_log_error ("Failed to allocate listener object: %d (%s)",
-                       err, strerror (err));
-        close (sock);
+                       errno, strerror (errno));
     }
 
     return ret;

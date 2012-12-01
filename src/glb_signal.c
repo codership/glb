@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -16,11 +16,11 @@ signal_handler(int signum)
     switch(signum) {
 //    case SIGALRM: should not be getting this signal either
 //        break;
+    case GLB_SIGNAL_OK: // used by child to report OK
+        exit (EXIT_SUCCESS);
     case SIGCHLD:
         glb_log_fatal ("Child unexpectedly terminated.");
         exit (EXIT_FAILURE);
-    case GLB_SIGNAL_OK: // used by child to report OK
-        exit (EXIT_SUCCESS);
     case SIGHUP:
     case SIGTERM:
     case SIGINT:

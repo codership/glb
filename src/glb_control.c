@@ -45,7 +45,6 @@ typedef enum ctrl_fd
 struct glb_ctrl
 {
     pthread_t     thread;
-    const char*   fifo_name;
     int           fifo;
     int           inet_sock;
     glb_router_t* router;
@@ -246,64 +245,29 @@ ctrl_thread (void* arg)
 }
 
 glb_ctrl_t*
-glb_ctrl_create (glb_router_t*         router,
-                 glb_pool_t*           pool,
-                 uint16_t              port,
-                 const char*           name,
-                 const glb_sockaddr_t* inet_addr)
+glb_ctrl_create (glb_router_t* const router,
+                 glb_pool_t*   const pool,
+                 uint16_t      const port,
+                 int           const fifo,
+                 int           const sock)
 {
     glb_ctrl_t* ret = NULL;
-    int inet_sock = 0;
-    int fifo;
-    const char* fifo_name;
 
     assert (NULL != router);
-    assert (NULL != name);
 
-    fifo_name = strdup (name); // for future cleanup
-    if (!fifo_name) {
-        glb_log_error ("Ctrl: strdup(): %d (%s)", errno, strerror (errno));
-        return NULL;
-    }
-
-    if (mkfifo (fifo_name, S_IRUSR | S_IWUSR)) {
-        glb_log_error ("FIFO '%s' already exists. Check that no other "
-                       "glbd instance is running and delete it "
-                       "or specify another name with --fifo option.",
-                       fifo_name);
-        goto err;
-    }
-
-    fifo = open (fifo_name, O_RDWR);
-    if (fifo < 0) {
-        glb_log_error ("Ctrl: failed to open FIFO file: %d (%s)",
+    if (sock && listen (sock, CTRL_MAX)) {
+        glb_log_error ("Ctrl: listen() failed: %d (%s)",
                        errno, strerror (errno));
-        goto err;
-    }
-
-    if (inet_addr) {
-        inet_sock = glb_socket_create (inet_addr, GLB_SOCK_DEFER_ACCEPT);
-        if (inet_sock < 0) {
-            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
-                           errno, strerror (errno));
-            goto err1;
-        }
-
-        if (listen (inet_sock, 10)) { // what should be the queue length?
-            glb_log_error ("Ctrl: listen() failed: %d (%s)",
-                           errno, strerror (errno));
-            goto err2;
-        }
+        return NULL;
     }
 
     ret = calloc (1, sizeof (glb_ctrl_t));
     if (ret) {
         ret->router       = router;
         ret->pool         = pool;
-        ret->fifo_name    = fifo_name;
         ret->fifo         = fifo;
-        ret->inet_sock    = inet_sock;
-        ret->fd_max       = fifo > inet_sock ? 1 : 2;
+        ret->inet_sock    = sock;
+        ret->fd_max       = fifo > sock ? 1 : 2;
         ret->default_port = port;
 
         ret->fds[CTRL_FIFO].fd      = ret->fifo;
@@ -317,7 +281,7 @@ glb_ctrl_create (glb_router_t*         router,
         if (pthread_create (&ret->thread, NULL, ctrl_thread, ret)) {
             glb_log_error ("Failed to launch ctrl thread.");
             free (ret);
-            goto err2;
+            return NULL;
         }
         return ret;
     }
@@ -325,13 +289,6 @@ glb_ctrl_create (glb_router_t*         router,
         glb_log_error ("Ctrl: out of memory.");
     }
 
-err2:
-    close (inet_sock);
-err1:
-    close (fifo);
-    remove (fifo_name);
-err:
-    free ((char*)fifo_name);
     return NULL;
 }
 
@@ -339,10 +296,6 @@ extern void
 glb_ctrl_destroy (glb_ctrl_t* ctrl)
 {
     pthread_join (ctrl->thread, NULL);
-    if (ctrl->fifo) close (ctrl->fifo);
-    if (ctrl->inet_sock) close (ctrl->inet_sock);
-    remove (ctrl->fifo_name);
-    free ((char*)ctrl->fifo_name);
     free (ctrl);
 }
 
