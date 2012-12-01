@@ -20,6 +20,9 @@ glb_router_destroy ();
 /*!
  * Returns file descriptor of a new destinaiton conneciton and fills
  * dst_addr with real server address
+ *
+ * Not thread-safe. Supposed to be called ONLY from the listener main loop.
+ *
  * @return file descriptor or negative error code
  */
 extern int

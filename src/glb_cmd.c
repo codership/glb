@@ -70,41 +70,41 @@ glb_cmd_help (FILE* out, const char* progname)
              "Usage:\n  %s [OPTIONS] LISTEN_ADDRESS "
              "[DESTINATION_LIST]\nOPTIONS:\n", progname);
     fprintf (out,
-             "  --help                  this help message.\n");
+             "  -h|--help                 this help message.\n");
     fprintf (out,
-             "  --daemon                run as a daemon.\n");
+             "  -d|--daemon               run as a daemon.\n");
     fprintf (out,
-             "  --fifo <fifo name>      name of the FIFO file for control.\n");
+             "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
     fprintf (out,
-             "  --control [HOST:]PORT   "
+             "  -c|--control [HOST:]PORT  "
              "listen for control requests on this address.\n");
     fprintf (out,
-             "  --threads N             "
+             "  -t|--threads N            "
              "number of working threads (connection pools).\n");
     fprintf (out,
-             "  --max_conn N            "
+             "  -m|--max_conn N           "
              "maximum allowed number of client connections (OS dependent).\n");
     fprintf (out,
-             "  --nodelay               "
+             "  -n|--nodelay              "
              "*DISABLE* TCP_NODELAY socket option (default: enabled).\n");
     fprintf (out,
-             "  --source_tracking       "
+             "  -s|--source_tracking      "
              "turn on source tracking: route connections from one\n"
-             "                          source to the same destination.\n");
+             "                            source to the same destination.\n");
     fprintf (out,
-             "  --verbose               turn on verbose reporting.\n");
+             "  -v|--verbose              turn on verbose reporting.\n");
     fprintf (out,
-             "  --version               print program version.\n");
+             "  -V|--version              print program version.\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
-             "  [IP:]PORT               "
+             "  [IP:]PORT                 "
              "where to listen for incoming TCP connections at.\n"
-             "                          "
+             "                            "
              "(without IP part - bind to all interfaces)\n"
              );
     fprintf (out, "DESTINATION_LIST:\n"
              "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
              " - a space-separated list of destinations\n"
-             "                          in the form address:port:weight.\n");
+             "                            in the form address:port:weight.\n");
     exit (EXIT_FAILURE);
 }
 

@@ -115,6 +115,7 @@ int
 glb_socket_setopt (int sock, uint32_t const optflags)
 {
     int const one  = 1;
+    int ret = 0;
 //    int const zero = 0;
 
 #if 0
@@ -137,22 +138,22 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     if ((optflags & GLB_SOCK_NODELAY) && glb_conf->nodelay &&
         setsockopt(sock, SOL_TCP, TCP_NODELAY, &one, sizeof(one)))
     {
-        glb_log_error ("Setting TCP_NODELAY failed: %d (%s)",
-                       errno, strerror(errno));
-        return -errno;
+        glb_log_warn ("Setting TCP_NODELAY failed: %d (%s)",
+                      errno, strerror(errno));
+        ret = -errno;
     }
 
 #if defined(TCP_DEFER_ACCEPT)
     if ((optflags & GLB_SOCK_DEFER_ACCEPT) &&
         setsockopt(sock, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one)))
     {
-        glb_log_error ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
-                       errno, strerror(errno));
-        return -errno;
+        glb_log_warn ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
+                      errno, strerror(errno));
+        ret = -errno;
     }
 #endif /* TCP_DEFER_ACCEPT */
 
-    return 0;
+    return ret;
 }
 
 int

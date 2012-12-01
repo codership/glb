@@ -47,27 +47,29 @@ allocate_resources(const glb_cmd_t* conf,
 
     *ctrl_fifo = open (conf->fifo_name, O_RDWR);
     if (*ctrl_fifo < 0) {
+        int err = -(*ctrl_fifo);
         glb_log_error ("Ctrl: failed to open FIFO file: %d (%s)",
-                       errno, strerror (errno));
+                       err, strerror (err));
         goto cleanup1;
     }
 
     if (conf->ctrl_set) {
         *ctrl_sock = glb_socket_create (&conf->ctrl_addr,GLB_SOCK_DEFER_ACCEPT);
         if (*ctrl_sock < 0) {
-            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
-                           errno, strerror (errno));
+//            int err = -(*ctrl_fifo);
+//            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
+//                           err, strerror (err));
             goto cleanup2;
         }
     }
 
     *listen_sock = glb_socket_create (&conf->inc_addr, GLB_SOCK_DEFER_ACCEPT);
     if (*listen_sock < 0) {
-        glb_log_error ("Failed to create listening socket: %d (%s)",
-                       errno, strerror (errno));
+//        int err = -(*ctrl_fifo);
+//        glb_log_error ("Failed to create listening socket: %d (%s)",
+//                       err, strerror (err));
         goto cleanup3;
     }
-
 
     return 0;
 

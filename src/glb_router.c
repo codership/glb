@@ -329,6 +329,13 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
 {
     int sock, ret;
 
+    /* Here it is assumed that this function is called only from one thread. */
+    if (router->conns >= glb_conf->max_conn) {
+        glb_log_warn ("Maximum connection limit of %ld exceeded. Rejecting "
+                      "connection attept.", glb_conf->max_conn);
+        return -EMFILE;
+    }
+
     // prepare a socket
     sock = glb_socket_create (&router->sock_out, GLB_SOCK_NODELAY);
     if (sock < 0) {
