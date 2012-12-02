@@ -8,4 +8,4 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-DISTFILES = README glbd.cfg glbd.sh
+DISTFILES = Makefile.am Makefile.in README glbd.cfg glbd.sh
