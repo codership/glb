@@ -127,5 +127,6 @@ AC_MSG_NOTICE([----------------------])
 
 AC_CONFIG_FILES([Makefile
                  doc/Makefile
-                 src/Makefile])
+                 src/Makefile
+                 files/Makefile])
 AC_OUTPUT
