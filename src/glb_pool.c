@@ -318,7 +318,7 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     pool->n_conns++; // increment connection count
     pool->stats.conns_opened++;
 
-    if (glb_conf->verbose) {
+    if (glb_cnf->verbose) {
         glb_log_info ("Pool %ld: added connection, "
                       "(total pool connections: %ld)", pool->id, pool->n_conns);
     }

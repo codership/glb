@@ -135,7 +135,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     }
 #endif
 
-    if ((optflags & GLB_SOCK_NODELAY) && glb_conf->nodelay &&
+    if ((optflags & GLB_SOCK_NODELAY) && glb_cnf->nodelay &&
         setsockopt(sock, SOL_TCP, TCP_NODELAY, &one, sizeof(one)))
     {
         glb_log_warn ("Setting TCP_NODELAY failed: %d (%s)",

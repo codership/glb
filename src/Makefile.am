@@ -9,6 +9,7 @@ glbd_SOURCES = \
 	glb_daemon.c   \
 	glb_socket.c   \
 	glb_dst.c      \
+	glb_cnf.c      \
 	glb_cmd.c      \
 	glb_router.c   \
 	glb_pool.c     \

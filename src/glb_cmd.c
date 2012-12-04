@@ -4,7 +4,7 @@
  * $Id$
  */
 
-#define GLB_CMD_C
+#define GLB_CNF_ACCESS
 
 #include "../config.h" // for version
 
@@ -12,8 +12,6 @@
 #include "glb_log.h"
 #include "glb_limits.h"
 #include "glb_socket.h"
-
-glb_cmd_t* glb_conf = NULL;
 
 #include <stddef.h> // ptrdiff_t
 #include <string.h>
@@ -37,6 +35,7 @@ typedef enum cmd_opt
     CMD_OPT_HELP         = 'h',
     CMD_OPT_MAX_CONN     = 'm',
     CMD_OPT_NODELAY      = 'n',
+    CMD_OPT_RANDOM       = 'r',
     CMD_OPT_SRC_TRACKING = 's',
     CMD_OPT_N_THREADS    = 't',
     CMD_OPT_VERBOSE      = 'v',
@@ -52,6 +51,7 @@ static option_t cmd_options[] =
     { "max_conn",        RA, NULL, CMD_OPT_MAX_CONN      },
     { "connections",     RA, NULL, CMD_OPT_MAX_CONN      },
     { "nodelay",         NA, NULL, CMD_OPT_NODELAY       },
+    { "random",          NA, NULL, CMD_OPT_RANDOM        },
     { "src_tracking",    NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "source_tracking", NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "threads",         RA, NULL, CMD_OPT_N_THREADS     },
@@ -88,6 +88,9 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -n|--nodelay              "
              "*DISABLE* TCP_NODELAY socket option (default: enabled).\n");
     fprintf (out,
+             "  -r|--random               "
+             "route connection to randomly selected destination.\n");
+    fprintf (out,
              "  -s|--source_tracking      "
              "turn on source tracking: route connections from one\n"
              "                            source to the same destination.\n");
@@ -106,34 +109,6 @@ glb_cmd_help (FILE* out, const char* progname)
              " - a space-separated list of destinations\n"
              "                            in the form address:port:weight.\n");
     exit (EXIT_FAILURE);
-}
-
-void
-glb_cmd_print (FILE* out, const glb_cmd_t* cmd)
-{
-    ulong i;
-
-    fprintf (out, "Incoming address: %s, ",
-             glb_socket_addr_to_string (&cmd->inc_addr));
-    fprintf (out, "control FIFO: %s\n", cmd->fifo_name);
-    fprintf (out, "Control  address:  %s\n",
-             cmd->ctrl_set ? glb_socket_addr_to_string (&cmd->ctrl_addr) :
-             "none");
-    fprintf (out, "Number of threads: %ld, max connections: %ld, nodelay: %s, "
-             "source tracking: %s, verbose: %s, daemon: %s\n",
-             cmd->n_threads,
-             cmd->max_conn,
-             cmd->nodelay ? "ON" : "OFF",
-             cmd->src_tracking ? "ON" : "OFF",
-             cmd->verbose ? "ON" : "OFF",
-             cmd->daemonize ? "YES" : "NO");
-    fprintf (out, "Destinations: %lu\n", (ulong)cmd->n_dst);
-
-    for (i = 0; i < cmd->n_dst; i++) {
-        char tmp[256];
-        glb_dst_print (tmp, sizeof(tmp), &cmd->dst[i]);
-        fprintf (out, "  %2lu: %s\n", i, tmp);
-    }
 }
 
 // parses [addr:]port
@@ -179,12 +154,12 @@ cmd_parse_addr (glb_sockaddr_t* addr,
 }
 
 // parses array list of destinations
-static glb_cmd_t*
+static glb_cnf_t*
 cmd_parse_dst_list (const char* dst_list[],
                     size_t      n_dst,
                     ulong       default_port)
 {
-    glb_cmd_t*   ret   = NULL;
+    glb_cnf_t*   ret   = NULL;
     size_t       i;
 
     ret = calloc (sizeof(*ret) + n_dst * sizeof(glb_dst_t), 1);
@@ -217,7 +192,7 @@ static const ulong cmd_min_threads          = 1;
 void
 glb_cmd_parse (int argc, char* argv[])
 {
-    glb_cmd_t    tmp = {{ 0 }}; // initialize to 0
+    glb_cnf_t    tmp = {{ 0 }}; // initialize to 0
     const char** dst_list = NULL;
     long         opt = 0;
     int          opt_idx = 0;
@@ -232,18 +207,16 @@ glb_cmd_parse (int argc, char* argv[])
     tmp.n_threads    = cmd_min_threads;
     tmp.max_conn     = conn_limit;
     tmp.nodelay      = true;
-    tmp.src_tracking = false;
+    tmp.policy       = GLB_POLICY_LEAST;
     tmp.verbose      = false;
     tmp.daemonize    = false;
 
     // parse options
-    while ((opt = getopt_long(argc, argv, "c:dfhnm:t:svV",cmd_options,&opt_idx))
+    while ((opt = getopt_long(argc, argv,"c:dfhm:nt:rsvV",cmd_options,&opt_idx))
            != -1) {
         switch (opt) {
-        case '?':
-        case CMD_OPT_HELP:
-            glb_cmd_help(stdout, argv[0]);
-            exit (-1);
+        case CMD_OPT_DAEMON:
+            tmp.daemonize = true;
             break;
         case CMD_OPT_CONTROL:
             if (cmd_parse_addr (&tmp.ctrl_addr, optarg, cmd_ctrl_addr_default))
@@ -252,6 +225,19 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_FIFO:
             tmp.fifo_name = optarg;
+            break;
+        case '?':
+        case CMD_OPT_HELP:
+            glb_cmd_help(stdout, argv[0]);
+            exit (-1);
+            break;
+        case CMD_OPT_MAX_CONN:
+            tmp.max_conn = strtol (optarg, &endptr, 10);
+            if ((*endptr != '\0' && *endptr != ' ') || errno) {
+                fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
+                         optarg);
+                return;
+            }
             break;
         case CMD_OPT_NODELAY:
             tmp.nodelay = false;
@@ -265,13 +251,11 @@ glb_cmd_parse (int argc, char* argv[])
             }
             if (tmp.n_threads<cmd_min_threads) tmp.n_threads = cmd_min_threads;
             break;
-        case CMD_OPT_MAX_CONN:
-            tmp.max_conn = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
-                fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
-                         optarg);
-                return;
-            }
+        case CMD_OPT_RANDOM:
+            tmp.policy = GLB_POLICY_RANDOM;
+            break;
+        case CMD_OPT_SRC_TRACKING:
+            tmp.policy = GLB_POLICY_SOURCE;
             break;
         case CMD_OPT_VERBOSE:
             tmp.verbose = true;
@@ -286,12 +270,6 @@ glb_cmd_parse (int argc, char* argv[])
 #error "USE_POLL/USE_EPOLL undefined"
 #endif
             );
-            break;
-        case CMD_OPT_DAEMON:
-            tmp.daemonize = true;
-            break;
-        case CMD_OPT_SRC_TRACKING:
-            tmp.src_tracking = true;
             break;
         default:
             glb_log_warn ("Option '%s' (%d) not supported yet. Ignoring.\n",
@@ -333,21 +311,21 @@ glb_cmd_parse (int argc, char* argv[])
     // parse destination list
     if (++optind < argc) dst_list = (const char**) &(argv[optind]);
     assert (argc >= optind);
-    glb_conf = cmd_parse_dst_list (dst_list, argc - optind, inc_port);
+    glb_cnf = cmd_parse_dst_list (dst_list, argc - optind, inc_port);
 
     if (tmp.daemonize) tmp.verbose = false;
 
-    if (glb_conf) {
-        glb_conf->inc_addr  = tmp.inc_addr;
-        glb_conf->ctrl_addr = tmp.ctrl_addr;
-        glb_conf->ctrl_set  = tmp.ctrl_set;
-        glb_conf->fifo_name = tmp.fifo_name;
-        glb_conf->n_threads = tmp.n_threads;
-        glb_conf->max_conn  = tmp.max_conn;
-        glb_conf->verbose   = tmp.verbose;
-        glb_conf->daemonize = tmp.daemonize;
-        glb_conf->nodelay   = tmp.nodelay;
-        glb_conf->src_tracking = tmp.src_tracking;
+    if (glb_cnf) {
+        glb_cnf->inc_addr  = tmp.inc_addr;
+        glb_cnf->ctrl_addr = tmp.ctrl_addr;
+        glb_cnf->ctrl_set  = tmp.ctrl_set;
+        glb_cnf->fifo_name = tmp.fifo_name;
+        glb_cnf->n_threads = tmp.n_threads;
+        glb_cnf->max_conn  = tmp.max_conn;
+        glb_cnf->verbose   = tmp.verbose;
+        glb_cnf->daemonize = tmp.daemonize;
+        glb_cnf->nodelay   = tmp.nodelay;
+        glb_cnf->policy    = tmp.policy;
     }
 }
 

@@ -33,8 +33,9 @@ struct glb_router
     long            busy_count;
     long            wait_count;
     pthread_cond_t  free;
-    long            n_dst;
     long            conns;
+    unsigned int    seed; // seed for rng
+    long            n_dst;
     router_dst_t*   dst;
 };
 
@@ -161,8 +162,9 @@ glb_router_create (size_t n_dst, glb_dst_t const dst[])
         glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
 
         ret->busy_count = 0;
-        ret->n_dst = 0;
         ret->conns = 0;
+        ret->seed  = getpid();
+        ret->n_dst = 0;
         ret->dst   = NULL;
 
         for (i = 0; i < n_dst; i++) {
@@ -250,7 +252,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
-    if (!glb_conf->src_tracking) {
+    if (GLB_POLICY_LEAST == glb_cnf->policy) {
         return router_choose_dst_weight (router);
     }
     else {
@@ -260,16 +262,15 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
 
 // connect to a best destination, possiblly failing over to a next best
 static int
-router_connect_dst (glb_router_t*         router,
-                    int                   sock,
-                    const glb_sockaddr_t* src_addr,
-                    glb_sockaddr_t*       addr)
+router_connect_dst (glb_router_t*   const router,
+                    int             const sock,
+                    uint32_t        const hint,
+                    glb_sockaddr_t* const addr)
 {
     router_dst_t* dst;
     int  error    = EHOSTDOWN;
     int  ret;
     bool redirect = false;
-    uint32_t hint = glb_conf->src_tracking ? glb_socket_addr_hash(src_addr) : 0;
 
     GLB_MUTEX_LOCK (&router->lock);
 
@@ -330,9 +331,9 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     int sock, ret;
 
     /* Here it is assumed that this function is called only from one thread. */
-    if (router->conns >= glb_conf->max_conn) {
+    if (router->conns >= glb_cnf->max_conn) {
         glb_log_warn ("Maximum connection limit of %ld exceeded. Rejecting "
-                      "connection attept.", glb_conf->max_conn);
+                      "connection attempt.", glb_cnf->max_conn);
         return -EMFILE;
     }
 
@@ -343,12 +344,21 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
         return sock;
     }
 
+    uint32_t hint = 0;
+    switch (glb_cnf->policy)
+    {
+    case GLB_POLICY_LEAST:  break;
+    case GLB_POLICY_RANDOM: hint = rand_r(&router->seed); break;
+    case GLB_POLICY_SOURCE: hint = glb_socket_addr_hash(src_addr); break;
+    case GLB_POLICY_MAX:    assert(0);
+    };
+
     // attmept to connect until we run out of destinations
-    ret = router_connect_dst (router, sock, src_addr, dst_addr);
+    ret = router_connect_dst (router, sock, hint, dst_addr);
 
     // avoid socket leak
     if (ret < 0) {
-        glb_log_error ("router_connect_dst() failed");
+        glb_log_error ("router_connect_dst() failed.");
         close (sock);
         sock = ret;
     }
@@ -386,7 +396,6 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 {
     size_t len = 0;
     long   total_conns;
-//    long   conn_check = 0;
     long   n_dst;
     long   i;
 
@@ -402,8 +411,6 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
-
-//        conn_check += d->conns;
 
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f %5ld\n",
                          glb_socket_addr_to_string(&d->dst.addr),
@@ -423,7 +430,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     len += snprintf (buf + len, buf_len - len,
                      "----------------------------------------------------\n"
                      "Destinations: %ld, total connections: %ld of %ld max\n",
-                     n_dst, total_conns, glb_conf->max_conn);
+                     n_dst, total_conns, glb_cnf->max_conn);
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);

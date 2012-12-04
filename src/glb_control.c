@@ -221,7 +221,7 @@ ctrl_thread (void* arg)
             // Add to fds and wait for new events
             ctrl_add_client (ctrl, client_sock);
 
-            if (glb_conf->verbose) {
+            if (glb_cnf->verbose) {
                 glb_log_info ("Ctrl: accepted connection from %s\n",
                          glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
             }

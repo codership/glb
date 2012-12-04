@@ -76,7 +76,7 @@ listener_thread (void* arg)
             goto err2;
         }
 
-        if (glb_conf->verbose) {
+        if (glb_cnf->verbose) {
             glb_log_info ("Accepted connection from %s ",
                           glb_socket_addr_to_string (&client));
             glb_log_info ("to %s\n",
@@ -104,7 +104,7 @@ glb_listener_create (glb_router_t* const router,
     glb_listener_t* ret = NULL;
 
     if (listen (sock,
-                glb_conf->max_conn ? glb_conf->max_conn : (1U << 14)/* 16K */)){
+                glb_cnf->max_conn ? glb_cnf->max_conn : (1U << 14)/* 16K */)){
         glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
         return NULL;
     }
