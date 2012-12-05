@@ -144,7 +144,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     }
 
 #if defined(TCP_DEFER_ACCEPT)
-    if ((optflags & GLB_SOCK_DEFER_ACCEPT) &&
+    if ((optflags & GLB_SOCK_DEFER_ACCEPT) && glb_cnf->defer_accept &&
         setsockopt(sock, SOL_TCP, TCP_DEFER_ACCEPT, &one, sizeof(one)))
     {
         glb_log_warn ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
@@ -167,19 +167,16 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     if (sock < 0)
     {
         err = -errno;
-        glb_log_error ("Failed to create listening socket: %d (%s)",
-                       -err, strerror (-err));
+        glb_log_error("Failed to create socket: %d (%s)", -err, strerror(-err));
         return err;
     }
 
     if ((err = glb_socket_setopt(sock, optflags))) goto error;
 
-    /* Give the socket a name. */
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {
         err = -errno;
-        glb_log_error ("Failed to bind listening socket: %d (%s)",
-                       -err, strerror (-err));
+        glb_log_error ("Failed to bind socket: %d (%s)", -err, strerror(-err));
         goto error;
     }
 

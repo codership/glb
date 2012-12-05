@@ -9,6 +9,12 @@
 
 #include "glb_cnf.h"
 
+/*!
+ * Parses command line arguments and creates configuration structure
+ * passed in defaults.
+ *
+ * @return updated config structure (maybe realloced) or NULL in case of failure
+ */
 extern void
 glb_cmd_parse (int argc, char* argv[]);
 

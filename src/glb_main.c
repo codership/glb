@@ -56,18 +56,18 @@ allocate_resources(const glb_cnf_t* conf,
     if (conf->ctrl_set) {
         *ctrl_sock = glb_socket_create (&conf->ctrl_addr,GLB_SOCK_DEFER_ACCEPT);
         if (*ctrl_sock < 0) {
-//            int err = -(*ctrl_fifo);
-//            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
-//                           err, strerror (err));
+            int err = -(*ctrl_sock);
+            glb_log_error ("Ctrl: failed to create listening socket: %d (%s)",
+                           err, strerror (err));
             goto cleanup2;
         }
     }
 
     *listen_sock = glb_socket_create (&conf->inc_addr, GLB_SOCK_DEFER_ACCEPT);
     if (*listen_sock < 0) {
-//        int err = -(*ctrl_fifo);
-//        glb_log_error ("Failed to create listening socket: %d (%s)",
-//                       err, strerror (err));
+        int err = -(*listen_sock);
+        glb_log_error ("Failed to create listening socket: %d (%s)",
+                       err, strerror (err));
         goto cleanup3;
     }
 
@@ -107,7 +107,6 @@ int main (int argc, char* argv[])
     int listen_sock, ctrl_fifo, ctrl_sock = 0;
 
     glb_limits_init();
-    if (!glb_cnf_init()) exit(EXIT_FAILURE);
 
     glb_cmd_parse (argc, argv);
     if (!glb_cnf) {

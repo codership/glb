@@ -30,7 +30,7 @@ static void*
 listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
-    pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
+//    pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
 
     while (1) {
         long           ret;
@@ -39,14 +39,14 @@ listener_thread (void* arg)
         socklen_t      client_size;
         int            server_sock;
         glb_sockaddr_t server;
-
+#if REMOVE
         ret = poll (&pollfd, 1, -1);
         if (ret < 0) {
             glb_log_error ("Error waiting for connections: %d (%s)",
                            errno, strerror (errno));
             goto err; //?
         }
-
+#endif
         assert (1 == ret);
         assert (pollfd.revents & POLLIN);
 

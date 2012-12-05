@@ -238,7 +238,8 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 
         router_dst_t* d = &router->dst[i];
 
-        if (difftime (now, d->failed) > DST_RETRY_INTERVAL) {
+        if (d->dst.weight > 0 &&
+            difftime (now, d->failed) > DST_RETRY_INTERVAL) {
             return d;
         }
 

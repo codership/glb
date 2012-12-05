@@ -28,8 +28,9 @@ typedef struct glb_cnf
     const char*    fifo_name;    // FIFO file name
     long           n_threads;    // number of routing threads (1 .. oo)
     long           max_conn;     // max allowed client connections
-    bool           nodelay;
     glb_policy_t   policy;       // algorithm to use for load-balancing
+    bool           nodelay;      // use TCP_NODELAY?
+    bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
     size_t         n_dst;        // number of destinations
@@ -42,8 +43,11 @@ extern const glb_cnf_t* const glb_cnf;
 extern glb_cnf_t* glb_cnf;
 #endif /* GLB_CNF_ACCESS */
 
-extern const glb_cnf_t*
+extern glb_cnf_t*
 glb_cnf_init ();
+
+extern void
+glb_print_version (FILE* out);
 
 extern void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf);

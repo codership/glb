@@ -523,8 +523,10 @@ pool_handle_read (pool_t* pool, int src_fd)
             else { // some other error
                 if (errno != EAGAIN) {
                     ret = -errno;
-                    glb_log_warn ("pool_handle_read(): %zd (%s)",
-                                  -ret, strerror(-ret));
+                    if (errno != ECONNRESET || glb_cnf->verbose) {
+                        glb_log_warn ("pool_handle_read(): %zd (%s)",
+                                      errno, strerror(errno));
+                    }
                 }
             }
         }

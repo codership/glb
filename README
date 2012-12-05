@@ -26,9 +26,22 @@ Features:
    single core machine as it will lessen poll() overhead proportionally and
    can improve overall performance by a factor of 2 or more.
 
-COMMAND LINE OPTIONS:
-=====================
-See output of the --help option.
+
+BALANCING POLICIES:
+===================
+GLB supports 3 balancing "policies":
+
+a) "least connected" - new connection will be directed to the server with least
+   connections (corrected for server "weight"). This is the default policy.
+
+b) "random" - connections are distributed randomly between the servers.
+
+c) "source tracking" - connections originating from the same address are
+   directed to the same server. For details about this policy see below.
+
+LIMITATION: currently "random" and "source tracking" policies don't respect
+node weights.
+
 
 MAXIMUM CONNECTIONS:
 ====================
@@ -39,6 +52,12 @@ user privileges. For unprivileged user it is normally 4096 which results
 in max 2029 connections.
 On Linux open files limit may be checked with 'ulimit -n' and if necessary
 increased in /etc/security/limits.conf.
+
+
+COMMAND LINE OPTIONS:
+=====================
+See output of the --help option.
+
 
 RUNTIME MANAGEMENT:
 ===================
@@ -102,7 +121,7 @@ scripts. A few description fields are added to assist in human reading. Value
 fields are all even and go as follows:
 
   2  - number of bytes received on incoming interface (client requests)
-  4  - number of bytes sent from incoming inteface (server responses)
+  4  - number of bytes sent from incoming interface (server responses)
   6  - number of bytes passed through recv() call
   8  - number of recv() calls
   10 - number of bytes passed through send() call (should be equal to p.6)
@@ -129,7 +148,7 @@ from one address can be routed to the same destination, chosen randomly
 when the destination list changes, destination choice for new connections
 changes as well while established connections naturally stay unchanged. Also
 when a destination is marked unavailable, all connections that would be routed
-to it will failover to another, randomly chosen, but deterministic choice.
+to it will fail over to another, randomly chosen (but the same) destination.
 When the original target becomes available, all new connections will be routed
 back to it.
 
@@ -140,3 +159,4 @@ will work best for short-lived connections.
 RUNNING GLBD AS A "SERVICE":
 ============================
 See README in the files/ directory.
+
