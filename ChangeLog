@@ -1,3 +1,9 @@
+2012-12-05 alex 
+- *HOTFIX*: fixed slow MySQL connection initiation due to TCP_DEFER_ACCEPT
+  enabled by default. Now it is an option.
+- added "random" load balancing policy.
+  Version 0.8.2
+
 2012-12-01 alex 
 - Fixed privileges issue when using service script and default FIFO location.
 - Implemented maximum connections option which both limits maximum client
