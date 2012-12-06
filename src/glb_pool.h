@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -21,14 +21,14 @@ extern void
 glb_pool_destroy (glb_pool_t* pool);
 
 // Adds connection to conneciton pool
-extern long
+extern int
 glb_pool_add_conn (glb_pool_t*     pool,
                    int             inc_sock,
                    int             dst_sock,
                    glb_sockaddr_t* dst_addr);
 
 // Closes all connecitons to a given destination
-extern long
+extern int
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst);
 
 extern ssize_t

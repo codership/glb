@@ -30,10 +30,10 @@ static void*
 listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
-//    pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
+// REMOVE   pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
 
     while (1) {
-        long           ret;
+        int            ret;
         int            client_sock;
         glb_sockaddr_t client;
         socklen_t      client_size;
@@ -48,7 +48,7 @@ listener_thread (void* arg)
         }
 #endif
         assert (1 == ret);
-        assert (pollfd.revents & POLLIN);
+// REMOVE        assert (pollfd.revents & POLLIN);
 
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);

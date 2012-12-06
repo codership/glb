@@ -46,6 +46,13 @@ extern glb_cnf_t* glb_cnf;
 extern glb_cnf_t*
 glb_cnf_init ();
 
+// parses array list of destinations
+extern glb_cnf_t*
+cmd_parse_dst_list (const char* const dst_list[],
+                    int         const n_dst,
+                    uint16_t    const default_port,
+                    glb_cnf_t*  const in);
+
 extern void
 glb_print_version (FILE* out);
 

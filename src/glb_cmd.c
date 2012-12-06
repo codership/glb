@@ -158,6 +158,7 @@ cmd_parse_addr (glb_sockaddr_t* addr,
     return glb_socket_addr_init (addr, addr_str, port);
 }
 
+#if REMOVE
 // parses array list of destinations
 static glb_cnf_t*
 cmd_parse_dst_list (const char* const dst_list[],
@@ -195,18 +196,19 @@ cmd_parse_dst_list (const char* const dst_list[],
     return out;
 }
 
-// General defaults
-static const char  cmd_inc_addr_default[]   = "0.0.0.0";
-static const char  cmd_ctrl_addr_default[]  = "127.0.0.1";
 static const char  cmd_fifo_name_default[]  = "/tmp/glbd.fifo";
 static const ulong cmd_min_threads          = 1;
+#endif /* REMOVE */
+// Defaults relevant to CLI
+static const char cmd_inc_addr_default[]  = "0.0.0.0";
+static const char cmd_ctrl_addr_default[] = "127.0.0.1";
 
 void
 glb_cmd_parse (int argc, char* argv[])
 {
     glb_cnf_t*   tmp = glb_cnf_init(); // initialize to defaults
     const char** dst_list = NULL;
-    long         opt = 0;
+    int          opt = 0;
     int          opt_idx = 0;
     char*        endptr;
     uint16_t     inc_port;
@@ -252,9 +254,8 @@ glb_cmd_parse (int argc, char* argv[])
             if ((*endptr != '\0' && *endptr != ' ') || errno) {
                 fprintf (stderr, "Bad n_threads value: %s. Integer expected.\n",
                          optarg);
-                return;
+                exit (EXIT_FAILURE);
             }
-            if (tmp->n_threads<cmd_min_threads) tmp->n_threads = cmd_min_threads;
             break;
         case CMD_OPT_RANDOM:
             tmp->policy = GLB_POLICY_RANDOM;
