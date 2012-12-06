@@ -59,10 +59,6 @@ static option_t cmd_options[] =
     { 0, 0, 0, 0 }
 };
 
-// Some constants
-#define cmd_ip_len_max     256
-#define cmd_port_max       ((1<<16) - 1)
-
 void
 glb_cmd_help (FILE* out, const char* progname)
 {
@@ -116,94 +112,12 @@ glb_cmd_help (FILE* out, const char* progname)
     exit (EXIT_FAILURE);
 }
 
-// parses [addr:]port
-static long
-cmd_parse_addr (glb_sockaddr_t* addr,
-                const char*     str,
-                const char*     default_addr)
-{
-    const char* port_str;
-    ulong       port;
-    char*       endptr;
-    char        addr_str[cmd_ip_len_max + 1] = { 0, };
 
-    port_str = strchr (str, ':');
-    if (!port_str) {
-        // no separator - only port present
-        port_str = str;
-        strncpy (addr_str, default_addr, cmd_ip_len_max); // any address
-    }
-    else {
-        ptrdiff_t addr_len = port_str - str;
-        if (addr_len > cmd_ip_len_max) {
-            fprintf (stderr, "Host address too long: %s\n", str);
-            return -EINVAL;
-        }
-        port_str = port_str + 1;
-        strncpy (addr_str, str, addr_len);
-//        if (glb_socket_in_addr (addr, addr_str)) {
-//            fprintf (stderr, "Invalid host address: %s\n", addr_str);
-//            return -EINVAL;
-//        }
-    }
-
-    port = strtoul (port_str, &endptr, 10);
-    if (*endptr != '\0' || port > cmd_port_max) {
-        fprintf (stderr, "Invalid port spec: %s\n", port_str);
-        return -EINVAL;
-    }
-
-//    printf ("Option: %s, found addr = '%s', port = '%s'\n",
-//            str, addr_str, port_str);
-    return glb_socket_addr_init (addr, addr_str, port);
-}
-
-#if REMOVE
-// parses array list of destinations
-static glb_cnf_t*
-cmd_parse_dst_list (const char* const dst_list[],
-                    int         const n_dst,
-                    ulong       const default_port,
-                    glb_cnf_t*  const in)
-{
-    int    i;
-    size_t const new_size = sizeof(*in) + n_dst * sizeof(glb_dst_t);
-    glb_cnf_t* out = realloc (in, new_size);
-
-    if (out) {
-        for (i = 0; i < n_dst; i++) {
-            switch (glb_dst_parse (&out->dst[i], dst_list[i], default_port)) {
-            case 1:
-                // default port is assigned glb_dst_parse()
-            case 2:
-                // default weight is assigned glb_dst_parse()
-            case 3:
-                break;
-            default: // error parsing destination
-                fprintf (stderr, "Invalid destination spec: %s\n", dst_list[i]);
-                free (out);
-                return NULL;
-            }
-        }
-        out->n_dst = n_dst;
-    }
-    else
-    {
-        fprintf (stderr, "Failed to reallocate conf struct to %zu bytes.\n",
-                 new_size);
-    }
-
-    return out;
-}
-
-static const char  cmd_fifo_name_default[]  = "/tmp/glbd.fifo";
-static const ulong cmd_min_threads          = 1;
-#endif /* REMOVE */
 // Defaults relevant to CLI
 static const char cmd_inc_addr_default[]  = "0.0.0.0";
 static const char cmd_ctrl_addr_default[] = "127.0.0.1";
 
-void
+glb_cnf_t*
 glb_cmd_parse (int argc, char* argv[])
 {
     glb_cnf_t*   tmp = glb_cnf_init(); // initialize to defaults
@@ -223,8 +137,8 @@ glb_cmd_parse (int argc, char* argv[])
             tmp->defer_accept = true;
             break;
         case CMD_OPT_CONTROL:
-            if (cmd_parse_addr (&tmp->ctrl_addr, optarg, cmd_ctrl_addr_default))
-                return;
+            if (glb_parse_addr (&tmp->ctrl_addr, optarg, cmd_ctrl_addr_default))
+                exit (EXIT_FAILURE);
             tmp->ctrl_set = true;
             break;
         case CMD_OPT_DAEMON:
@@ -243,7 +157,7 @@ glb_cmd_parse (int argc, char* argv[])
             if ((*endptr != '\0' && *endptr != ' ') || errno) {
                 fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
                          optarg);
-                return;
+                exit (EXIT_FAILURE);
             }
             break;
         case CMD_OPT_NODELAY:
@@ -284,8 +198,8 @@ glb_cmd_parse (int argc, char* argv[])
     }
 
     // parse obligatory incoming address
-    if (cmd_parse_addr (&tmp->inc_addr, argv[optind], cmd_inc_addr_default)) {
-        return;
+    if (glb_parse_addr (&tmp->inc_addr, argv[optind], cmd_inc_addr_default)) {
+        exit (EXIT_FAILURE);
     }
     inc_port = glb_socket_addr_get_port (&tmp->inc_addr);
 
@@ -294,8 +208,8 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp->ctrl_set) {
         char port[6] = { 0, };
         snprintf (port, 5, "%hu", inc_port + 1);
-        if (cmd_parse_addr (&tmp->ctrl_addr, port, cmd_ctrl_addr_default))
-            return;
+        if (glb_parse_addr (&tmp->ctrl_addr, port, cmd_ctrl_addr_default))
+            exit (EXIT_FAILURE);
         tmp->ctrl_set = true;
     }
 #endif
@@ -314,7 +228,9 @@ glb_cmd_parse (int argc, char* argv[])
     if (++optind < argc) dst_list = (const char**) &(argv[optind]);
     assert (argc >= optind);
 
-    glb_cnf = cmd_parse_dst_list (dst_list, argc - optind, inc_port, tmp);
+    glb_cnf = glb_parse_dst_list (dst_list, argc - optind, inc_port, tmp);
+
+    return glb_cnf;
 }
 
 

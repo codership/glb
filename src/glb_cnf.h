@@ -46,12 +46,25 @@ extern glb_cnf_t* glb_cnf;
 extern glb_cnf_t*
 glb_cnf_init ();
 
-// parses array list of destinations
+/*!
+ * parses array list of destinations, returns updated cnf structure.
+ */
 extern glb_cnf_t*
-cmd_parse_dst_list (const char* const dst_list[],
+glb_parse_dst_list (const char* const dst_list[],
                     int         const n_dst,
                     uint16_t    const default_port,
                     glb_cnf_t*  const in);
+
+/*!
+ * parses [addr:]port
+ *
+ * depending on the purpose default address can be e.g. 127.0.0.1 or 0.0.0.0
+ * (for listening socket)
+ */
+extern int
+glb_parse_addr (glb_sockaddr_t* addr,
+                const char*     str,
+                const char*     default_addr);
 
 extern void
 glb_print_version (FILE* out);

@@ -13,6 +13,8 @@
 
 glb_cnf_t* glb_cnf = NULL;
 
+#include <errno.h>
+#include <stddef.h> // ptrdiff_t
 #include <string.h>
 
 static const char default_fifo_name[]  = "/tmp/glbd.fifo";
@@ -45,9 +47,55 @@ static const char* policy_str[GLB_POLICY_MAX] =
     "least connected", "random", "source"
 };
 
+// Some constants
+#define glb_ip_len_max     256
+#define glb_port_max       ((1<<16) - 1)
+
+// parses [addr:]port
+int
+glb_parse_addr (glb_sockaddr_t* addr,
+                const char*     str,
+                const char*     default_addr)
+{
+    const char* port_str;
+    ulong       port;
+    char*       endptr;
+    char        addr_str[glb_ip_len_max + 1] = { 0, };
+
+    port_str = strchr (str, ':');
+    if (!port_str) {
+        // no separator - only port present
+        port_str = str;
+        strncpy (addr_str, default_addr, glb_ip_len_max); // any address
+    }
+    else {
+        ptrdiff_t addr_len = port_str - str;
+        if (addr_len > glb_ip_len_max) {
+            fprintf (stderr, "Host address too long: %s\n", str);
+            return -EINVAL;
+        }
+        port_str = port_str + 1;
+        strncpy (addr_str, str, addr_len);
+//        if (glb_socket_in_addr (addr, addr_str)) {
+//            fprintf (stderr, "Invalid host address: %s\n", addr_str);
+//            return -EINVAL;
+//        }
+    }
+
+    port = strtoul (port_str, &endptr, 10);
+    if (*endptr != '\0' || port > glb_port_max) {
+        fprintf (stderr, "Invalid port spec: %s\n", port_str);
+        return -EINVAL;
+    }
+
+//    printf ("Option: %s, found addr = '%s', port = '%s'\n",
+//            str, addr_str, port_str);
+    return glb_socket_addr_init (addr, addr_str, port);
+}
+
 // parses array list of destinations
 glb_cnf_t*
-cmd_parse_dst_list (const char* const dst_list[],
+glb_parse_dst_list (const char* const dst_list[],
                     int         const n_dst,
                     uint16_t    const default_port,
                     glb_cnf_t*  const in)
