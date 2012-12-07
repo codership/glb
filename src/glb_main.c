@@ -80,19 +80,22 @@ cleanup2:
     close (*ctrl_fifo);
     *ctrl_fifo = 0;
 cleanup1:
-    remove (glb_cnf->fifo_name);
+    remove (conf->fifo_name);
 
     return 1;
 }
 
 static void
-free_resources (int const ctrl_fifo, int const ctrl_sock, int const lsock)
+free_resources (const char* const fifo_name,
+                int const ctrl_fifo,
+                int const ctrl_sock,
+                int const lsock)
 {
     if (lsock) close (lsock);
     if (ctrl_sock) close (ctrl_sock);
     if (ctrl_fifo) {
         close (ctrl_fifo);
-        remove (glb_cnf->fifo_name);
+        remove (fifo_name);
     }
 }
 
@@ -108,64 +111,65 @@ int main (int argc, char* argv[])
 
     glb_limits_init();
 
-    glb_cmd_parse (argc, argv);
-    if (!glb_cnf) {
+    glb_cnf_t* const cnf = glb_cmd_parse (argc, argv);
+    if (!cnf) {
         fprintf (stderr, "Failed to parse arguments. Exiting.\n");
         exit (EXIT_FAILURE);
     }
 
-    glb_cnf_print (stdout, glb_cnf);
+    glb_cnf_print (stdout, cnf);
+    glb_socket_init (cnf);
 
     if (glb_log_init (GLB_LOG_PRINTF)) {
         fprintf (stderr, "Failed to initialize logger. Aborting.\n");
         exit (EXIT_FAILURE);
     }
 
-    if (allocate_resources (glb_cnf, &ctrl_fifo, &ctrl_sock, &listen_sock)) {
+    if (allocate_resources (cnf, &ctrl_fifo, &ctrl_sock, &listen_sock)) {
         glb_log_fatal ("Failed to allocate inital resources. Aborting.\n");
         exit (EXIT_FAILURE);
     }
 
     glb_signal_set_handler();
 
-    if (glb_cnf->daemonize) {
+    if (cnf->daemonize) {
         glb_daemon_start();
         // at this point we're a child process
     }
 
-    router = glb_router_create (glb_cnf->n_dst, glb_cnf->dst);
+    router = glb_router_create (cnf);
     if (!router) {
         glb_log_fatal ("Failed to create router. Exiting.");
         goto failure;
     }
 
-    pool = glb_pool_create (glb_cnf->n_threads, router);
+    pool = glb_pool_create (cnf, router);
     if (!pool) {
         glb_log_fatal ("Failed to create thread pool. Exiting.");
         goto failure;
     }
 
-    listener = glb_listener_create (router, pool, listen_sock);
+    listener = glb_listener_create (cnf, router, pool, listen_sock);
     if (!listener) {
         glb_log_fatal ("Failed to create connection listener. Exiting.");
         goto failure;
     }
 
-    inc_port = glb_socket_addr_get_port (&glb_cnf->inc_addr);
-    ctrl = glb_ctrl_create (router, pool, inc_port, ctrl_fifo, ctrl_sock);
+    inc_port = glb_socket_addr_get_port (&cnf->inc_addr);
+    ctrl = glb_ctrl_create (cnf, router, pool, inc_port, ctrl_fifo, ctrl_sock);
     if (!ctrl) {
         glb_log_fatal ("Failed to create control thread. Exiting.");
         goto failure;
     }
 
-    if (glb_cnf->daemonize) {
+    if (cnf->daemonize) {
         glb_daemon_ok (); // Tell parent that daemon successfully started
         glb_log_info ("Started.");
     }
 
     while (!glb_terminate) {
 
-        if (!glb_cnf->daemonize) {
+        if (!cnf->daemonize) {
             char stats[BUFSIZ];
 
             glb_router_print_info (router, stats, BUFSIZ);
@@ -181,14 +185,16 @@ int main (int argc, char* argv[])
     // cleanup
     glb_ctrl_destroy (ctrl);
 
-    if (glb_cnf->daemonize) {
+    if (cnf->daemonize) {
         glb_log_info ("Exit.");
     }
 
-    free_resources (ctrl_fifo, ctrl_sock, listen_sock);
+    free_resources (cnf->fifo_name, ctrl_fifo, ctrl_sock, listen_sock);
+    free (cnf);
     return 0;
 
 failure:
-    free_resources (ctrl_fifo, ctrl_sock, listen_sock);
+    free_resources (cnf->fifo_name, ctrl_fifo, ctrl_sock, listen_sock);
+    free (cnf);
     exit (EXIT_FAILURE);
 }

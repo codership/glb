@@ -15,7 +15,7 @@ typedef struct glb_pool glb_pool_t;
 
 // Creates array of routing pools, each pool is serviced by a separate thread
 extern glb_pool_t*
-glb_pool_create (size_t pools, glb_router_t* router);
+glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router);
 
 extern void
 glb_pool_destroy (glb_pool_t* pool);

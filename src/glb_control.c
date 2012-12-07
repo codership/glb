@@ -45,11 +45,12 @@ typedef enum ctrl_fd
 
 struct glb_ctrl
 {
+    glb_cnf_t*    cnf;
+    glb_router_t* router;
+    glb_pool_t*   pool;
     pthread_t     thread;
     int           fifo;
     int           inet_sock;
-    glb_router_t* router;
-    glb_pool_t*   pool;
     int           fd_max;
     pollfd_t      fds[CTRL_MAX];
     uint16_t      default_port;
@@ -221,7 +222,7 @@ ctrl_thread (void* arg)
             // Add to fds and wait for new events
             ctrl_add_client (ctrl, client_sock);
 
-            if (glb_cnf->verbose) {
+            if (ctrl->cnf->verbose) {
                 glb_log_info ("Ctrl: accepted connection from %s\n",
                          glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
             }
@@ -246,7 +247,8 @@ ctrl_thread (void* arg)
 }
 
 glb_ctrl_t*
-glb_ctrl_create (glb_router_t* const router,
+glb_ctrl_create (glb_cnf_t*    const cnf,
+                 glb_router_t* const router,
                  glb_pool_t*   const pool,
                  uint16_t      const port,
                  int           const fifo,
@@ -264,6 +266,7 @@ glb_ctrl_create (glb_router_t* const router,
 
     ret = calloc (1, sizeof (glb_ctrl_t));
     if (ret) {
+        ret->cnf          = cnf;
         ret->router       = router;
         ret->pool         = pool;
         ret->fifo         = fifo;

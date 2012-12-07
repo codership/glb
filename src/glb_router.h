@@ -7,12 +7,12 @@
 #ifndef _glb_router_h_
 #define _glb_router_h_
 
-#include "glb_dst.h"
+#include "glb_cnf.h"
 
 typedef struct glb_router glb_router_t;
 
 extern glb_router_t*
-glb_router_create (size_t n_dst, glb_dst_t const dst[]);
+glb_router_create (const glb_cnf_t* cnf);
 
 extern void
 glb_router_destroy ();

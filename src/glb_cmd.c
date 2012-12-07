@@ -4,19 +4,13 @@
  * $Id$
  */
 
-#define GLB_CNF_ACCESS
-
 #include "glb_cmd.h"
-#include "glb_log.h"
 #include "glb_limits.h"
 #include "glb_socket.h"
 
-#include <stddef.h> // ptrdiff_t
-#include <string.h>
 #include <errno.h>
 #include <assert.h>
 #include <getopt.h>
-#include <arpa/inet.h>
 
 typedef struct option option_t;
 extern char* optarg;
@@ -185,8 +179,8 @@ glb_cmd_parse (int argc, char* argv[])
             if (argc == 2) exit(0);
             break;
         default:
-            glb_log_warn ("Option '%s' (%d) not supported yet. Ignoring.\n",
-                          cmd_options[opt_idx].name, opt);
+            fprintf (stderr, "Option '%s' (%d) not supported yet. Ignoring.\n",
+                     cmd_options[opt_idx].name, opt);
         }
     }
 
@@ -228,9 +222,7 @@ glb_cmd_parse (int argc, char* argv[])
     if (++optind < argc) dst_list = (const char**) &(argv[optind]);
     assert (argc >= optind);
 
-    glb_cnf = glb_parse_dst_list (dst_list, argc - optind, inc_port, tmp);
-
-    return glb_cnf;
+    return glb_parse_dst_list (dst_list, argc - optind, inc_port, tmp);
 }
 
 

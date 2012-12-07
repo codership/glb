@@ -4,9 +4,9 @@
  * $Id$
  */
 
-#include "glb_log.h"
-#include "glb_cmd.h"
 #include "glb_socket.h"
+#include "glb_cnf.h"
+#include "glb_log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +17,14 @@
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
+
+static const struct glb_cnf* glb_cnf = 0;
+
+void
+glb_socket_init(const glb_cnf_t* cnf)
+{
+    glb_cnf = cnf;
+}
 
 //static const size_t addr_string_len = 512; heh, my GCC refuses to see it as
 //a constant! here goes type safety...

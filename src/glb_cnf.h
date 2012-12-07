@@ -37,12 +37,6 @@ typedef struct glb_cnf
     glb_dst_t      dst[];        // destination descriptions
 } glb_cnf_t;
 
-#ifndef GLB_CNF_ACCESS
-extern const glb_cnf_t* const glb_cnf;
-#else
-extern glb_cnf_t* glb_cnf;
-#endif /* GLB_CNF_ACCESS */
-
 extern glb_cnf_t*
 glb_cnf_init ();
 

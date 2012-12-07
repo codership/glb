@@ -13,6 +13,11 @@
 
 typedef struct sockaddr_in glb_sockaddr_t;
 
+struct glb_cnf;
+
+extern void
+glb_socket_init(const struct glb_cnf* cnf);
+
 static inline bool
 glb_socket_addr_is_equal (const glb_sockaddr_t* left,
                           const glb_sockaddr_t* right)

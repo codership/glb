@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -15,6 +15,7 @@ typedef struct glb_ctrl glb_ctrl_t;
 
 /*!
  * Creates control thread
+ * @param cnf
  * @param router
  * @param port
  *        default destination port
@@ -24,7 +25,8 @@ typedef struct glb_ctrl glb_ctrl_t;
  *        socket to listen at for ctrl form another host, may be 0
  */
 extern glb_ctrl_t*
-glb_ctrl_create (glb_router_t* router,
+glb_ctrl_create (glb_cnf_t*    cnf,
+                 glb_router_t* router,
                  glb_pool_t*   pool,
                  uint16_t      port,
                  int           fifo,

@@ -4,8 +4,6 @@
  * $Id$
  */
 
-#define GLB_CNF_ACCESS
-
 #include "../config.h" // for version
 
 #include "glb_cnf.h"

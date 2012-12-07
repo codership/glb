@@ -28,6 +28,7 @@ typedef struct router_dst
 
 struct glb_router
 {
+    const volatile glb_cnf_t* cnf;
     glb_sockaddr_t  sock_out; // outgoing socket address
     pthread_mutex_t lock;
     long            busy_count;
@@ -149,7 +150,7 @@ router_cleanup (glb_router_t* router)
 }
 
 glb_router_t*
-glb_router_create (size_t n_dst, glb_dst_t const dst[])
+glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
 {
     glb_router_t* ret = malloc (sizeof (glb_router_t));
 
@@ -161,20 +162,21 @@ glb_router_create (size_t n_dst, glb_dst_t const dst[])
 
         glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
 
+        ret->cnf   = cnf;
         ret->busy_count = 0;
         ret->conns = 0;
         ret->seed  = getpid();
         ret->n_dst = 0;
         ret->dst   = NULL;
 
-        for (i = 0; i < n_dst; i++) {
-            if (glb_router_change_dst(ret, &dst[i]) < 0) {
+        for (i = 0; i < cnf->n_dst; i++) {
+            if (glb_router_change_dst(ret, &cnf->dst[i]) < 0) {
                 router_cleanup (ret);
                 return NULL;
             }
         }
 
-        assert (ret->n_dst == n_dst);
+        assert (ret->n_dst == cnf->n_dst);
     }
 
     return ret;
@@ -253,7 +255,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
-    if (GLB_POLICY_LEAST == glb_cnf->policy) {
+    if (GLB_POLICY_LEAST == router->cnf->policy) {
         return router_choose_dst_weight (router);
     }
     else {
@@ -332,9 +334,9 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     int sock, ret;
 
     /* Here it is assumed that this function is called only from one thread. */
-    if (router->conns >= glb_cnf->max_conn) {
+    if (router->conns >= router->cnf->max_conn) {
         glb_log_warn ("Maximum connection limit of %ld exceeded. Rejecting "
-                      "connection attempt.", glb_cnf->max_conn);
+                      "connection attempt.", router->cnf->max_conn);
         return -EMFILE;
     }
 
@@ -346,7 +348,7 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     }
 
     uint32_t hint = 0;
-    switch (glb_cnf->policy)
+    switch (router->cnf->policy)
     {
     case GLB_POLICY_LEAST:  break;
     case GLB_POLICY_RANDOM: hint = rand_r(&router->seed); break;
@@ -431,7 +433,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     len += snprintf (buf + len, buf_len - len,
                      "----------------------------------------------------\n"
                      "Destinations: %ld, total connections: %ld of %ld max\n",
-                     n_dst, total_conns, glb_cnf->max_conn);
+                     n_dst, total_conns, router->cnf->max_conn);
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);

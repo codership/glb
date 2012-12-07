@@ -20,17 +20,17 @@ typedef struct pollfd pollfd_t;
 
 struct glb_listener
 {
-    int           sock;
+    const glb_cnf_t* cnf;
     glb_router_t* router;
     glb_pool_t*   pool;
     pthread_t     thread;
+    int           sock;
 };
 
 static void*
 listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
-// REMOVE   pollfd_t pollfd = { .fd = listener->sock, .events = POLLIN, .revents = 0 };
 
     while (1) {
         int            ret;
@@ -39,16 +39,8 @@ listener_thread (void* arg)
         socklen_t      client_size;
         int            server_sock;
         glb_sockaddr_t server;
-#if REMOVE
-        ret = poll (&pollfd, 1, -1);
-        if (ret < 0) {
-            glb_log_error ("Error waiting for connections: %d (%s)",
-                           errno, strerror (errno));
-            goto err; //?
-        }
-#endif
+
         assert (1 == ret);
-// REMOVE        assert (pollfd.revents & POLLIN);
 
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
@@ -76,7 +68,7 @@ listener_thread (void* arg)
             goto err2;
         }
 
-        if (glb_cnf->verbose) {
+        if (listener->cnf->verbose) {
             glb_log_info ("Accepted connection from %s ",
                           glb_socket_addr_to_string (&client));
             glb_log_info ("to %s\n",
@@ -97,23 +89,25 @@ listener_thread (void* arg)
 }
 
 glb_listener_t*
-glb_listener_create (glb_router_t* const router,
-                     glb_pool_t*   const pool,
-                     int           const sock)
+glb_listener_create (const glb_cnf_t* const cnf,
+                     glb_router_t*    const router,
+                     glb_pool_t*      const pool,
+                     int              const sock)
 {
     glb_listener_t* ret = NULL;
 
     if (listen (sock,
-                glb_cnf->max_conn ? glb_cnf->max_conn : (1U << 14)/* 16K */)){
+                cnf->max_conn ? cnf->max_conn : (1U << 14)/* 16K */)){
         glb_log_error ("listen() failed: %d (%s)", errno, strerror (errno));
         return NULL;
     }
 
     ret = calloc (1, sizeof (glb_listener_t));
     if (ret) {
-        ret->sock   = sock;
+        ret->cnf    = cnf;
         ret->router = router;
         ret->pool   = pool;
+        ret->sock   = sock;
 
         if (pthread_create (&ret->thread, NULL, listener_thread, ret)) {
             glb_log_error ("Failed to launch listener thread: %d (%s)",

@@ -77,10 +77,11 @@ typedef struct pool_conn_end
 
 typedef struct pool
 {
-    int              id;
+    const glb_cnf_t* cnf;
     pthread_t        thread;
     pthread_mutex_t  lock;
     pthread_cond_t   cond;
+    int              id;
     int              ctl_recv; // fd to receive commands in pool thread
     int              ctl_send; // fd to send commands to pool - other function
     volatile int     n_conns;  // how many connecitons this pool serves
@@ -98,6 +99,7 @@ typedef struct pool
 
 struct glb_pool
 {
+    const glb_cnf_t* cnf;
     pthread_mutex_t lock;
     glb_time_t      last_info;
     glb_time_t      last_stats;
@@ -318,7 +320,7 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     pool->n_conns++; // increment connection count
     pool->stats.conns_opened++;
 
-    if (glb_cnf->verbose) {
+    if (pool->cnf->verbose) {
         glb_log_info ("Pool %ld: added connection, "
                       "(total pool connections: %ld)", pool->id, pool->n_conns);
     }
@@ -523,7 +525,7 @@ pool_handle_read (pool_t* pool, int src_fd)
             else { // some other error
                 if (errno != EAGAIN) {
                     ret = -errno;
-                    if (errno != ECONNRESET || glb_cnf->verbose) {
+                    if (errno != ECONNRESET || pool->cnf->verbose) {
                         glb_log_warn ("pool_handle_read(): %zd (%s)",
                                       errno, strerror(errno));
                     }
@@ -680,12 +682,13 @@ pool_fds_init (pool_t* pool, int ctl_fd)
     return pool_fds_add (pool, ctl_fd, POOL_FD_READ);
 }
 
-static long
-pool_init (pool_t* pool, long id, glb_router_t* router)
+static int
+pool_init (const glb_cnf_t* cnf, pool_t* pool, long id, glb_router_t* router)
 {
-    long ret;
+    int ret;
     int pipe_fds[2];
 
+    pool->cnf    = cnf;
     pool->id     = id;
     pool->router = router;
     pool->stats  = glb_zero_stats;
@@ -724,9 +727,9 @@ pool_init (pool_t* pool, long id, glb_router_t* router)
 }
 
 extern glb_pool_t*
-glb_pool_create (size_t n_pools, glb_router_t* router)
+glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router)
 {
-    size_t ret_size = sizeof(glb_pool_t) + n_pools * sizeof(pool_t);
+    size_t ret_size = sizeof(glb_pool_t) + cnf->n_threads * sizeof(pool_t);
     glb_pool_t* ret = malloc (ret_size);
 
     if (ret) {
@@ -735,10 +738,11 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
 
         memset (ret, 0, ret_size);
         pthread_mutex_init (&ret->lock, NULL);
-        ret->n_pools = n_pools;
+        ret->cnf     = cnf;
+        ret->n_pools = ret->cnf->n_threads;
 
-        for (i = 0; i < n_pools; i++) {
-            if ((err = pool_init(&ret->pool[i], i, router))) {
+        for (i = 0; i < ret->n_pools; i++) {
+            if ((err = pool_init(ret->cnf, &ret->pool[i], i, router))) {
                 glb_log_fatal ("Failed to initialize pool %ld.", i);
                 abort();
             }
@@ -746,7 +750,7 @@ glb_pool_create (size_t n_pools, glb_router_t* router)
     }
     else {
         glb_log_fatal ("Could not allocate memory for %zu pools.",
-                       n_pools);
+                       cnf->n_threads);
         abort();
     }
 
