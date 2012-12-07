@@ -18,6 +18,19 @@ glbd_SOURCES = \
 	glb_limits.c   \
 	glb_main.c     \
 	*.h
+glbd_CFLAGS = $(AM_CFLAGS) -DGLBD
+
+lib_LTLIBRARIES   = libglb.la
+
+libglb_la_SOURCES = \
+	glb_socket.c   \
+	glb_dst.c      \
+	glb_cnf.c      \
+	glb_env.c      \
+	glb_router.c   \
+	glb_lib.c
+
+libglb_la_LDFLAGS = -version-info 0:9:0
 
 .PHONY: all clean
 

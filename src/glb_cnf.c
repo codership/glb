@@ -25,11 +25,13 @@ glb_cnf_init ()
     if (ret) // init defaults
     {
         memset (ret, 0, sizeof(*ret));
+#ifdef GLBD
         ret->fifo_name = default_fifo_name;
         ret->n_threads = 1;
         ret->max_conn  = glb_get_conn_limit();
         ret->policy    = GLB_POLICY_LEAST;
         ret->nodelay   = true;
+#endif /* GLBD */
     }
     else
     {
@@ -39,11 +41,6 @@ glb_cnf_init ()
 
     return ret;
 }
-
-static const char* policy_str[GLB_POLICY_MAX] =
-{
-    "least connected", "random", "source"
-};
 
 // Some constants
 #define glb_ip_len_max     256
@@ -128,6 +125,7 @@ glb_parse_dst_list (const char* const dst_list[],
     return out;
 }
 
+#ifdef GLBD
 
 void
 glb_print_version (FILE* out)
@@ -143,6 +141,11 @@ glb_print_version (FILE* out)
         );
 }
 
+static const char* policy_str[GLB_POLICY_MAX] =
+{
+    "least connected", "random", "source"
+};
+
 void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
 {
@@ -155,7 +158,7 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     fprintf (out, "Control  address:  %s\n",
              cnf->ctrl_set ? glb_socket_addr_to_string (&cnf->ctrl_addr) :
              "none");
-    fprintf (out, "Number of threads: %ld, max conn: %ld, policy: '%s', "
+    fprintf (out, "Number of threads: %d, max conn: %d, policy: '%s', "
              "nodelay: %s, defer accept: %s, verbose: %s, daemon: %s\n",
              cnf->n_threads,
              cnf->max_conn,
@@ -173,6 +176,6 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     }
 }
 
-
+#endif /* GLBD */
 
 

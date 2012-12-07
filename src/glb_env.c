@@ -4,137 +4,128 @@
  * $Id$
  */
 
-#define GLB_CNF_ACCESS
-
-#include "glb_cmd.h"
+#include "glb_env.h"
 #include "glb_limits.h"
 #include "glb_socket.h"
 
-#include <stddef.h> // ptrdiff_t
 #include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <ctype.h>
 #include <errno.h>
 #include <assert.h>
-#include <arpa/inet.h>
 
-// Some constants
-#define cmd_ip_len_max     256
-#define cmd_port_max       ((1<<16) - 1)
+/* Environment variable names */
+static const char env_vip[] = "GLB_VIP"; // address that should be balanced
+static const char env_ctrl[] = "GLB_CONTROL"; // address to accept control connections
+static const char env_targets[] = "GLB_TARGETS"; // balancing targets
 
 // Defaults relevant to ENV
-static const char cmd_ctrl_addr_default[] = "127.0.0.1";
+static const char env_ctrl_addr_default[] = "127.0.0.1";
+static const char env_vip_addr_default[] = "127.0.0.1";
 
-void
-glb_cmd_parse (int argc, char* argv[])
+/* convert string into array of tokens */
+static bool
+env_parse_target_string (char* targets,
+                         const char*** dst_list,
+                         int* dst_num)
 {
-    glb_cnf_t*   tmp = glb_cnf_init(); // initialize to defaults
-    const char** dst_list = NULL;
-    int          opt = 0;
-    int          opt_idx = 0;
-    char*        endptr;
-    uint16_t     inc_port;
+    assert (targets);
 
-    if (!tmp) exit (EXIT_FAILURE);
+    *dst_list = NULL;
+    *dst_num  = 0;
 
-    // parse options
-    while ((opt = getopt_long(argc,argv,"ac:dfhm:nt:rsvV",cmd_options,&opt_idx))
-           != -1) {
-        switch (opt) {
-        case CMD_OPT_DEFER_ACCEPT:
-            tmp->defer_accept = true;
-            break;
-        case CMD_OPT_CONTROL:
-            if (cmd_parse_addr (&tmp->ctrl_addr, optarg, cmd_ctrl_addr_default))
-                return;
-            tmp->ctrl_set = true;
-            break;
-        case CMD_OPT_DAEMON:
-            tmp->daemonize = true;
-            break;
-        case CMD_OPT_FIFO:
-            tmp->fifo_name = optarg;
-            break;
-        case '?':
-        case CMD_OPT_HELP:
-            glb_cmd_help(stdout, argv[0]);
-            exit (EXIT_FAILURE);
-            break;
-        case CMD_OPT_MAX_CONN:
-            tmp->max_conn = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
-                fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
-                         optarg);
-                return;
-            }
-            break;
-        case CMD_OPT_NODELAY:
-            tmp->nodelay = false;
-            break;
-        case CMD_OPT_N_THREADS:
-            tmp->n_threads = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
-                fprintf (stderr, "Bad n_threads value: %s. Integer expected.\n",
-                         optarg);
-                exit (EXIT_FAILURE);
-            }
-            break;
-        case CMD_OPT_RANDOM:
-            tmp->policy = GLB_POLICY_RANDOM;
-            break;
-        case CMD_OPT_SRC_TRACKING:
-            tmp->policy = GLB_POLICY_SOURCE;
-            break;
-        case CMD_OPT_VERBOSE:
-            tmp->verbose = true;
-            break;
-        case CMD_OPT_VERSION:
-            glb_print_version (stdout);
-            if (argc == 2) exit(0);
-            break;
-        default:
-            glb_log_warn ("Option '%s' (%d) not supported yet. Ignoring.\n",
-                          cmd_options[opt_idx].name, opt);
+    if (!targets) return true;
+
+    size_t const tlen = strlen(targets);
+    if (!tlen) return true;
+
+    const char** list = NULL;
+    int num = 0;
+
+    size_t i;
+    for (i = 1; i <= tlen; i++) /* we can skip the first string char */
+    {
+        if (isspace(targets[i]) || ',' == targets[i]) targets[i] = '\0';
+        if (targets[i] == '\0' && targets[i-1] != '\0') num++;/* end of token */
+    }
+
+    list = calloc (num, sizeof(const char*));
+    if (!list) return true;
+
+    list[0] = targets;
+    num = 1;
+
+    for (i = 1; i <= tlen; i++)
+    {
+        if (targets[i-1] == '\0' && targets[i] != '\0') /* beginning of token */
+        {
+            list[num] = &targets[i];
+            num++;
         }
     }
 
-    // first non-option argument
-    if (optind >= argc) {
-        fprintf (stderr, "Missing required argument: LISTEN_ADDR.\n");
-        glb_cmd_help(stderr, argv[0]);
-        exit (EXIT_FAILURE);
+    *dst_list = list;
+    *dst_num  = num;
+
+    return false;
+}
+
+glb_cnf_t*
+glb_env_parse ()
+{
+    bool err;
+
+    if (!getenv (env_vip))     return NULL;
+    if (!getenv (env_targets)) return NULL;
+
+    glb_cnf_t* ret = glb_cnf_init(); // initialize to defaults
+    if (!ret) return NULL;
+
+    char* const vip = strdup (getenv (env_vip));
+    if (vip)
+    {
+        err = glb_parse_addr(&ret->inc_addr, vip, env_vip_addr_default);
+        free (vip);
     }
+    else err = true;
 
-    // parse obligatory incoming address
-    if (cmd_parse_addr (&tmp->inc_addr, argv[optind], cmd_inc_addr_default)) {
-        return;
+    if (err) goto failure;
+
+    char* const targets = strdup (getenv (env_targets));
+    if (targets)
+    {
+        const char** dst_list = NULL;
+        int          dst_num = 0;
+        uint16_t     vip_port = glb_socket_addr_get_port (&ret->inc_addr);
+
+        if (!env_parse_target_string (targets, &dst_list, &dst_num))
+        {
+            assert(dst_list);
+            assert(dst_num >= 0);
+
+            glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num,vip_port,ret);
+
+            if (tmp)
+            {
+                ret = tmp;
+            }
+            else err = true;
+
+            free (dst_list);
+        }
+        else err = true;
+
+        free (targets);
     }
-    inc_port = glb_socket_addr_get_port (&tmp->inc_addr);
+    else err = true;
 
-#if 0 // don't open socket by default for security considerations.
-    // if control address was not specified
-    if (!tmp->ctrl_set) {
-        char port[6] = { 0, };
-        snprintf (port, 5, "%hu", inc_port + 1);
-        if (cmd_parse_addr (&tmp->ctrl_addr, port, cmd_ctrl_addr_default))
-            return;
-        tmp->ctrl_set = true;
-    }
-#endif
+    if (!err) return ret;
 
-    // if number of threads was not specified
-    if (!tmp->n_threads) tmp->n_threads = 1;
+failure:
 
-    if (tmp->max_conn > glb_get_conn_limit()) {
-        int res = glb_set_conn_limit (tmp->max_conn);
-        if (res > 0) tmp->max_conn = res;
-    }
-
-    if (tmp->daemonize) tmp->verbose = false;
-
-    // parse destination list
-    if (++optind < argc) dst_list = (const char**) &(argv[optind]);
-    assert (argc >= optind);
-
-    glb_cnf = cmd_parse_dst_list (dst_list, argc - optind, inc_port, tmp);
+    free (ret);
+    return NULL;
 }
 
 

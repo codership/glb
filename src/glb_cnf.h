@@ -23,16 +23,18 @@ typedef enum glb_policy
 typedef struct glb_cnf
 {
     glb_sockaddr_t inc_addr;     // IP to bind listener for incoming connecitons
+#ifdef GLBD
     glb_sockaddr_t ctrl_addr;    // network control interface
-    bool           ctrl_set;     // was set? (false)
     const char*    fifo_name;    // FIFO file name
-    long           n_threads;    // number of routing threads (1 .. oo)
-    long           max_conn;     // max allowed client connections
-    glb_policy_t   policy;       // algorithm to use for load-balancing
+    int            n_threads;    // number of routing threads (1 .. oo)
+    int            max_conn;     // max allowed client connections
+    bool           ctrl_set;     // was set? (false)
     bool           nodelay;      // use TCP_NODELAY?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
+    glb_policy_t   policy;       // algorithm to use for load-balancing
+#endif /* GLBD */
     size_t         n_dst;        // number of destinations
     glb_dst_t      dst[];        // destination descriptions
 } glb_cnf_t;

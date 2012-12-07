@@ -14,7 +14,7 @@
 /*!
  * Parses environment variables and creates configuration structure.
  */
-extern const glb_cnf_t*
-glb_env_parse (int argc, char* argv[]);
+extern glb_cnf_t*
+glb_env_parse ();
 
 #endif // _glb_env_h_

@@ -1,11 +1,13 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
 
 #ifndef _glb_log_h_
 #define _glb_log_h_
+
+#ifdef GLBD
 
 #include <stdlib.h>
 
@@ -53,10 +55,20 @@ glb_log_init (glb_log_type_t log_type);
 
 #ifdef NDEBUG
 #define glb_log_debug(format, ...)
-#else  // DEBUG
+#else  /* DEBUG */
 #define glb_log_debug(format, ...) \
         glb_log (GLB_LOG_DEBUG, __FILE__, __PRETTY_FUNCTION__, __LINE__,\
                  format, ## __VA_ARGS__, NULL)
-#endif // DEBUG
+#endif /* DEBUG */
+
+#else /* LIBGLB */
+
+#define glb_log_fatal(format, ...)
+#define glb_log_error(format, ...)
+#define glb_log_warn(format, ...)
+#define glb_log_info(format, ...)
+#define glb_log_debug(format, ...)
+
+#endif /* GLBD */
 
 #endif // _glb_log_h_

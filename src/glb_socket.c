@@ -18,6 +18,8 @@
 #include <assert.h>
 #include <unistd.h>
 
+#ifdef GLBD
+
 static const struct glb_cnf* glb_cnf = 0;
 
 void
@@ -57,6 +59,8 @@ glb_socket_addr_to_string (const glb_sockaddr_t* addr)
     return addr_string;
 }
 
+#endif /* GLBD */
+
 // Initialize glb_sockaddr_t struct
 long
 glb_socket_addr_init (glb_sockaddr_t* addr,
@@ -90,6 +94,8 @@ glb_socket_addr_get_port (const glb_sockaddr_t* addr)
 {
     return ntohs (addr->sin_port);
 }
+
+#ifdef GLBD
 
 #define FNV32_SEED  2166136261
 #define FNV32_PRIME 16777619
@@ -164,6 +170,8 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     return ret;
 }
 
+#endif /* GLBD */
+
 int
 glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
 {
@@ -179,7 +187,9 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
         return err;
     }
 
+#ifdef GLBD
     if ((err = glb_socket_setopt(sock, optflags))) goto error;
+#endif
 
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {

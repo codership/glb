@@ -2,13 +2,12 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.50)
-AC_INIT(glb, 0.8.2, info@codership.com)
+AC_INIT(glb, 0.9.0beta, info@codership.com)
 AC_CONFIG_SRCDIR([src/glb_main.c])
 AC_CONFIG_HEADER([config.h])
 AC_CANONICAL_SYSTEM
 
 AM_INIT_AUTOMAKE
-
 CFLAGS="$CFLAGS" # prevent configure from guessing its own CFLAGS
 
 # Check for debug
@@ -60,13 +59,17 @@ AM_CONDITIONAL(ENABLE_STATS, test "$enable_stats" != "no")
 # Checks for programs.
 AC_PROG_CXX
 AC_PROG_CC
-#AC_PROG_LIBTOOL
+AM_PROG_CC_C_O
+LT_INIT # AC_PROG_LIBTOOL
+
+# Checks for header files.
+AC_CHECK_HEADERS([strings.h sys/time.h unistd.h dlfcn.h])
 
 AC_CHECK_LIB([pthread], [pthread_testcancel],,
              AC_MSG_ERROR([*** POSIX threads not found! ***]))
 
-# Checks for header files.
-AC_CHECK_HEADERS([strings.h sys/time.h unistd.h])
+AC_CHECK_LIB([dl], [dlsym],,
+             AC_MSG_ERROR([*** libdl not found! ***]))
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL

@@ -17,6 +17,8 @@ glb_router_create (const glb_cnf_t* cnf);
 extern void
 glb_router_destroy ();
 
+#ifdef GLBD
+
 /*!
  * Returns file descriptor of a new destinaiton conneciton and fills
  * dst_addr with real server address
@@ -47,5 +49,11 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
 // Returns the length of the string
 extern size_t
 glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len);
+
+#else /* GLBD */
+
+extern int __glb_router_connect(glb_router_t* const router, int const sockfd);
+
+#endif /* GLBD */
 
 #endif // _glb_router_h_

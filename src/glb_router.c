@@ -4,6 +4,8 @@
  * $Id$
  */
 
+#define _GNU_SOURCE 1 /* for function overloading */
+
 #include "glb_log.h"
 #include "glb_cmd.h"
 #include "glb_misc.h"
@@ -14,9 +16,17 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
 #include <unistd.h> // for close()
 #include <time.h>
+
+#ifdef GLBD
+#  include <stdio.h>
+#else /* GLBD */
+#  include <dlfcn.h>
+static int (*__glb_real_connect) (int                    sockfd,
+                                  const struct sockaddr* addr,
+                                  socklen_t              addrlen) = NULL;
+#endif /* GLBD */
 
 typedef struct router_dst
 {
@@ -66,9 +76,11 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     // sanity check
     if (!d && dst->weight < 0) {
         GLB_MUTEX_UNLOCK (&router->lock);
+#ifdef GLBD
         char tmp[256];
         glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
+#endif
         return -EADDRNOTAVAIL;
     }
 
@@ -152,6 +164,11 @@ router_cleanup (glb_router_t* router)
 glb_router_t*
 glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
 {
+#ifndef GLBD
+    __glb_real_connect = dlsym(RTLD_NEXT, "__connect");
+    if (!__glb_real_connect) return NULL;
+#endif
+
     glb_router_t* ret = malloc (sizeof (glb_router_t));
 
     if (ret) {
@@ -191,6 +208,7 @@ glb_router_destroy (glb_router_t* router)
 // seconds (should be > 1 due to time_t precision)
 static const double DST_RETRY_INTERVAL = 2.0;
 
+#ifdef GLBD
 // find a ready destination with minimal usage
 static router_dst_t*
 router_choose_dst_weight (glb_router_t* router)
@@ -215,6 +233,7 @@ router_choose_dst_weight (glb_router_t* router)
 
     return ret;
 }
+#endif /* GLBD */
 
 // find a ready destination by client source hint
 static router_dst_t*
@@ -252,6 +271,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
     return NULL;
 }
 
+#ifdef GLBD
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
@@ -262,6 +282,7 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
         return router_choose_dst_hint (router, hint);
     }
 }
+#endif /* GLBD */
 
 // connect to a best destination, possiblly failing over to a next best
 static int
@@ -280,14 +301,20 @@ router_connect_dst (glb_router_t*   const router,
     router->busy_count++;
 
     // keep trying until we run out of destinations
+#ifdef GLBD
+    #define glb_connect connect
     while ((dst = router_choose_dst (router, hint))) {
+#else
+    #define glb_connect __glb_real_connect
+    while ((dst = router_choose_dst_hint (router, hint))) {
+#endif /* GLBD */
         dst->conns++; router->conns++;
         dst->usage = router_dst_usage(dst);
 
         GLB_MUTEX_UNLOCK (&router->lock);
 
-        ret = connect (sock, (struct sockaddr*)&dst->dst.addr,
-                       sizeof (dst->dst.addr));
+        ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
+                           sizeof (dst->dst.addr));
 
         GLB_MUTEX_LOCK (&router->lock);
 
@@ -297,9 +324,9 @@ router_connect_dst (glb_router_t*   const router,
             dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
-            glb_log_warn ("Failed to connect to %s: %s",
-                     glb_socket_addr_to_string (&dst->dst.addr),
-                     strerror(error));
+            glb_log_warn ("Failed to connect to %s: %d (%s)",
+                          glb_socket_addr_to_string (&dst->dst.addr),
+                          error, strerror(error));
             dst->failed = time(NULL);
             redirect = true;
         }
@@ -326,6 +353,7 @@ router_connect_dst (glb_router_t*   const router,
     return -error; // all attempts failed, return last errno
 }
 
+#ifdef GLBD
 // returns socket number or negative error code
 int
 glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
@@ -398,9 +426,9 @@ size_t
 glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 {
     size_t len = 0;
-    long   total_conns;
-    long   n_dst;
-    long   i;
+    int    total_conns;
+    int    n_dst;
+    int    i;
 
     len += snprintf (buf + len, buf_len - len, "Router:\n"
                      "----------------------------------------------------\n"
@@ -432,7 +460,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     len += snprintf (buf + len, buf_len - len,
                      "----------------------------------------------------\n"
-                     "Destinations: %ld, total connections: %ld of %ld max\n",
+                     "Destinations: %d, total connections: %d of %d max\n",
                      n_dst, total_conns, router->cnf->max_conn);
     if (len == buf_len) {
         buf[len - 1] = '\0';
@@ -441,3 +469,14 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
      return len;
 }
+
+#else /* GLBD */
+
+int __glb_router_connect(glb_router_t* const router, int const sockfd)
+{
+    glb_sockaddr_t dst;
+    return router_connect_dst (router, sockfd, rand_r(&router->seed), &dst);
+}
+
+#endif /* GLBD */
+
