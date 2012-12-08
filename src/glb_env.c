@@ -16,7 +16,7 @@
 #include <assert.h>
 
 /* Environment variable names */
-static const char env_vip[]     = "GLB_VIP"; // address that should be balanced
+static const char env_bind[]    = "GLB_BIND"; // address that should be balanced
 static const char env_policy[]  = "GLB_POLICY";
 static const char env_ctrl[]    = "GLB_CONTROL"; // address to accept control
                                                  // connections
@@ -24,7 +24,7 @@ static const char env_targets[] = "GLB_TARGETS"; // balancing targets
 
 // Defaults relevant to ENV
 static const char env_ctrl_addr_default[] = "127.0.0.1";
-static const char env_vip_addr_default[] = "127.0.0.1";
+static const char env_bind_addr_default[] = "127.0.0.1";
 
 /* convert string into array of tokens */
 static bool
@@ -98,31 +98,31 @@ glb_env_parse ()
 {
     bool err;
 
-    if (!getenv (env_vip))     return NULL;
+    if (!getenv (env_bind))    return NULL;
     if (!getenv (env_targets)) return NULL;
 
     glb_cnf_t* ret = glb_cnf_init(); // initialize to defaults
     if (!ret) return NULL;
 
-    err = glb_parse_addr(&ret->inc_addr, getenv(env_vip), env_vip_addr_default);
+    err = glb_parse_addr(&ret->inc_addr, getenv(env_bind), env_bind_addr_default);
     if (err) goto failure;
 
     const char** dst_list = NULL;
     int          dst_num  = 0;
-    uint16_t     vip_port = glb_socket_addr_get_port (&ret->inc_addr);
+    uint16_t     bind_port = glb_socket_addr_get_port (&ret->inc_addr);
 
     if (!env_parse_target_string (getenv (env_targets), &dst_list, &dst_num))
     {
         assert(dst_list);
         assert(dst_num >= 0);
 
-        glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num,vip_port,ret);
+        glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
 
         if (tmp)
         {
             ret = tmp;
 
-            env_parse_policy  (ret, getenv (env_vip));
+            env_parse_policy  (ret, getenv (env_policy));
             env_parse_control (ret, getenv (env_ctrl));
         }
         else err = true;

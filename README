@@ -180,7 +180,7 @@ GLB_TARGETS=H1[:P1[:W1]],[H2[:P2[:W2]],...]
     Which is a comma-separated list of target servers among which the client
     connections must be distributed.
 
-GLB_VIP=<addr>
+GLB_BIND=<addr>
     Where <addr> is interpreted the same way as LISTEN_ADDR parameter for glbd.
     Whenever application attempts to initiate connection to this address, the
     request will be intercepted and connection established to one of the
@@ -189,7 +189,7 @@ GLB_VIP=<addr>
 Example:
 
 $ LD_PRELOAD=src/.libs/libglb.so \
-GLB_VIP=3306 GLB_TARGETS=127.0.0.1:3305,192.168.0.2,192.168.0.3 \
+GLB_BIND=3306 GLB_TARGETS=127.0.0.1:3305,192.168.0.2,192.168.0.3 \
 mysql -uroot -prootpass -h127.0.0.1 -P3306
 
 Welcome to the MySQL monitor.  Commands end with ; or \g.
@@ -198,9 +198,9 @@ Server version: 5.5.28 Source distribution, wsrep_24dev.7.r3830
 ...
 
 Here GLB_VIP=3306 is interpreted as 127.0.0.1:3306, and GLB_TARGETS as
-192.168.0.1:3306,192.168.0.2:3306,192.168.0.3:3306 (note port in GLB_VIP).
+192.168.0.1:3306,192.168.0.2:3306,192.168.0.3:3306 (note port in GLB_BIND).
 Note that mysql is connecting to 127.0.0.1:3306 as well and since this
-address matches GLB_VIP, connection is intecepted and directed to the real
+address matches GLB_BIND, connection is intecepted and directed to the real
 server.
 
 Limitations:
