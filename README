@@ -42,9 +42,12 @@ GLB supports 3 balancing "policies":
 a) "least connected" - new connection will be directed to the server with least
    connections (corrected for server "weight"). This is the default policy.
 
-b) "random" - connections are distributed randomly between the servers.
+b) "round-robin" - each new connection is routed to the next destination
+   in the list in circular order. This policy does not use node weights.
 
-c) "source tracking" - connections originating from the same address are
+c) "random" - connections are distributed randomly between the servers.
+
+d) "source tracking" - connections originating from the same address are
    directed to the same server. For details about this policy see below.
 
 LIMITATION: currently "random" and "source tracking" policies don't respect
@@ -203,7 +206,8 @@ Note that mysql is connecting to 127.0.0.1:3306 as well and since this
 address matches GLB_BIND, connection is intecepted and directed to the real
 server.
 
-Limitations:
+Additional libglb parameters:
 
-Currently only 'random' balancing policy is supported and no runtime target
-list modifications, although the latter may be added in later versions.
+GLB_POLICY=random|source
+    Default libglb balancing policy is "round-robin", "random" and
+    "source tracking" policies can be specified with GLB_POLICY variable.

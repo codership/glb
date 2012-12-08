@@ -79,6 +79,7 @@ env_parse_policy (glb_cnf_t* cnf, const char* p)
     cnf->policy = GLB_POLICY_ROUND; // default
 
     if (p && !strcmp(p, "random")) cnf->policy = GLB_POLICY_RANDOM;
+    if (p && !strcmp(p, "source")) cnf->policy = GLB_POLICY_SOURCE;
 }
 
 static void

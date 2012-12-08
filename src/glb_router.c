@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <unistd.h> // for close()
 #include <time.h>
+#include <sys/time.h>
 
 #ifdef GLBD
 #  include <stdio.h>
@@ -44,7 +45,7 @@ struct glb_router
     long            busy_count;
     long            wait_count;
     pthread_cond_t  free;
-    long            conns;
+    int             conns;
     unsigned int    seed;     // seed for rng
     int             rrb_next; // round-robin cursor
     int             n_dst;
@@ -154,6 +155,20 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     return i;
 }
 
+static uint32_t
+router_generate_seed()
+{
+    uint32_t seed = getpid();
+
+    struct timeval t;
+    gettimeofday (&t, NULL);
+
+    seed ^= t.tv_sec;
+    seed ^= t.tv_usec;
+
+    return rand_r(&seed); // this should be sufficiently random and unique
+}
+
 static void
 router_cleanup (glb_router_t* router)
 {
@@ -181,13 +196,13 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
 
         glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
 
-        ret->cnf   = cnf;
+        ret->cnf        = cnf;
         ret->busy_count = 0;
-        ret->conns = 0;
-        ret->seed  = getpid();
-        ret->rrb_next = 0;
-        ret->n_dst = 0;
-        ret->dst   = NULL;
+        ret->conns      = 0;
+        ret->seed       = router_generate_seed();
+        ret->rrb_next   = 0;
+        ret->n_dst      = 0;
+        ret->dst        = NULL;
 
         for (i = 0; i < cnf->n_dst; i++) {
             if (glb_router_change_dst(ret, &cnf->dst[i]) < 0) {
@@ -320,8 +335,8 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
     switch (router->cnf->policy) {
     case GLB_POLICY_LEAST:  return NULL;
     case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
-    case GLB_POLICY_RANDOM: return router_choose_dst_hint  (router, hint);
-    case GLB_POLICY_SOURCE: return NULL;
+    case GLB_POLICY_RANDOM:
+    case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint);
     }
     return NULL;
 }
@@ -513,7 +528,12 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 int __glb_router_connect(glb_router_t* const router, int const sockfd)
 {
     glb_sockaddr_t dst;
-    return router_connect_dst (router, sockfd, rand_r(&router->seed), &dst);
+
+    uint32_t hint =
+        GLB_POLICY_RANDOM == router->cnf->policy ?
+        rand_r(&router->seed) : router->seed;
+
+    return router_connect_dst (router, sockfd, hint, &dst);
 }
 
 #endif /* GLBD */

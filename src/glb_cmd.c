@@ -50,6 +50,7 @@ static option_t cmd_options[] =
     { "connections",     RA, NULL, CMD_OPT_MAX_CONN      },
     { "nodelay",         NA, NULL, CMD_OPT_NODELAY       },
     { "random",          NA, NULL, CMD_OPT_RANDOM        },
+    { "source",          NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "src_tracking",    NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "source_tracking", NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "threads",         RA, NULL, CMD_OPT_N_THREADS     },
@@ -90,7 +91,7 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -r|--random               "
              "route connections to randomly selected destination.\n");
     fprintf (out,
-             "  -s|--source_tracking      "
+             "  -s|--source               "
              "turn on source tracking: route connections from one\n"
              "                            source to the same destination.\n");
     fprintf (out,
