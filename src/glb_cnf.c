@@ -29,8 +29,10 @@ glb_cnf_init ()
         ret->fifo_name = default_fifo_name;
         ret->n_threads = 1;
         ret->max_conn  = glb_get_conn_limit();
-        ret->policy    = GLB_POLICY_LEAST;
         ret->nodelay   = true;
+        ret->policy    = GLB_POLICY_LEAST;
+#else
+        ret->policy    = GLB_POLICY_ROUND;
 #endif /* GLBD */
     }
     else
@@ -143,7 +145,7 @@ glb_print_version (FILE* out)
 
 static const char* policy_str[GLB_POLICY_MAX] =
 {
-    "least connected", "random", "source"
+    "least connected", "round-robin", "random", "source"
 };
 
 void

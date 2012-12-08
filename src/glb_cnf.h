@@ -14,27 +14,29 @@
 
 typedef enum glb_policy
 {
-    GLB_POLICY_LEAST = 0, /* least conected */
-    GLB_POLICY_RANDOM,    /* random choice */
-    GLB_POLICY_SOURCE,    /* same for one source */
-    GLB_POLICY_MAX
+    GLB_POLICY_LEAST = 0, /* least connected     */
+    GLB_POLICY_ROUND,     /* round-robin         */
+    GLB_POLICY_RANDOM,    /* random choice       */
+    GLB_POLICY_SOURCE     /* same for one source */
 } glb_policy_t;
+
+#define GLB_POLICY_MAX (GLB_POLICY_SOURCE + 1)
 
 typedef struct glb_cnf
 {
     glb_sockaddr_t inc_addr;     // IP to bind listener for incoming connecitons
-#ifdef GLBD
     glb_sockaddr_t ctrl_addr;    // network control interface
+#ifdef GLBD
     const char*    fifo_name;    // FIFO file name
     int            n_threads;    // number of routing threads (1 .. oo)
     int            max_conn;     // max allowed client connections
-    bool           ctrl_set;     // was set? (false)
     bool           nodelay;      // use TCP_NODELAY?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
-    glb_policy_t   policy;       // algorithm to use for load-balancing
 #endif /* GLBD */
+    bool           ctrl_set;     // was set? (false)
+    glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations
     glb_dst_t      dst[];        // destination descriptions
 } glb_cnf_t;

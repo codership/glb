@@ -16,8 +16,10 @@
 #include <assert.h>
 
 /* Environment variable names */
-static const char env_vip[] = "GLB_VIP"; // address that should be balanced
-static const char env_ctrl[] = "GLB_CONTROL"; // address to accept control connections
+static const char env_vip[]     = "GLB_VIP"; // address that should be balanced
+static const char env_policy[]  = "GLB_POLICY";
+static const char env_ctrl[]    = "GLB_CONTROL"; // address to accept control
+                                                 // connections
 static const char env_targets[] = "GLB_TARGETS"; // balancing targets
 
 // Defaults relevant to ENV
@@ -71,6 +73,26 @@ env_parse_target_string (char* targets,
     return false;
 }
 
+static void
+env_parse_policy (glb_cnf_t* cnf, const char* p)
+{
+    cnf->policy = GLB_POLICY_ROUND; // default
+
+    if (p && !strcmp(p, "random")) cnf->policy = GLB_POLICY_RANDOM;
+}
+
+static void
+env_parse_control (glb_cnf_t* cnf, const char* p)
+{
+    cnf->ctrl_set = false; // default
+
+    if (p)
+    {
+        cnf->ctrl_set =
+            !glb_parse_addr(&cnf->ctrl_addr, p, env_ctrl_addr_default);
+    }
+}
+
 glb_cnf_t*
 glb_env_parse ()
 {
@@ -82,41 +104,30 @@ glb_env_parse ()
     glb_cnf_t* ret = glb_cnf_init(); // initialize to defaults
     if (!ret) return NULL;
 
-    char* const vip = strdup (getenv (env_vip));
-    if (vip)
-    {
-        err = glb_parse_addr(&ret->inc_addr, vip, env_vip_addr_default);
-        free (vip);
-    }
-    else err = true;
-
+    err = glb_parse_addr(&ret->inc_addr, getenv(env_vip), env_vip_addr_default);
     if (err) goto failure;
 
-    char* const targets = strdup (getenv (env_targets));
-    if (targets)
+    const char** dst_list = NULL;
+    int          dst_num  = 0;
+    uint16_t     vip_port = glb_socket_addr_get_port (&ret->inc_addr);
+
+    if (!env_parse_target_string (getenv (env_targets), &dst_list, &dst_num))
     {
-        const char** dst_list = NULL;
-        int          dst_num = 0;
-        uint16_t     vip_port = glb_socket_addr_get_port (&ret->inc_addr);
+        assert(dst_list);
+        assert(dst_num >= 0);
 
-        if (!env_parse_target_string (targets, &dst_list, &dst_num))
+        glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num,vip_port,ret);
+
+        if (tmp)
         {
-            assert(dst_list);
-            assert(dst_num >= 0);
+            ret = tmp;
 
-            glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num,vip_port,ret);
-
-            if (tmp)
-            {
-                ret = tmp;
-            }
-            else err = true;
-
-            free (dst_list);
+            env_parse_policy  (ret, getenv (env_vip));
+            env_parse_control (ret, getenv (env_ctrl));
         }
         else err = true;
 
-        free (targets);
+        free (dst_list);
     }
     else err = true;
 

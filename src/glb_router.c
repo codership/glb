@@ -45,8 +45,9 @@ struct glb_router
     long            wait_count;
     pthread_cond_t  free;
     long            conns;
-    unsigned int    seed; // seed for rng
-    long            n_dst;
+    unsigned int    seed;     // seed for rng
+    int             rrb_next; // round-robin cursor
+    int             n_dst;
     router_dst_t*   dst;
 };
 
@@ -136,6 +137,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
         else {
             router->dst = tmp;
             router->n_dst--;
+            router->rrb_next = router->rrb_next % router->n_dst;
         }
     }
     else if (d->dst.weight != dst->weight) {
@@ -183,6 +185,7 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
         ret->busy_count = 0;
         ret->conns = 0;
         ret->seed  = getpid();
+        ret->rrb_next = 0;
         ret->n_dst = 0;
         ret->dst   = NULL;
 
@@ -211,7 +214,7 @@ static const double DST_RETRY_INTERVAL = 2.0;
 #ifdef GLBD
 // find a ready destination with minimal usage
 static router_dst_t*
-router_choose_dst_weight (glb_router_t* router)
+router_choose_dst_least (glb_router_t* router)
 {
     router_dst_t* ret = NULL;
 
@@ -234,6 +237,26 @@ router_choose_dst_weight (glb_router_t* router)
     return ret;
 }
 #endif /* GLBD */
+
+// find next suitable destination by round robin
+static router_dst_t*
+router_choose_dst_round (glb_router_t* router)
+{
+    time_t now = time(NULL);
+    int    offset;
+
+    for (offset = 0; offset < router->n_dst; offset++)
+    {
+        router_dst_t* d = &router->dst[router->rrb_next];
+
+        router->rrb_next = (router->rrb_next + 1) % router->n_dst;
+
+        if (d->dst.weight > 0.0 &&
+            difftime (now, d->failed) > DST_RETRY_INTERVAL) return d;
+    }
+
+    return NULL;
+}
 
 // find a ready destination by client source hint
 static router_dst_t*
@@ -259,7 +282,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 
         router_dst_t* d = &router->dst[i];
 
-        if (d->dst.weight > 0 &&
+        if (d->dst.weight > 0.0 &&
             difftime (now, d->failed) > DST_RETRY_INTERVAL) {
             return d;
         }
@@ -272,16 +295,37 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 }
 
 #ifdef GLBD
+
+#define glb_connect connect
+
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
-    if (GLB_POLICY_LEAST == router->cnf->policy) {
-        return router_choose_dst_weight (router);
+    switch (router->cnf->policy) {
+    case GLB_POLICY_LEAST:  return router_choose_dst_least (router);
+    case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
+    case GLB_POLICY_RANDOM:
+    case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint);
     }
-    else {
-        return router_choose_dst_hint (router, hint);
-    }
+    return NULL;
 }
+
+#else /* GLBD */
+
+#define glb_connect __glb_real_connect
+
+static inline router_dst_t*
+router_choose_dst (glb_router_t* router, uint32_t hint)
+{
+    switch (router->cnf->policy) {
+    case GLB_POLICY_LEAST:  return NULL;
+    case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
+    case GLB_POLICY_RANDOM: return router_choose_dst_hint  (router, hint);
+    case GLB_POLICY_SOURCE: return NULL;
+    }
+    return NULL;
+}
+
 #endif /* GLBD */
 
 // connect to a best destination, possiblly failing over to a next best
@@ -301,13 +345,7 @@ router_connect_dst (glb_router_t*   const router,
     router->busy_count++;
 
     // keep trying until we run out of destinations
-#ifdef GLBD
-    #define glb_connect connect
     while ((dst = router_choose_dst (router, hint))) {
-#else
-    #define glb_connect __glb_real_connect
-    while ((dst = router_choose_dst_hint (router, hint))) {
-#endif /* GLBD */
         dst->conns++; router->conns++;
         dst->usage = router_dst_usage(dst);
 
@@ -378,10 +416,10 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     uint32_t hint = 0;
     switch (router->cnf->policy)
     {
-    case GLB_POLICY_LEAST:  break;
+    case GLB_POLICY_LEAST:
+    case GLB_POLICY_ROUND:  break;
     case GLB_POLICY_RANDOM: hint = rand_r(&router->seed); break;
     case GLB_POLICY_SOURCE: hint = glb_socket_addr_hash(src_addr); break;
-    case GLB_POLICY_MAX:    assert(0);
     };
 
     // attmept to connect until we run out of destinations

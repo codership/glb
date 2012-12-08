@@ -22,6 +22,7 @@ typedef enum cmd_opt
 {
     CMD_OPT_VERSION      = 'V',
     CMD_OPT_DEFER_ACCEPT = 'a',
+    CMD_OPT_ROUND_ROBIN  = 'b',
     CMD_OPT_CONTROL      = 'c',
     CMD_OPT_DAEMON       = 'd',
     CMD_OPT_FIFO         = 'f',
@@ -38,6 +39,9 @@ static option_t cmd_options[] =
 {
     { "version",         NA, NULL, CMD_OPT_VERSION       },
     { "defer-accept",    NA, NULL, CMD_OPT_DEFER_ACCEPT  },
+    { "round",           NA, NULL, CMD_OPT_ROUND_ROBIN   },
+    { "round-robin",     NA, NULL, CMD_OPT_ROUND_ROBIN   },
+    { "rrb",             NA, NULL, CMD_OPT_ROUND_ROBIN   },
     { "control",         RA, NULL, CMD_OPT_CONTROL       },
     { "daemon",          NA, NULL, CMD_OPT_DAEMON        },
     { "fifo",            RA, NULL, CMD_OPT_FIFO          },
@@ -66,6 +70,9 @@ glb_cmd_help (FILE* out, const char* progname)
              "enable TCP_DEFER_ACCEPT on the listening socket\n"
              "                            (default: disabled).\n");
     fprintf (out,
+             "  -b|--round                "
+             "round-robin destination selection policy.\n");
+    fprintf (out,
              "  -c|--control [HOST:]PORT  "
              "listen for control requests on this address.\n");
     fprintf (out,
@@ -81,7 +88,7 @@ glb_cmd_help (FILE* out, const char* progname)
              "                            (default: enabled).\n");
     fprintf (out,
              "  -r|--random               "
-             "route connection to randomly selected destination.\n");
+             "route connections to randomly selected destination.\n");
     fprintf (out,
              "  -s|--source_tracking      "
              "turn on source tracking: route connections from one\n"
@@ -124,11 +131,14 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long(argc,argv,"ac:dfhm:nt:rsvV",cmd_options,&opt_idx))
-           != -1) {
+    while ((opt = getopt_long (argc, argv, "abc:dfhm:nt:rsvV", cmd_options,
+                               &opt_idx)) != -1) {
         switch (opt) {
         case CMD_OPT_DEFER_ACCEPT:
             tmp->defer_accept = true;
+            break;
+        case CMD_OPT_ROUND_ROBIN:
+            tmp->policy = GLB_POLICY_ROUND;
             break;
         case CMD_OPT_CONTROL:
             if (glb_parse_addr (&tmp->ctrl_addr, optarg, cmd_ctrl_addr_default))
