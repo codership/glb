@@ -67,11 +67,11 @@ int connect(int                    const sockfd,
     {
         if (__glb_match_address (addr, addrlen))
         {
-            puts("DEBUG: Connecting by router");
+//            puts("DEBUG: Connecting by router");
             return __glb_router_connect(__glb_router, sockfd);
         }
     }
-    puts ("DEBUG: Connecting directly");
+//    puts ("DEBUG: Connecting directly");
 
     return __glb_real_connect(sockfd, addr, addrlen);
 }

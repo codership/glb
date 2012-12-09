@@ -11,6 +11,7 @@ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See COPYING for license details.
 
+
 ABOUT:
 ======
 glbd is a simple TCP connection balancer made with scalability and
@@ -37,7 +38,7 @@ program modification or recompilation is needed. See below for details.
 
 BALANCING POLICIES:
 ===================
-GLB supports 3 balancing "policies":
+GLB supports four balancing "policies":
 
 a) "least connected" - new connection will be directed to the server with least
    connections (corrected for server "weight"). This is the default policy.
@@ -50,15 +51,12 @@ c) "random" - connections are distributed randomly between the servers.
 d) "source tracking" - connections originating from the same address are
    directed to the same server. For details about this policy see below.
 
-LIMITATION: currently "random" and "source tracking" policies don't respect
-node weights.
 
-
-MAXIMUM CONNECTIONS:
-====================
-Maximum connections that can be opened via glb depends on the system open
-files limit and is 493 for a standard limit of 1024. If needed glbd will
-attempt to increase open files limit as much as allowed by the effective
+MAXIMUM CONCURRENT CONNECTIONS:
+===============================
+Maximum connections that can be opened via glbd simultaneously depends on the
+system open files limit and is 493 for a standard limit of 1024. If needed glbd
+will attempt to increase open files limit as much as allowed by the effective
 user privileges. For unprivileged user it is normally 4096 which results
 in max 2029 connections.
 On Linux open files limit may be checked with 'ulimit -n' and if necessary
@@ -155,11 +153,11 @@ SOURCE TRACKING CAPABILITY:
 ===========================
 GLB features simple source tracking capability where connections originating
 from one address can be routed to the same destination, chosen randomly
-(address hash % number of destinations). One limitation of such schema is that
-when the destination list changes, destination choice for new connections
-changes as well while established connections naturally stay unchanged. Also
-when a destination is marked unavailable, all connections that would be routed
-to it will fail over to another, randomly chosen (but the same) destination.
+among available destinations according to their weights. One limitation of such
+scheme is that when the destination list changes, destination choice for new
+connections changes as well while established connections naturally stay
+unchanged. Also when a destination is marked unavailable, all connections that
+would be routed to it will fail over to another, randomly chosen destination.
 When the original target becomes available, all new connections will be routed
 back to it.
 
@@ -211,3 +209,9 @@ Additional libglb parameters:
 GLB_POLICY=random|source
     Default libglb balancing policy is "round-robin", "random" and
     "source tracking" policies can be specified with GLB_POLICY variable.
+
+The meaning of GLB_POLICY=source in this case is that all connections from
+this client will be routed to the same random destination, and failover to
+another if the primary destination fails. Thus client-server affinity is
+achieved, however load from many clients will be spread over all available
+destinations.
