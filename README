@@ -190,7 +190,7 @@ GLB_BIND=<addr>
 Example:
 
 $ LD_PRELOAD=src/.libs/libglb.so \
-GLB_BIND=3306 GLB_TARGETS=127.0.0.1:3305,192.168.0.2,192.168.0.3 \
+GLB_BIND=3306 GLB_TARGETS=192.168.0.1,192.168.0.2,192.168.0.3 \
 mysql -uroot -prootpass -h127.0.0.1 -P3306
 
 Welcome to the MySQL monitor.  Commands end with ; or \g.
