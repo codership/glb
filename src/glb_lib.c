@@ -12,6 +12,7 @@
 
 #include "glb_env.h"
 #include "glb_router.h"
+#include "glb_control.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -37,6 +38,17 @@ __glb_init()
     if (__glb_cnf)
     {
         __glb_router = glb_router_create(__glb_cnf);
+
+        if (__glb_cnf->ctrl_set)
+        {
+            uint16_t const default_port =
+                glb_socket_addr_get_port(&__glb_cnf->inc_addr);
+
+            int const sock = glb_socket_create(&__glb_cnf->ctrl_addr, 0);
+
+            if (sock > 0)
+                glb_ctrl_create(__glb_cnf, __glb_router, default_port, 0, sock);
+        }
     }
 
     __glb_real_connect = dlsym(RTLD_NEXT, "__connect");

@@ -20,11 +20,11 @@ struct glb_cnf;
 extern void
 glb_socket_init(const struct glb_cnf* cnf);
 
+#endif /* GLBD */
+
 // behaves like inet_ntoa() - returns static buffer
 extern const char*
 glb_socket_addr_to_string (const glb_sockaddr_t* addr);
-
-#endif /* GLBD */
 
 static inline bool
 glb_socket_addr_is_equal (const glb_sockaddr_t* left,

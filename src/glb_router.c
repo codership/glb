@@ -1,6 +1,9 @@
 /*
  * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
+ * NOTE: connection count and usage make sense only for standalone balancer
+ *       so all operations on them are #ifdef GLBD ... #endif
+ *
  * $Id$
  */
 
@@ -32,10 +35,14 @@ static int (*__glb_real_connect) (int                    sockfd,
 typedef struct router_dst
 {
     glb_dst_t dst;
+#ifdef GLBD
     double    usage;  // usage measure: weight/(conns + 1) - bigger wins
+#endif
     double    map;    // hard to explain
     time_t    failed; // last time connection to this destination failed
+#ifdef GLBD
     int       conns;  // how many connections use this destination
+#endif
 } router_dst_t;
 
 struct glb_router
@@ -46,7 +53,9 @@ struct glb_router
     long            busy_count;
     long            wait_count;
     pthread_cond_t  free;
+#ifdef GLBD
     int             conns;
+#endif
     unsigned int    seed;     // seed for rng
     int             rrb_next; // round-robin cursor
     int             n_dst;
@@ -102,9 +111,11 @@ router_redo_map (glb_router_t* router)
     }
 }
 
+#ifdef GLBD
 static inline double
 router_dst_usage (router_dst_t* d)
 { return (d->dst.weight / (d->conns + router_div_prot)); }
+#endif
 
 int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
@@ -158,8 +169,10 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
             d = router->dst + router->n_dst;
             router->n_dst++;
             d->dst    = *dst;
+#ifdef GLBD
             d->conns  = 0;
             d->usage  = router_dst_usage(d);
+#endif
             d->failed = 0;
         }
     }
@@ -167,9 +180,9 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
         assert (d);
         assert (i >= 0 && i < router->n_dst);
-
+#ifdef GLBD
         router->conns -= d->conns; assert (router->conns >= 0);
-
+#endif
         if ((i + 1) < router->n_dst) {
             // it is not the last, move the rest to close the gap
             router_dst_t* next = d + 1;
@@ -192,7 +205,9 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
     else if (d->dst.weight != dst->weight) {
         // update weight and usage
         d->dst.weight = dst->weight;
+#ifdef GLBD
         d->usage      = router_dst_usage (d);
+#endif
     }
 
     router_redo_map (router);
@@ -202,6 +217,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
     if (router->wait_count > 0) pthread_cond_signal (&router->free);
     GLB_MUTEX_UNLOCK (&router->lock);
+
     return i;
 }
 
@@ -248,7 +264,9 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
 
         ret->cnf        = cnf;
         ret->busy_count = 0;
+#ifdef GLBD
         ret->conns      = 0;
+#endif
         ret->seed       = router_generate_seed();
         ret->rrb_next   = 0;
         ret->n_dst      = 0;
@@ -358,7 +376,9 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
         router->map_failed = 0;
     }
 
+    // make sure it is strictly < 1.0
     double const m = ((double)hint) / 0xffffffff - router_div_prot;
+
     int i;
     for (i = 0; i < router->n_dst; i++)
     {
@@ -422,9 +442,10 @@ router_connect_dst (glb_router_t*   const router,
 
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router, hint))) {
+#ifdef GLBD
         dst->conns++; router->conns++;
         dst->usage = router_dst_usage(dst);
-
+#endif
         GLB_MUTEX_UNLOCK (&router->lock);
 
         ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
@@ -435,9 +456,11 @@ router_connect_dst (glb_router_t*   const router,
         if (ret != 0) {
             error = errno;
             // connect failed, undo usage count, update destination failed mark
+#ifdef GLBD
             dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
+#endif
             glb_log_warn ("Failed to connect to %s: %d (%s)",
                           glb_socket_addr_to_string (&dst->dst.addr),
                           error, strerror(error));
@@ -555,9 +578,9 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     int    n_dst;
     int    i;
 
-    len += snprintf (buf + len, buf_len - len, "Router:\n"
-                     "------------------------------------------------------\n"
-                     "        Address       :   weight   usage    map  conns\n");
+    len += snprintf(buf + len, buf_len - len, "Router:\n"
+                    "------------------------------------------------------\n"
+                    "        Address       :   weight   usage    map  conns\n");
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);
@@ -593,7 +616,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
         return (len - 1);
     }
 
-     return len;
+    return len;
 }
 
 #else /* GLBD */
@@ -607,6 +630,50 @@ int __glb_router_connect(glb_router_t* const router, int const sockfd)
         router_random_hint(router) : router->seed;
 
     return router_connect_dst (router, sockfd, hint, &dst);
+}
+
+size_t
+glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
+{
+    size_t len = 0;
+    int    n_dst;
+    int    i;
+
+    len += snprintf(buf + len, buf_len - len, "Router:\n"
+                    "-----------------------------------------\n"
+                    "        Address       :   weight    map  \n");
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+    GLB_MUTEX_LOCK (&router->lock);
+
+    for (i = 0; i < router->n_dst; i++) {
+        router_dst_t* d = &router->dst[i];
+
+        len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f\n",
+                         glb_socket_addr_to_string(&d->dst.addr),
+                         d->dst.weight, d->map);
+        if (len == buf_len) {
+            buf[len - 1] = '\0';
+            return (len - 1);
+        }
+    }
+
+    n_dst = router->n_dst;
+
+    GLB_MUTEX_UNLOCK (&router->lock);
+
+    len += snprintf (buf + len, buf_len - len,
+                     "-----------------------------------------\n"
+                     "Destinations: %d\n", n_dst);
+    if (len == buf_len) {
+        buf[len - 1] = '\0';
+        return (len - 1);
+    }
+
+    return len;
 }
 
 #endif /* GLBD */

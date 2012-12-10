@@ -28,6 +28,7 @@ libglb_la_SOURCES = \
 	glb_cnf.c      \
 	glb_env.c      \
 	glb_router.c   \
+	glb_control.c  \
 	glb_lib.c
 
 libglb_la_LDFLAGS = -version-info 0:9:0

@@ -172,7 +172,6 @@ See README in the files/ directory.
 
 USING LIBGLB:
 =============
-
 libglb requres 3 program environment variables to be set:
 
 LD_PRELOAD=<path-to-libglb>
@@ -210,8 +209,15 @@ GLB_POLICY=random|source
     Default libglb balancing policy is "round-robin", "random" and
     "source tracking" policies can be specified with GLB_POLICY variable.
 
-The meaning of GLB_POLICY=source in this case is that all connections from
+(The meaning of GLB_POLICY=source in this case is that all connections from
 this client will be routed to the same random destination, and failover to
 another if the primary destination fails. Thus client-server affinity is
 achieved, however load from many clients will be spread over all available
-destinations.
+destinations.)
+
+GLB_CONTROL=[IP:]PORT
+    Interpreted the same way as --cotrol parameter of glbd. Application will
+    open a socket at a specified address to listen to control commands. Due
+    to library functionality limited only to connect() call, no traffic
+    statistics or connection count is maintained, so "getstat" command is a
+    noop and "getinfo" only prints out a routing table.

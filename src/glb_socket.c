@@ -28,6 +28,8 @@ glb_socket_init(const glb_cnf_t* cnf)
     glb_cnf = cnf;
 }
 
+#endif /* GLBD */
+
 //static const size_t addr_string_len = 512; heh, my GCC refuses to see it as
 //a constant! here goes type safety...
 #define addr_string_len 512
@@ -58,8 +60,6 @@ glb_socket_addr_to_string (const glb_sockaddr_t* addr)
 
     return addr_string;
 }
-
-#endif /* GLBD */
 
 // Initialize glb_sockaddr_t struct
 long

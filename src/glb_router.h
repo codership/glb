@@ -17,6 +17,15 @@ glb_router_create (const glb_cnf_t* cnf);
 extern void
 glb_router_destroy ();
 
+/*!
+ * Modifies internal list of destinations
+ * If destination is not in the list, adds it, if it is there - changes its
+ * weight, if weight is -1 - removes destination from the list
+ * @return index of record changed or negative error code
+ */
+extern int
+glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
+
 #ifdef GLBD
 
 /*!
@@ -37,23 +46,14 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
 extern void
 glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr);
 
-/*!
- * Modifies internal list of destinations
- * If destination is not in the list, adds it, if it is there - changes its
- * weight, if weight is -1 - removes destination from the list
- * @return index of record changed or negative error code
- */
-extern int
-glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
-
-// Returns the length of the string
-extern size_t
-glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len);
-
 #else /* GLBD */
 
 extern int __glb_router_connect(glb_router_t* const router, int const sockfd);
 
 #endif /* GLBD */
+
+// Returns the length of the string
+extern size_t
+glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len);
 
 #endif // _glb_router_h_

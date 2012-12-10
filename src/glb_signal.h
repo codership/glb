@@ -1,11 +1,13 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
  * $Id$
  */
 
 #ifndef _glb_signal_h_
 #define _glb_signal_h_
+
+#ifdef GLBD
 
 #include <signal.h>
 
@@ -17,5 +19,7 @@ glb_terminate;
 
 extern void
 glb_signal_set_handler();
+
+#endif /* GLBD */
 
 #endif // _glb_signal_h_

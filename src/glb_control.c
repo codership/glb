@@ -36,21 +36,26 @@ typedef struct pollfd pollfd_t;
 static const char ctrl_getinfo_cmd[] = "getinfo";
 static const char ctrl_getstat_cmd[] = "getstat";
 
+#if 0
 typedef enum ctrl_fd
 {
     CTRL_FIFO = 0,
     CTRL_LISTEN,
-    CTRL_MAX = GLB_MAX_CTRL_CONN
 } ctrl_fd_t;
+#endif
+#define CTRL_MAX GLB_MAX_CTRL_CONN
 
 struct glb_ctrl
 {
     glb_cnf_t*    cnf;
     glb_router_t* router;
+#ifdef GLBD
     glb_pool_t*   pool;
+#endif
     pthread_t     thread;
     int           fifo;
     int           inet_sock;
+    int const     inet_fd;
     int           fd_max;
     pollfd_t      fds[CTRL_MAX];
     uint16_t      default_port;
@@ -67,8 +72,8 @@ ctrl_add_client (glb_ctrl_t* ctrl, int fd)
 
     ctrl->fd_max++;
 
-    if (CTRL_MAX == ctrl->fd_max) // no more clients
-        ctrl->fds[CTRL_LISTEN].events = 0;
+    if (CTRL_MAX == ctrl->fd_max) // no more clients allowed
+        ctrl->fds[ctrl->inet_fd].events = 0;
 }
 
 static void
@@ -77,7 +82,7 @@ ctrl_del_client (glb_ctrl_t* ctrl, int fd)
     int idx;
 
     assert (CTRL_MAX >= ctrl->fd_max);
-    assert (ctrl->fd_max > CTRL_LISTEN);
+    assert (ctrl->fd_max > 1);
 
     for (idx = 1; idx < ctrl->fd_max; idx++) {
         if (fd == ctrl->fds[idx].fd) {
@@ -96,7 +101,7 @@ ctrl_del_client (glb_ctrl_t* ctrl, int fd)
         abort();
     };
 
-    ctrl->fds[CTRL_LISTEN].events = POLLIN;
+    ctrl->fds[ctrl->inet_fd].events = POLLIN;
 }
 
 static inline void
@@ -124,11 +129,9 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
     }
     while (EINTR == errno);
 
-    if (ret < 0) return -1;
-
-    if (0 == req_size) { // connection closed
+    if (0 == req_size || ret < 0) { // connection closed or reset
         ctrl_del_client (ctrl, fd);
-        return 0;
+        return ret;
     }
 
     assert (req_size > 0);
@@ -148,8 +151,10 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         return 0;
     }
     else if (!strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
+#ifdef GLBD
         glb_pool_print_stats (ctrl->pool, req, sizeof(req));
         ctrl_respond (ctrl, fd, req);
+#endif /* GLBD */
         return 0;
     }
     else { // change destiantion request
@@ -172,11 +177,12 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
 
         ctrl_respond (ctrl, fd, "Ok\n");
 
+#ifdef GLBD
         if (dst.weight < 0.0) {
             // destination was removed from router, drop all connections to it
             glb_pool_drop_dst (ctrl->pool, &dst.addr);
         }
-
+#endif /* GLBD */
         return 0;
     }
 }
@@ -193,7 +199,11 @@ ctrl_thread (void* arg)
 {
     glb_ctrl_t* ctrl = arg;
 
+#ifdef GLBD
     while (!glb_terminate) {
+#else /* GLBD */
+    while (true) {
+#endif /* GLBD */
         long ret;
 
         // Timeout is needed to gracefully shut down
@@ -204,8 +214,7 @@ ctrl_thread (void* arg)
             goto err; //?
         }
         else if (0 == ret) continue;
-
-        if (ctrl->inet_sock > 0 && (ctrl_fd_isset (ctrl, CTRL_LISTEN))) {
+        if (ctrl->inet_sock > 0 && (ctrl_fd_isset (ctrl, ctrl->inet_fd))) {
             // new network client
             int             client_sock;
             struct sockaddr client;
@@ -218,21 +227,21 @@ ctrl_thread (void* arg)
                                errno, strerror (errno));
                 goto err;
             }
-
             // Add to fds and wait for new events
             ctrl_add_client (ctrl, client_sock);
-
+#ifdef GLBD
             if (ctrl->cnf->verbose) {
                 glb_log_info ("Ctrl: accepted connection from %s\n",
                          glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
             }
+#endif
             continue;
         }
         else {
             int fd;
-            for (fd = CTRL_FIFO; fd <= ctrl->fd_max; fd++) { // find fd
+            for (fd = 0; fd <= ctrl->fd_max; fd++) { // find fd
                 if (ctrl_fd_isset (ctrl, fd)) {
-                    assert (fd != CTRL_LISTEN);
+                    assert (fd != ctrl->inet_fd);
                     if (ctrl_handle_request (ctrl, ctrl->fds[fd].fd)) goto err;
                 }
             }
@@ -249,14 +258,14 @@ ctrl_thread (void* arg)
 glb_ctrl_t*
 glb_ctrl_create (glb_cnf_t*    const cnf,
                  glb_router_t* const router,
+#ifdef GLBD
                  glb_pool_t*   const pool,
+#endif /* GLBD */
                  uint16_t      const port,
                  int           const fifo,
                  int           const sock)
 {
-    glb_ctrl_t* ret = NULL;
-
-    assert (NULL != router);
+    if (fifo <= 0 && sock <= 0) return NULL;
 
     if (sock && listen (sock, CTRL_MAX)) {
         glb_log_error ("Ctrl: listen() failed: %d (%s)",
@@ -264,22 +273,39 @@ glb_ctrl_create (glb_cnf_t*    const cnf,
         return NULL;
     }
 
+    assert (NULL != router);
+
+    glb_ctrl_t* ret = NULL;
+
     ret = calloc (1, sizeof (glb_ctrl_t));
     if (ret) {
         ret->cnf          = cnf;
         ret->router       = router;
+#ifdef GLBD
         ret->pool         = pool;
+#endif /* GLBD */
         ret->fifo         = fifo;
         ret->inet_sock    = sock;
-        ret->fd_max       = fifo > sock ? 1 : 2;
         ret->default_port = port;
+        ret->fd_max       = 1; // at least one of fifo or inet_sock is present
 
-        ret->fds[CTRL_FIFO].fd      = ret->fifo;
-        ret->fds[CTRL_FIFO].events  = POLLIN;
+        *(int*)&ret->inet_fd = -1;
 
-        if (ret->inet_sock > 0) {
-            ret->fds[CTRL_LISTEN].fd      = ret->inet_sock;
-            ret->fds[CTRL_LISTEN].events  = POLLIN;
+        if (ret->fifo > 0) {
+            ret->fds[0].fd      = ret->fifo;
+            ret->fds[0].events  = POLLIN;
+
+            if (ret->inet_sock > 0) {
+                ret->fds[1].fd      = ret->inet_sock;
+                ret->fds[1].events  = POLLIN;
+                *(int*)&ret->inet_fd = 1;
+                ret->fd_max  = 2;
+            }
+        }
+        else if (ret->inet_sock > 0) {
+            ret->fds[0].fd      = ret->inet_sock;
+            ret->fds[0].events  = POLLIN;
+            *(int*)&ret->inet_fd = 0;
         }
 
         if (pthread_create (&ret->thread, NULL, ctrl_thread, ret)) {
