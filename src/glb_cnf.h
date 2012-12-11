@@ -26,6 +26,7 @@ typedef struct glb_cnf
 {
     glb_sockaddr_t inc_addr;     // IP to bind listener for incoming connecitons
     glb_sockaddr_t ctrl_addr;    // network control interface
+    const char*    watchdog;     // watchdog spec string
 #ifdef GLBD
     const char*    fifo_name;    // FIFO file name
     int            n_threads;    // number of routing threads (1 .. oo)
@@ -35,6 +36,7 @@ typedef struct glb_cnf
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
 #endif /* GLBD */
+    double         interval;     // health check interval
     bool           ctrl_set;     // was set? (false)
     glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations

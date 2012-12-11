@@ -27,12 +27,14 @@ typedef enum cmd_opt
     CMD_OPT_DAEMON       = 'd',
     CMD_OPT_FIFO         = 'f',
     CMD_OPT_HELP         = 'h',
+    CMD_OPT_INTERVAL     = 'i',
     CMD_OPT_MAX_CONN     = 'm',
     CMD_OPT_NODELAY      = 'n',
     CMD_OPT_RANDOM       = 'r',
     CMD_OPT_SRC_TRACKING = 's',
     CMD_OPT_N_THREADS    = 't',
     CMD_OPT_VERBOSE      = 'v',
+    CMD_OPT_WATCHDOG     = 'w'
 } cmd_opt_t;
 
 static option_t cmd_options[] =
@@ -46,6 +48,7 @@ static option_t cmd_options[] =
     { "daemon",          NA, NULL, CMD_OPT_DAEMON        },
     { "fifo",            RA, NULL, CMD_OPT_FIFO          },
     { "help",            NA, NULL, CMD_OPT_HELP          },
+    { "interval",        RA, NULL, CMD_OPT_INTERVAL      },
     { "max_conn",        RA, NULL, CMD_OPT_MAX_CONN      },
     { "connections",     RA, NULL, CMD_OPT_MAX_CONN      },
     { "nodelay",         NA, NULL, CMD_OPT_NODELAY       },
@@ -55,6 +58,7 @@ static option_t cmd_options[] =
     { "source_tracking", NA, NULL, CMD_OPT_SRC_TRACKING  },
     { "threads",         RA, NULL, CMD_OPT_N_THREADS     },
     { "verbose",         NA, NULL, CMD_OPT_VERBOSE       },
+    { "watchdog",        RA, NULL, CMD_OPT_WATCHDOG      },
     { 0, 0, 0, 0 }
 };
 
@@ -81,6 +85,9 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
     fprintf (out,
+             "  -i|--interval D.DDD       "
+             "how often to poll destination for liveness (decimal seconds).\n");
+    fprintf (out,
              "  -m|--max_conn N           "
              "maximum allowed number of client connections (OS dependent).\n");
     fprintf (out,
@@ -100,6 +107,8 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  -v|--verbose              turn on verbose reporting.\n");
     fprintf (out,
+             "  -w|--watchdog SPEC_STR    watchdog specification.\n");
+    fprintf (out,
              "  -V|--version              print program version.\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
              "  [IP:]PORT                 "
@@ -111,6 +120,9 @@ glb_cmd_help (FILE* out, const char* progname)
              "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
              " - a space-separated list of destinations\n"
              "                            in the form address:port:weight.\n");
+    fprintf (out, "SPEC_STR:\n"
+             "  BACKEND_ID[:BACKEND_SPECIFIC_STRING], "
+             "e.g. mysql:user:password\n");
     exit (EXIT_FAILURE);
 }
 
@@ -132,7 +144,7 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "abc:dfhm:nt:rsvV", cmd_options,
+    while ((opt = getopt_long (argc, argv, "abc:dfhi:m:nt:rsvw:V", cmd_options,
                                &opt_idx)) != -1) {
         switch (opt) {
         case CMD_OPT_DEFER_ACCEPT:
@@ -156,6 +168,14 @@ glb_cmd_parse (int argc, char* argv[])
         case CMD_OPT_HELP:
             glb_cmd_help(stdout, argv[0]);
             exit (EXIT_FAILURE);
+            break;
+        case CMD_OPT_INTERVAL:
+            tmp->interval = strtod (optarg, &endptr);
+            if ((*endptr != '\0' && *endptr != ' ') || errno) {
+                fprintf (stderr, "Bad max_conn value: %s. "
+                         "Floating number expected.\n", optarg);
+                exit (EXIT_FAILURE);
+            }
             break;
         case CMD_OPT_MAX_CONN:
             tmp->max_conn = strtol (optarg, &endptr, 10);
@@ -184,6 +204,9 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_VERBOSE:
             tmp->verbose = true;
+            break;
+        case CMD_OPT_WATCHDOG:
+            tmp->watchdog = optarg;
             break;
         case CMD_OPT_VERSION:
             glb_print_version (stdout);

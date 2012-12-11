@@ -21,6 +21,8 @@ static const char env_policy[]  = "GLB_POLICY";
 static const char env_ctrl[]    = "GLB_CONTROL"; // address to accept control
                                                  // connections
 static const char env_targets[] = "GLB_TARGETS"; // balancing targets
+static const char env_interval[]= "GLB_INTERVAL";// health check interval
+static const char env_watchdog[]= "GLB_WATCHDOG";// watchdog spec string
 
 // Defaults relevant to ENV
 static const char env_ctrl_addr_default[] = "127.0.0.1";
@@ -94,6 +96,25 @@ env_parse_control (glb_cnf_t* cnf, const char* p)
     }
 }
 
+static void
+env_parse_interval (glb_cnf_t* cnf, const char* p)
+{
+    if (!p) return;
+
+    char*  endptr;
+    double tmp = strtod (p, &endptr);
+
+    if ((*endptr != '\0' && !isspace(*endptr)) || errno) return;
+
+    cnf->interval = tmp;
+}
+
+static void
+env_parse_watchdog (glb_cnf_t* cnf, const char* p)
+{
+    if (p) cnf->watchdog = strdup(p);
+}
+
 glb_cnf_t*
 glb_env_parse ()
 {
@@ -123,8 +144,10 @@ glb_env_parse ()
         {
             ret = tmp;
 
-            env_parse_policy  (ret, getenv (env_policy));
-            env_parse_control (ret, getenv (env_ctrl));
+            env_parse_policy   (ret, getenv (env_policy));
+            env_parse_control  (ret, getenv (env_ctrl));
+            env_parse_interval (ret, getenv (env_interval));
+            env_parse_watchdog (ret, getenv (env_watchdog));
         }
         else err = true;
 

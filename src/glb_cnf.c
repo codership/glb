@@ -15,7 +15,8 @@ glb_cnf_t* glb_cnf = NULL;
 #include <stddef.h> // ptrdiff_t
 #include <string.h>
 
-static const char default_fifo_name[]  = "/tmp/glbd.fifo";
+static const double default_check_interval = 1.0;
+static const char   default_fifo_name[]    = "/tmp/glbd.fifo";
 
 glb_cnf_t*
 glb_cnf_init ()
@@ -34,6 +35,7 @@ glb_cnf_init ()
 #else
         ret->policy    = GLB_POLICY_ROUND;
 #endif /* GLBD */
+        ret->interval  = default_check_interval;
     }
     else
     {
