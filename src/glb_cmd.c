@@ -86,7 +86,8 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
     fprintf (out,
              "  -i|--interval D.DDD       "
-             "how often to poll destination for liveness (decimal seconds).\n");
+             "how often to poll destination for liveness\n"
+             "(floating point seconds, default 1.0).\n");
     fprintf (out,
              "  -m|--max_conn N           "
              "maximum allowed number of client connections (OS dependent).\n");
@@ -170,10 +171,11 @@ glb_cmd_parse (int argc, char* argv[])
             exit (EXIT_FAILURE);
             break;
         case CMD_OPT_INTERVAL:
-            tmp->interval = strtod (optarg, &endptr);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
-                fprintf (stderr, "Bad max_conn value: %s. "
-                         "Floating number expected.\n", optarg);
+            tmp->interval = strtod (optarg, &endptr) * 1000000000;
+            if ((*endptr != '\0' && *endptr != ' ') || errno ||
+                tmp->interval <= 0) {
+                fprintf (stderr, "Bad check interval value: %s. "
+                         "Positive floating number expected.\n", optarg);
                 exit (EXIT_FAILURE);
             }
             break;

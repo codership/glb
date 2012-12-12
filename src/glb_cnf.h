@@ -36,7 +36,7 @@ typedef struct glb_cnf
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
 #endif /* GLBD */
-    double         interval;     // health check interval
+    long long      interval;     // health check interval (nanoseconds)
     bool           ctrl_set;     // was set? (false)
     glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations

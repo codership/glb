@@ -15,8 +15,8 @@ glb_cnf_t* glb_cnf = NULL;
 #include <stddef.h> // ptrdiff_t
 #include <string.h>
 
-static const double default_check_interval = 1.0;
-static const char   default_fifo_name[]    = "/tmp/glbd.fifo";
+static const long long default_check_interval = 1000000000; // 1 sec
+static const char      default_fifo_name[]    = "/tmp/glbd.fifo";
 
 glb_cnf_t*
 glb_cnf_init ()
