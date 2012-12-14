@@ -120,7 +120,7 @@ router_dst_usage (router_dst_t* d)
 int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 {
-    long          i;
+    int           i;
     void*         tmp;
     router_dst_t* d = NULL;
 

@@ -16,6 +16,7 @@ glbd_SOURCES = \
 	glb_listener.c \
 	glb_control.c  \
 	glb_limits.c   \
+	glb_wdog.c     \
 	glb_main.c     \
 	*.h
 glbd_CFLAGS = $(AM_CFLAGS) -DGLBD
@@ -29,6 +30,7 @@ libglb_la_SOURCES = \
 	glb_env.c      \
 	glb_router.c   \
 	glb_control.c  \
+	glb_wdog.c     \
 	glb_lib.c
 
 libglb_la_LDFLAGS = -version-info 0:9:0
