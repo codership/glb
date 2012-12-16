@@ -10,6 +10,7 @@
 #include "glb_signal.h"
 #include "glb_daemon.h"
 #include "glb_router.h"
+#include "glb_wdog.h"
 #include "glb_pool.h"
 #include "glb_listener.h"
 #include "glb_control.h"
@@ -104,6 +105,7 @@ int main (int argc, char* argv[])
     glb_router_t*   router;
     glb_pool_t*     pool;
     glb_listener_t* listener;
+    glb_wdog_t*     wdog = NULL;
     glb_ctrl_t*     ctrl;
     uint16_t        inc_port;
 
@@ -155,8 +157,17 @@ int main (int argc, char* argv[])
         goto failure;
     }
 
+    if (cnf->watchdog) {
+        wdog = glb_wdog_create (cnf, router);
+        if (!wdog) {
+            glb_log_fatal ("Failed to create destination watchdog. Exiting.");
+            goto failure;
+        }
+    }
+
     inc_port = glb_socket_addr_get_port (&cnf->inc_addr);
-    ctrl = glb_ctrl_create (cnf, router, pool, inc_port, ctrl_fifo, ctrl_sock);
+    ctrl = glb_ctrl_create (cnf, router, wdog, pool,
+                            inc_port, ctrl_fifo, ctrl_sock);
     if (!ctrl) {
         glb_log_fatal ("Failed to create control thread. Exiting.");
         goto failure;

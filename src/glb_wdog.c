@@ -1,6 +1,35 @@
 /*
  * Copyright (C) 2012 Codership Oy <info@codership.com>
  *
+ * Watchdog implementation: main loop module.
+ *
+How it works:
+     ,---------.
+     | control |
+     | thread  |
+     `---------'
+          |
+add/remove destinations
+          V                 query destination
+,--------------------.    ,------------------.   ,-------------.
+|                    |<-->|  backend thread  |-->| destination |
+|                    |    `------------------'   `-------------'
+| watchdog main loop |    ,------------------.   ,-------------.
+|                    |<-->|  backend thread  |-->| destination |
+|     (collect       |    `------------------'   `-------------'
+| destination data)  |     . . .
+|                    |    ,------------------.   ,-------------.
+|                    |<-->|  backend thread  |-->| destination |
+`--------------------'    `------------------'   `-------------'
+          |
+  destination changes
+          V
+  ,--------------.
+  |    router    |
+  |  (dispatch   |
+  | connections) |
+  `--------------'
+
  * $Id$
  */
 
@@ -21,36 +50,34 @@
 
 typedef struct wdog_dst
 {
-    bool               explicit; //! was added explicitly, never remove
-//    bool               joined;
-    glb_dst_t          dst;
-    double             weight;
-//    glb_wdog_check_t   current; // is it needed?
-    glb_wdog_check_t   pending;
-    bool               memb_changed;
-    glb_backend_ctx_t* ctx;      //! backend thread context
+    bool                      explicit; //! was added explicitly, never remove
+    glb_dst_t                 dst;
+    double                    weight;
+    glb_wdog_check_t          pending;
+    bool                      memb_changed;
+    glb_backend_thread_ctx_t* ctx;      //! backend thread context
 } wdog_dst_t;
 
 struct glb_wdog
 {
-    const glb_cnf_t*      cnf;
-    glb_router_t*         router;
-    glb_backend_t*        backend;
-    glb_backend_thread_t  backend_thread;
-    glb_backend_destroy_t backend_destroy;
-    pthread_t             thd;
-    pthread_mutex_t       lock;
-    pthread_cond_t        cond;
-    bool                  quit;
-    bool                  join;
-    long long             interval; // nsec
-    struct timespec       next;
-    int                   n_dst;
-    wdog_dst_t*           dst;
+    glb_backend_t    backend;
+    const glb_cnf_t* cnf;
+    glb_router_t*    router;
+    pthread_t        thd;
+    pthread_mutex_t  lock;
+    pthread_cond_t   cond;
+    bool             quit;
+    bool             join;
+    long long        interval; // nsec
+    struct timespec  next;
+    int              n_dst;
+    wdog_dst_t*      dst;
 };
 
-static glb_backend_ctx_t*
-wdog_backend_ctx_create (glb_backend_t* backend, const glb_dst_t* const dst)
+static glb_backend_thread_ctx_t*
+wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
+                                const glb_dst_t*   const dst,
+                                long long          const interval)
 {
     char* addr = strdup (glb_socket_addr_to_string (&dst->addr));
 
@@ -63,7 +90,7 @@ wdog_backend_ctx_create (glb_backend_t* backend, const glb_dst_t* const dst)
             long port = strtol (colon + 1, NULL, 10);
             assert (port > 0 && port <= 65535);
 
-            glb_backend_ctx_t* ret = calloc (1, sizeof(*ret));
+            glb_backend_thread_ctx_t* ret = calloc (1, sizeof(*ret));
 
             if (ret) {
                 glb_log_info("Created context for %s:%ld", addr, port);
@@ -72,6 +99,7 @@ wdog_backend_ctx_create (glb_backend_t* backend, const glb_dst_t* const dst)
                 pthread_cond_init  (&ret->cond, NULL);
                 ret->addr = addr;
                 ret->port = port;
+                ret->interval = interval;
                 return ret;
             }
         }
@@ -83,7 +111,7 @@ wdog_backend_ctx_create (glb_backend_t* backend, const glb_dst_t* const dst)
 }
 
 static void
-wdog_backend_ctx_destroy (glb_backend_ctx_t* ctx)
+wdog_backend_thread_ctx_destroy (glb_backend_thread_ctx_t* ctx)
 {
     free (ctx->addr);
     free ((void*)ctx->result.others);
@@ -126,7 +154,9 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
 
         assert (i == wdog->n_dst);
 
-        glb_backend_ctx_t* ctx = wdog_backend_ctx_create (wdog->backend, dst);
+        glb_backend_thread_ctx_t* ctx =
+            wdog_backend_thread_ctx_create (wdog->backend.ctx, dst,
+                                            wdog->cnf->interval);
 
         if (!ctx) {
             i = -ENOMEM;
@@ -135,7 +165,7 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
             tmp = realloc (wdog->dst, (wdog->n_dst + 1) * sizeof(wdog_dst_t));
 
             if (!tmp) {
-                wdog_backend_ctx_destroy (ctx);
+                wdog_backend_thread_ctx_destroy (ctx);
                 i = -ENOMEM;
             }
             else {
@@ -144,7 +174,7 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
 
                 GLB_MUTEX_LOCK (&ctx->lock);
                 {
-                    pthread_create (&ctx->id, NULL, wdog->backend_thread, ctx);
+                    pthread_create (&ctx->id, NULL, wdog->backend.thread, ctx);
                     pthread_cond_wait (&ctx->cond, &ctx->lock);
                     success = !ctx->join;
                 }
@@ -162,7 +192,7 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
                 else {
                     i = -ctx->errn;
                     pthread_join (ctx->id, NULL);
-                    wdog_backend_ctx_destroy(ctx);
+                    wdog_backend_thread_ctx_destroy(ctx);
                 }
             }
         }
@@ -179,25 +209,6 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
             pthread_cond_signal (&d->ctx->cond);
             GLB_MUTEX_UNLOCK (&d->ctx->lock);
             /* thread will be joined context will be cleaned up later */
-#if REMOVE
-            if ((i + 1) < router->n_dst) {
-            // it is not the last, copy the last to close the gap
-            router_dst_t* next = d + 1;
-            size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
-            memmove (d, next, len);
-            }
-            tmp = realloc (router->dst,
-                           (router->n_dst - 1) * sizeof(router_dst_t));
-
-            if (!tmp && (router->n_dst > 1)) {
-                i = -ENOMEM;
-            }
-            else {
-                router->dst = tmp;
-                router->n_dst--;
-                router->rrb_next = router->rrb_next % router->n_dst;
-            }
-#endif /* REMOVE */
         }
         else
         {
@@ -214,29 +225,12 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
     return i;
 }
 
-static void*
-dummy_backend_thread (void* arg)
-{
-    glb_backend_ctx_t* ctx = arg;
-    GLB_MUTEX_LOCK(&ctx->lock);
-    pthread_cond_signal (&ctx->cond);
-    while (!ctx->quit) {
-        pthread_cond_wait (&ctx->cond, &ctx->lock);
-    }
-    ctx->join = true;
-    GLB_MUTEX_UNLOCK(&ctx->lock);
-    return NULL;
-}
 
-static void
-wdog_backend_factory (const glb_cnf_t*       cnf,
-                      glb_backend_t**        backend,
-                      glb_backend_thread_t*  thread,
-                      glb_backend_destroy_t* destroy)
+static int
+wdog_backend_factory (const glb_cnf_t* cnf,
+                      glb_backend_t*   backend)
 {
-    *backend = NULL;
-    *thread  = NULL;
-    *destroy = NULL;
+    memset (backend, 0, sizeof (*backend));
 
     assert (cnf->watchdog);
 
@@ -248,18 +242,20 @@ wdog_backend_factory (const glb_cnf_t*       cnf,
         spec++;
     }
 
-    if (strlen (cnf->watchdog) == 0)
+    if (!strcmp (cnf->watchdog, "dummy"))
     {
-        *thread = dummy_backend_thread;
+        return glb_backend_dummy_init (backend, spec);
     }
     else if (!strcmp (cnf->watchdog, "script"))
     {
-        glb_log_error("%s watchdog not implemented.", cnf->watchdog);
+        glb_log_error("'%s' watchdog not implemented.", cnf->watchdog);
 //        *backend = glb_script_create (spec, thread, destroy);
+        return -ENOSYS;
     }
     else
     {
-        glb_log_error("%s watchdog not implemented.", cnf->watchdog);
+        glb_log_error("'%s' watchdog not implemented.", cnf->watchdog);
+        return -ENOSYS;
     }
 }
 
@@ -290,6 +286,7 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
             }
             else { // remote destination is live, handle others string
                 bool changed_length = false;
+
                 if (others_len < res->others_len ||
                     others_len > (res->others_len * 2)) {
                     // buffer size is too different, reallocate
@@ -305,10 +302,16 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
                     }
                 }
 
-                if (d->pending.others_len >= res->others_len &&
-                    (changed_length || strcmp(d->pneding.others, res->others))){
-                    d->memb_changed = true;
-                    strcpy (d->pending.others, res->others);
+                assert (d->pending.others || 0 == d->pending.others_len);
+                assert (NULL == d->pending.others || d->pending.others_len);
+
+                if (res->others_len > 0) {
+                    if (d->pending.others_len >= res->others_len &&
+                        (changed_length ||
+                         strcmp(d->pending.others, res->others))){
+                        d->memb_changed = true;
+                        strcpy (d->pending.others, res->others);
+                    }
                 }
             }
         }
@@ -334,8 +337,6 @@ wdog_result_weight (wdog_dst_t* const d, double const max_lat)
 {
     assert (d->pending.ready); // this must be called only for fresh data
 
-//    d->current.state = d->pending.state;
-
     switch (d->pending.state)
     {
     case GLB_DST_NOTFOUND:
@@ -354,7 +355,7 @@ wdog_result_weight (wdog_dst_t* const d, double const max_lat)
 static void
 wdog_dst_free (wdog_dst_t* d)
 {
-    wdog_backend_ctx_destroy (d->ctx);
+    wdog_backend_thread_ctx_destroy (d->ctx);
     free (d->pending.others);
 }
 
@@ -362,6 +363,8 @@ wdog_dst_free (wdog_dst_t* d)
 static int
 wdog_collect_results (glb_wdog_t* const wdog)
 {
+    glb_log_debug ("main loop collecting...");
+
     double max_lat = 0.0;
     int results = 0;
 
@@ -371,6 +374,8 @@ wdog_collect_results (glb_wdog_t* const wdog)
         wdog_copy_result (&wdog->dst[i], &max_lat);
     }
 
+    int const old_n_dst = wdog->n_dst;
+
     for (i = wdog->n_dst - 1; i >= 0; i--) // reverse order for ease of cleanup
     {
         wdog_dst_t* d = &wdog->dst[i];
@@ -378,9 +383,11 @@ wdog_collect_results (glb_wdog_t* const wdog)
 
         if (d->ctx->join) {
             pthread_join (d->ctx->id, NULL);
-//            d->joined = true;
-            if (i + 1 < wdog->n_dst) {
+            wdog_dst_free (d);
+            wdog->n_dst--;
+            if (i < wdog->n_dst) {
                 // not the last in the list, copy the last one over this
+                *d = wdog->dst[wdog->n_dst];
             }
             continue;
         }
@@ -391,11 +398,11 @@ wdog_collect_results (glb_wdog_t* const wdog)
         }
         else {
             // have heard nothing from the backend thread, put dest on hold
-//            d->current.state = GLB_DST_AVOID;
             new_weight = 0.0;
         }
 
         static double const WEIGHT_TOLERANCE = 0.1; // 10%
+
         if (new_weight != d->weight &&
             (new_weight <= 0.0 ||
              fabs(d->weight/new_weight - 1.0) > WEIGHT_TOLERANCE)) {
@@ -404,19 +411,24 @@ wdog_collect_results (glb_wdog_t* const wdog)
             if (!glb_router_change_dst (wdog->router, &dst)) {
                 d->weight = new_weight;
             }
-//            d->current.state = d->pending.state;
         }
+    }
+
+    if (old_n_dst != wdog->n_dst) {
+        // removed some destinations
+        void* const tmp = realloc (wdog->dst, wdog->n_dst * sizeof(wdog_dst_t));
+        if (tmp) wdog->dst = tmp;
     }
 
     return results;
 }
 
 static inline void
-timespec_add (struct timespec* t, long long d)
+timespec_add (struct timespec* t, long long i)
 {
-    d += t->tv_nsec;
-    t->tv_sec += d / 1000000000;
-    t->tv_nsec = d % 1000000000;
+    i += t->tv_nsec;
+    t->tv_sec += i / 1000000000;
+    t->tv_nsec = i % 1000000000;
 }
 
 static void*
@@ -487,38 +499,42 @@ wdog_dst_cleanup (glb_wdog_t* wdog)
     {
         wdog_dst_t* d = &wdog->dst[i];
         pthread_join (d->ctx->id, NULL);
-        wdog_backend_ctx_destroy (d->ctx);
+        wdog_backend_thread_ctx_destroy (d->ctx);
     }
 }
 
 glb_wdog_t*
 glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router)
 {
+    assert (router);
     assert (cnf->watchdog);
 
     glb_wdog_t* ret = calloc (1, sizeof(*ret));
 
     if (ret)
     {
-        ret->cnf = cnf;
-        wdog_backend_factory (cnf,
-                              &ret->backend,
-                              &ret->backend_thread,
-                              &ret->backend_destroy);
-
-        if (!ret->backend_thread)
+        int err = - wdog_backend_factory (cnf, &ret->backend);
+        if (err)
         {
+            glb_log_fatal ("Failed to initialize the backend: %d (%s)",
+                           err, strerror(err));
             free(ret);
             return NULL;
         }
 
-        assert (ret->backend || !ret->backend_destroy);
-        assert (ret->backend_destroy || !ret->backend);
+        assert (ret->backend.thread);
+        assert (ret->backend.ctx || !ret->backend.destroy);
+        assert (ret->backend.destroy || !ret->backend.ctx);
+
+        ret->cnf    = cnf;
+        ret->router = router;
 
         pthread_mutex_init (&ret->lock, NULL);
         pthread_cond_init  (&ret->cond, NULL);
 
-        ret->interval = cnf->interval * 1.5;
+        /* making this slightly bigger than backend polling interval
+         * to make sure that there is always a ready result for us to collect */
+        ret->interval = cnf->interval * 1.1;
 
         int i;
         for (i = 0; i < cnf->n_dst; i++) {
@@ -553,6 +569,12 @@ glb_wdog_destroy(glb_wdog_t* wdog)
     pthread_cond_destroy  (&wdog->cond);
     GLB_MUTEX_UNLOCK (&wdog->lock);
     pthread_mutex_destroy (&wdog->lock);
+    int i;
+    for (i = 0; i < wdog->n_dst; i++)
+    {
+        wdog_dst_free (&wdog->dst[i]);
+    }
+    wdog->backend.destroy (wdog->backend.ctx);
     free (wdog->dst);
     free (wdog);
 }

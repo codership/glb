@@ -1,1 +1,3 @@
-SUBDIRS = src doc files
+SUBDIRS = src doc
+
+EXTRA_DIST = files

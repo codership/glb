@@ -49,6 +49,7 @@ struct glb_ctrl
 {
     glb_cnf_t*    cnf;
     glb_router_t* router;
+    glb_wdog_t*   wdog;
 #ifdef GLBD
     glb_pool_t*   pool;
 #endif
@@ -167,10 +168,20 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
             return 0;
         }
 
-        if (glb_router_change_dst (ctrl->router, &dst) < 0) {
+        int err;
+        if (ctrl->wdog) {
+            err = glb_wdog_change_dst   (ctrl->wdog,   &dst, true);
+        }
+        else {
+            err = glb_router_change_dst (ctrl->router, &dst);
+        }
+
+        if (err < 0) {
+#ifdef GLBD
             char tmp[128];
             glb_dst_print (tmp, 128, &dst);
             glb_log_info ("Ctrl: failed to apply destination change: %s", tmp);
+#endif /* GLBD */
             ctrl_respond (ctrl, fd, "Error\n");
             return 0;
         }
@@ -258,6 +269,7 @@ ctrl_thread (void* arg)
 glb_ctrl_t*
 glb_ctrl_create (glb_cnf_t*    const cnf,
                  glb_router_t* const router,
+                 glb_wdog_t*   const wdog,
 #ifdef GLBD
                  glb_pool_t*   const pool,
 #endif /* GLBD */
@@ -281,6 +293,7 @@ glb_ctrl_create (glb_cnf_t*    const cnf,
     if (ret) {
         ret->cnf          = cnf;
         ret->router       = router;
+        ret->wdog         = wdog;
 #ifdef GLBD
         ret->pool         = pool;
 #endif /* GLBD */

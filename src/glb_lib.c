@@ -12,6 +12,7 @@
 
 #include "glb_env.h"
 #include "glb_router.h"
+#include "glb_wdog.h"
 #include "glb_control.h"
 
 #include <sys/types.h>
@@ -20,11 +21,12 @@
 #include <string.h>
 #include <stdio.h>
 
-static bool __glb_initialized     = false;
+static bool          __glb_initialized = false;
 
-static glb_cnf_t*    __glb_cnf    = NULL;
+static glb_cnf_t*    __glb_cnf         = NULL;
 
-static glb_router_t* __glb_router = NULL;
+static glb_router_t* __glb_router      = NULL;
+
 
 static int (*__glb_real_connect) (int                    sockfd,
                                   const struct sockaddr* addr,
@@ -39,15 +41,26 @@ __glb_init()
     {
         __glb_router = glb_router_create(__glb_cnf);
 
-        if (__glb_cnf->ctrl_set)
+        if (__glb_router)
         {
-            uint16_t const default_port =
-                glb_socket_addr_get_port(&__glb_cnf->inc_addr);
+            glb_wdog_t* wdog = NULL;
 
-            int const sock = glb_socket_create(&__glb_cnf->ctrl_addr, 0);
+            if (__glb_cnf->watchdog)
+            {
+                wdog = glb_wdog_create(__glb_cnf, __glb_router);
+            }
 
-            if (sock > 0)
-                glb_ctrl_create(__glb_cnf, __glb_router, default_port, 0, sock);
+            if (__glb_cnf->ctrl_set)
+            {
+                uint16_t const default_port =
+                    glb_socket_addr_get_port(&__glb_cnf->inc_addr);
+
+                int const sock = glb_socket_create(&__glb_cnf->ctrl_addr, 0);
+
+                if (sock > 0)
+                    glb_ctrl_create(__glb_cnf, __glb_router, wdog,
+                                    default_port, 0, sock);
+            }
         }
     }
 
@@ -79,11 +92,9 @@ int connect(int                    const sockfd,
     {
         if (__glb_match_address (addr, addrlen))
         {
-//            puts("DEBUG: Connecting by router");
             return __glb_router_connect(__glb_router, sockfd);
         }
     }
-//    puts ("DEBUG: Connecting directly");
 
     return __glb_real_connect(sockfd, addr, addrlen);
 }

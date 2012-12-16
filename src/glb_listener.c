@@ -40,8 +40,6 @@ listener_thread (void* arg)
         int            server_sock;
         glb_sockaddr_t server;
 
-        assert (1 == ret);
-
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
         if (client_sock < 0) {

@@ -66,19 +66,22 @@ struct glb_router
 static const double router_div_prot = 1.0e-09; // protection against div by 0
 
 // seconds (should be > 1 due to time_t precision)
-static const double DST_RETRY_INTERVAL = 2.0;
+//static const double ROUTER_RETRY_INTERVAL = 2.0;
+#define ROUTER_RETRY_INTERVAL(router) ((router->cnf->interval >> 30) + 1)
 
 static inline bool
-router_dst_is_good (const router_dst_t* const d, time_t const now)
+router_dst_is_good (const router_dst_t* const d,
+                    time_t              const now,
+                    long                const retry)
 {
-    return (d->dst.weight > 0.0 &&
-            difftime (now, d->failed) > DST_RETRY_INTERVAL);
+    return ((d->dst.weight > 0.0) && (difftime (now, d->failed) > retry));
 }
 
 static void
 router_redo_map (glb_router_t* router)
 {
-    time_t now = time(NULL);
+    time_t const now   = time(NULL);
+    long   const retry = ROUTER_RETRY_INTERVAL(router);
     int i;
 
     // pass 1: calculate total weight of available destinations
@@ -87,7 +90,7 @@ router_redo_map (glb_router_t* router)
     {
         router_dst_t* d = &router->dst[i];
 
-        if (router_dst_is_good (d, now))
+        if (router_dst_is_good (d, now, retry))
         {
             total += d->dst.weight;
             d->map = d->dst.weight;
@@ -272,14 +275,16 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
         ret->n_dst      = 0;
         ret->dst        = NULL;
 
-        for (i = 0; i < cnf->n_dst; i++) {
-            if (glb_router_change_dst(ret, &cnf->dst[i]) < 0) {
-                router_cleanup (ret);
-                return NULL;
+        if (!cnf->watchdog) {
+            for (i = 0; i < cnf->n_dst; i++) {
+                if (glb_router_change_dst(ret, &cnf->dst[i]) < 0) {
+                    router_cleanup (ret);
+                    return NULL;
+                }
             }
-        }
 
-        assert (ret->n_dst == cnf->n_dst);
+            assert (ret->n_dst <= cnf->n_dst);
+        }
     }
 
     return ret;
@@ -307,7 +312,7 @@ router_choose_dst_least (glb_router_t* router)
             router_dst_t* d = &router->dst[i];
 
             if (d->usage > max_usage &&
-                difftime (now, d->failed) > DST_RETRY_INTERVAL) {
+                difftime (now, d->failed) > ROUTER_RETRY_INTERVAL(router)) {
                 ret = d;
                 max_usage = d->usage;
             }
@@ -322,7 +327,8 @@ router_choose_dst_least (glb_router_t* router)
 static router_dst_t*
 router_choose_dst_round (glb_router_t* router)
 {
-    time_t now = time(NULL);
+    time_t const now   = time(NULL);
+    long   const retry = ROUTER_RETRY_INTERVAL(router);
     int    offset;
 
     for (offset = 0; offset < router->n_dst; offset++)
@@ -331,7 +337,7 @@ router_choose_dst_round (glb_router_t* router)
 
         router->rrb_next = (router->rrb_next + 1) % router->n_dst;
 
-        if (router_dst_is_good (d, now)) return d;
+        if (router_dst_is_good (d, now, retry)) return d;
     }
 
     return NULL;
@@ -370,7 +376,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
     }
 #else /* OLD */
     if (router->map_failed != 0 &&
-        difftime (now, router->map_failed) > DST_RETRY_INTERVAL)
+        difftime (now, router->map_failed) > ROUTER_RETRY_INTERVAL(router))
     {
         router_redo_map (router);
         router->map_failed = 0;
