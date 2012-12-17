@@ -8,6 +8,7 @@
 #define _glb_cnf_h_
 
 #include "glb_dst.h"
+#include "glb_time.h"
 
 #include <stdbool.h>    // for bool
 #include <stdio.h>      // for FILE and fprintf()
@@ -36,7 +37,7 @@ typedef struct glb_cnf
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
 #endif /* GLBD */
-    long long      interval;     // health check interval (nanoseconds)
+    glb_time_t     interval;     // health check interval (nanoseconds)
     bool           ctrl_set;     // was set? (false)
     glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations

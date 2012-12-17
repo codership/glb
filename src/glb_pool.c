@@ -885,7 +885,7 @@ glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 
     ret = pool_bcast_ctl (pool, &stats_ctl);
     if (!ret) {
-        double elapsed = now - pool->last_stats;
+        double elapsed = glb_time_seconds(now - pool->last_stats);
         ret = snprintf (buf, buf_len, "in: %lu out: %lu "
                         "recv: %lu / %lu send: %lu / %lu "
                         "conns: %lu / %lu poll: %lu / %lu / %lu "
@@ -925,7 +925,7 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 #ifdef GLB_POOL_STATS
     {
     glb_time_t now = glb_time_now ();
-    double elapsed = now - pool->last_info;
+    double elapsed = glb_time_seconds (now - pool->last_info);
 #endif
 
     int i;

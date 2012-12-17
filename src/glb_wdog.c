@@ -423,13 +423,6 @@ wdog_collect_results (glb_wdog_t* const wdog)
     return results;
 }
 
-static inline void
-timespec_add (struct timespec* t, long long i)
-{
-    i += t->tv_nsec;
-    t->tv_sec += i / 1000000000;
-    t->tv_nsec = i % 1000000000;
-}
 
 static void*
 wdog_main_loop (void* arg)
@@ -450,15 +443,14 @@ wdog_main_loop (void* arg)
         }
     }
 
-    struct timeval now;
-    gettimeofday (&now, NULL);
-    wdog->next.tv_sec  = now.tv_sec;
-    wdog->next.tv_nsec = now.tv_usec * 1000;
-
     pthread_cond_signal (&wdog->cond);
 
-    while (!wdog->quit) {
-        timespec_add (&wdog->next, wdog->interval);
+    wdog->next = glb_timespec_now();
+
+    while (!wdog->quit)
+    {
+        glb_timespec_add (&wdog->next, wdog->interval);
+
         int err;
         do {
             err = pthread_cond_timedwait (&wdog->cond, &wdog->lock,

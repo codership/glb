@@ -11,6 +11,8 @@
 
 #include <pthread.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
 static inline void GLB_MUTEX_LOCK (pthread_mutex_t* mtx)
 {

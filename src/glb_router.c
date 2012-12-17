@@ -65,9 +65,9 @@ struct glb_router
 
 static const double router_div_prot = 1.0e-09; // protection against div by 0
 
-// seconds (should be > 1 due to time_t precision)
-//static const double ROUTER_RETRY_INTERVAL = 2.0;
-#define ROUTER_RETRY_INTERVAL(router) ((router->cnf->interval >> 30) + 1)
+// seconds (should be >= 1 due to time_t precision)
+#define ROUTER_RETRY_INTERVAL(router) \
+(glb_time_approx_seconds(router->cnf->interval) + 1)
 
 static inline bool
 router_dst_is_good (const router_dst_t* const d,

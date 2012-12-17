@@ -10,6 +10,7 @@
 #ifndef _glb_wdog_backend_h_
 #define _glb_wdog_backend_h_
 
+#include "glb_time.h"   // for time manipulation functions and glb_time_t
 #include "glb_signal.h" // for extern volatile sig_atomic_t glb_terminate;
 
 #include <stdbool.h>
@@ -54,7 +55,7 @@ typedef struct glb_backend_thread_ctx
     pthread_cond_t     cond;    //! signal to thread
     char*              addr;    //! address of the destination to watch
     uint16_t           port;
-    long long          interval;//! check interval (nanoseconds)
+    glb_time_t         interval;//! check interval (nanoseconds)
     glb_wdog_check_t   result;  //! check result
     bool               quit;    //! signal for thread to quit
     bool               join;    //! thread is ready to be joined

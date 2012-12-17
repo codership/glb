@@ -102,7 +102,7 @@ env_parse_interval (glb_cnf_t* cnf, const char* p)
     if (!p) return;
 
     char*  endptr;
-    long long tmp = strtod (p, &endptr) * 1000000000;
+    glb_time_t tmp = glb_time_from_double (strtod (p, &endptr));
 
     if ((*endptr != '\0' && !isspace(*endptr)) || errno || tmp <= 0) return;
 

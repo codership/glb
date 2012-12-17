@@ -171,7 +171,7 @@ glb_cmd_parse (int argc, char* argv[])
             exit (EXIT_FAILURE);
             break;
         case CMD_OPT_INTERVAL:
-            tmp->interval = strtod (optarg, &endptr) * 1000000000;
+            tmp->interval = glb_time_from_double(strtod (optarg, &endptr));
             if ((*endptr != '\0' && *endptr != ' ') || errno ||
                 tmp->interval <= 0) {
                 fprintf (stderr, "Bad check interval value: %s. "
