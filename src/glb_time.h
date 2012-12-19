@@ -15,7 +15,8 @@ typedef long long glb_time_t;
 
 /*! Returns current time as "elapsed" nanoseconds. */
 static inline glb_time_t
-glb_time_now() {
+glb_time_now()
+{
     struct timeval tv;
     gettimeofday (&tv, NULL);
     return (tv.tv_sec * 1000000000LL + tv.tv_usec * 1000);
@@ -29,7 +30,7 @@ glb_timespec_now()
     gettimeofday (&tv, NULL);
 
     /* it seems that we can't simply cast struct timeval to struct timespec
-     * as they have potentially different types for members. */
+     * as they potentially may have different types for members. */
     struct timespec ts = {
         .tv_sec  = tv.tv_sec,
         .tv_nsec = tv.tv_usec * 1000

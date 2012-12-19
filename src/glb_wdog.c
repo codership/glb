@@ -37,6 +37,7 @@ add/remove destinations
 
 #include "glb_wdog.h"
 #include "glb_wdog_backend.h"
+#include "glb_wdog_exec.h"
 #include "glb_dst.h"
 #include "glb_log.h"
 #include "glb_socket.h"
@@ -93,7 +94,7 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
             glb_backend_thread_ctx_t* ret = calloc (1, sizeof(*ret));
 
             if (ret) {
-                glb_log_info("Created context for %s:%ld", addr, port);
+                glb_log_debug ("Created context for %s:%ld", addr, port);
                 ret->backend = backend;
                 pthread_mutex_init (&ret->lock, NULL);
                 pthread_cond_init  (&ret->cond, NULL);
@@ -239,18 +240,16 @@ wdog_backend_factory (const glb_cnf_t* cnf,
     if (spec)
     {
         *spec = '\0'; // separate watchdog id string
-        spec++;
+        spec++;       // this is passed to backend
     }
 
     if (!strcmp (cnf->watchdog, "dummy"))
     {
         return glb_backend_dummy_init (backend, spec);
     }
-    else if (!strcmp (cnf->watchdog, "script"))
+    else if (!strcmp (cnf->watchdog, "exec"))
     {
-        glb_log_error("'%s' watchdog not implemented.", cnf->watchdog);
-//        *backend = glb_script_create (spec, thread, destroy);
-        return -ENOSYS;
+        return glb_backend_exec_init (backend, spec);
     }
     else
     {
@@ -363,8 +362,9 @@ wdog_dst_free (wdog_dst_t* d)
 static int
 wdog_collect_results (glb_wdog_t* const wdog)
 {
-    glb_log_debug ("main loop collecting...");
-
+#ifdef GLBD
+    if (wdog->cnf->verbose) glb_log_debug ("main loop collecting...");
+#endif
     double max_lat = 0.0;
     int results = 0;
 
@@ -408,7 +408,11 @@ wdog_collect_results (glb_wdog_t* const wdog)
              fabs(d->weight/new_weight - 1.0) > WEIGHT_TOLERANCE)) {
             glb_dst_t dst = d->dst;
             dst.weight = new_weight;
-            if (!glb_router_change_dst (wdog->router, &dst)) {
+            int ret = glb_router_change_dst (wdog->router, &dst);
+            glb_log_debug ("Changing weight %6.3f -> %6.3f:  %d (%s)",
+                           d->weight, new_weight,
+                           ret, strerror (ret > 0 ? 0 : -ret));
+            if (ret >= 0) {
                 d->weight = new_weight;
             }
         }
@@ -508,7 +512,7 @@ glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router)
         int err = - wdog_backend_factory (cnf, &ret->backend);
         if (err)
         {
-            glb_log_fatal ("Failed to initialize the backend: %d (%s)",
+            glb_log_error ("Failed to initialize the backend: %d (%s)",
                            err, strerror(err));
             free(ret);
             return NULL;

@@ -2,12 +2,13 @@
 # $Id$
 
 COMMON_SRCS = \
-	glb_socket.c   \
-	glb_dst.c      \
-	glb_cnf.c      \
-	glb_router.c   \
-	glb_control.c  \
-	glb_wdog.c     \
+	glb_socket.c    \
+	glb_dst.c       \
+	glb_cnf.c       \
+	glb_router.c    \
+	glb_control.c   \
+	glb_wdog.c      \
+	glb_wdog_exec.c \
 	glb_wdog_backend.c
 
 sbin_PROGRAMS = glbd

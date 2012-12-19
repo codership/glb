@@ -14,6 +14,9 @@
 extern volatile sig_atomic_t
 glb_terminate;
 
+extern const char*
+glb_fifo_name;
+
 // The signal to be sent to parent to confirm that child has started fine.
 #define GLB_SIGNAL_OK SIGUSR1
 

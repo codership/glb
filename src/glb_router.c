@@ -120,6 +120,7 @@ router_dst_usage (router_dst_t* d)
 { return (d->dst.weight / (d->conns + router_div_prot)); }
 #endif
 
+/*! return index of the deleted destination or negative error code*/
 int
 glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 {

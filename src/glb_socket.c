@@ -7,6 +7,7 @@
 #include "glb_socket.h"
 #include "glb_cnf.h"
 #include "glb_log.h"
+#include "glb_misc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,6 +168,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     }
 #endif /* TCP_DEFER_ACCEPT */
 
+
     return ret;
 }
 
@@ -188,7 +190,8 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     }
 
 #ifdef GLBD
-    if ((err = glb_socket_setopt(sock, optflags))) goto error;
+    if ((err = glb_socket_setopt (sock, optflags)))       goto error;
+    if ((err = glb_set_fd_flag (sock, FD_CLOEXEC, true))) goto error;
 #endif
 
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)

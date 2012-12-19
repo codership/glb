@@ -32,4 +32,29 @@ static inline void GLB_MUTEX_UNLOCK (pthread_mutex_t* mtx)
     }
 }
 
+#include <stdbool.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+/* Even though there is currently only FD_CLOEXEC defined, it is good to
+ * play safe. */
+static inline int
+glb_set_fd_flag (int const fd, int const flag, bool const on)
+{
+    int flags = fcntl (fd, F_GETFD);
+
+    if (flags >= 0)
+    {
+        if (on)
+            flags |= flag;
+        else
+            flags &= ~(flag);
+
+        if (fcntl (fd, F_SETFD, flags) >= 0) return 0;
+    }
+
+    return -errno;
+}
+
 #endif // _glb_misc_h_
