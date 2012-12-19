@@ -202,7 +202,11 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
         else {
             router->dst = tmp;
             router->n_dst--;
-            router->rrb_next = router->rrb_next % router->n_dst;
+            assert (router->n_dst >= 0);
+            if (router->n_dst)
+                router->rrb_next = router->rrb_next % router->n_dst;
+            else
+                router->rrb_next = 0;
         }
     }
     else if (d->dst.weight != dst->weight) {
