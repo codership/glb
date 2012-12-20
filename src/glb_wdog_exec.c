@@ -370,9 +370,10 @@ exec_thread (void* arg)
     {
         if (pthread_mutex_unlock (&ctx->lock)) abort();
 
-        char*  others = NULL;
-        size_t others_len = 0;
-        glb_dst_state_t state = GLB_DST_NOTFOUND;
+        struct glb_wdog_check r = { 0, 0, 0, 0, 0 };
+//        char*  others = NULL;
+//        size_t others_len = 0;
+//        glb_dst_state_t state = GLB_DST_NOTFOUND;
         struct proc p;
 
         glb_time_t start = glb_time_now();
@@ -387,12 +388,13 @@ exec_thread (void* arg)
                 if (('\0' == endptr[0] || isspace(endptr[0])) &&
                     st >= GLB_DST_NOTFOUND && st <= GLB_DST_READY)
                 {
-                    state = st;
+                    r.state = st;
                     if ('\0' != endptr[0]) {
                         endptr++;
-                        others_len = strlen (endptr);
-                        if (others_len > 0) others = endptr;
+                        r.others_len = strlen (endptr);
+                        if (r.others_len > 0) r.others = endptr;
                     }
+                    r.ready = true;
                 }
                 else {
                     ctx->errn = EPROTO;
@@ -409,24 +411,20 @@ exec_thread (void* arg)
         proc_wait(&p);
         proc_cleanup(&p);
 
-        if (p.err_) ctx->errn = p.err_;
+        r.latency = glb_time_seconds (glb_time_now() - start);
 
-        double latency = glb_time_seconds (glb_time_now() - start);
+        if (p.err_) ctx->errn = p.err_;
 
         if (pthread_mutex_lock (&ctx->lock)) abort();
 
-        ctx->result.state      = state;
-        ctx->result.latency    = latency;
-        ctx->result.others     = others;
-        ctx->result.others_len = others_len;
-        ctx->result.ready      = true;
-
         if (ctx->errn) break;
+
+        ctx->result = r;
 
         /* We want to check working nodes very frequently to learn when they
          * go down. For failed nodes we can make longer intervals to minimize
          * the noise. */
-        int interval_mod = state > GLB_DST_NOTFOUND ? 1 : 10;
+        int interval_mod = r.state > GLB_DST_NOTFOUND ? 1 : 10;
 
         glb_timespec_add (&next, ctx->interval * interval_mod); // next wakeup
 
@@ -437,6 +435,8 @@ cleanup:
 
     free (cmd);
     free (res);
+
+    memset (&ctx->result, 0, sizeof(ctx->result));
 
     ctx->join = true; /* ready to be joined */
 

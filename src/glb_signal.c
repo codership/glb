@@ -38,9 +38,10 @@ signal_handler(int signum)
     case SIGINT:
     case SIGQUIT:
     case SIGPIPE:
-        fifo_cleanup();
+    case SIGABRT:
         glb_log_info ("Received signal %d. Terminating.", signum);
         glb_terminate = 1;
+        fifo_cleanup();
         return;
     default: // should never get here
         fifo_cleanup();
@@ -59,4 +60,5 @@ glb_signal_set_handler()
     signal (SIGINT,  signal_handler);
     signal (SIGQUIT, signal_handler);
     signal (SIGPIPE, signal_handler);
+    signal (SIGABRT, signal_handler);
 }
