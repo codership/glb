@@ -54,7 +54,7 @@ typedef struct wdog_dst
     bool                      explicit; //! was added explicitly, never remove
     glb_dst_t                 dst;
     double                    weight;
-    glb_wdog_check_t          pending;
+    glb_wdog_check_t          result;
     bool                      memb_changed;
     glb_backend_thread_ctx_t* ctx;      //! backend thread context
 } wdog_dst_t;
@@ -64,6 +64,7 @@ struct glb_wdog
     glb_backend_t    backend;
     const glb_cnf_t* cnf;
     glb_router_t*    router;
+    glb_pool_t*      pool;
     pthread_t        thd;
     pthread_mutex_t  lock;
     pthread_cond_t   cond;
@@ -261,23 +262,23 @@ wdog_backend_factory (const glb_cnf_t* cnf,
 static inline int
 wdog_copy_result (wdog_dst_t* d, double* max_lat)
 {
-    double old_lat    = d->pending.latency;
-    char*  others     = d->pending.others;
-    size_t others_len = d->pending.others_len;
+    double old_lat    = d->result.latency;
+    char*  others     = d->result.others;
+    size_t others_len = d->result.others_len;
 
     GLB_MUTEX_LOCK (&d->ctx->lock);
     {
         glb_wdog_check_t* res = &d->ctx->result;
 
-        d->pending = *res;
+        d->result = *res;
         res->ready = false;
 
         // restore original buffer
-        d->pending.others     = others;
-        d->pending.others_len = others_len;
+        d->result.others     = others;
+        d->result.others_len = others_len;
 
-        if (d->pending.ready) {
-            if (GLB_DST_NOTFOUND == d->pending.state) {
+        if (d->result.ready) {
+            if (GLB_DST_NOTFOUND == d->result.state) {
                 if (!d->explicit) { // if selfdiscovered - schedule for cleanup
                     d->ctx->quit = true;
                     pthread_cond_signal (&d->ctx->cond);
@@ -289,27 +290,27 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
                 if (others_len < res->others_len ||
                     others_len > (res->others_len * 2)) {
                     // buffer size is too different, reallocate
-                    d->pending.others = realloc (others, res->others_len);
-                    if (!d->pending.others) {
+                    d->result.others = realloc (others, res->others_len);
+                    if (!d->result.others) {
                         // this is pretty much fatal, but we'll try
                         free (others);
-                        d->pending.others_len = 0;
+                        d->result.others_len = 0;
                     }
                     else {
                         changed_length = true;
-                        d->pending.others_len = res->others_len;
+                        d->result.others_len = res->others_len;
                     }
                 }
 
-                assert (d->pending.others || 0 == d->pending.others_len);
-                assert (NULL == d->pending.others || d->pending.others_len);
+                assert (d->result.others || 0 == d->result.others_len);
+                assert (NULL == d->result.others || d->result.others_len);
 
                 if (res->others_len > 0) {
-                    if (d->pending.others_len >= res->others_len &&
+                    if (d->result.others_len >= res->others_len &&
                         (changed_length ||
-                         strcmp(d->pending.others, res->others))){
+                         strcmp(d->result.others, res->others))){
                         d->memb_changed = true;
-                        strcpy (d->pending.others, res->others);
+                        strcpy (d->result.others, res->others);
                     }
                 }
             }
@@ -317,14 +318,14 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
     }
     GLB_MUTEX_UNLOCK (&d->ctx->lock);
 
-    if (d->pending.ready && GLB_DST_READY == d->pending.state) {
+    if (d->result.ready && GLB_DST_READY == d->result.state) {
         // smooth latency measurement with the previous one
-        d->pending.latency = (d->pending.latency + old_lat) / 2.0;
-        if (*max_lat < d->pending.latency) *max_lat = d->pending.latency;
+        d->result.latency = (d->result.latency + old_lat * 2.0) / 3.0;
+        if (*max_lat < d->result.latency) *max_lat = d->result.latency;
     }
     else {
         // preserve previously measured latency
-        d->pending.latency = old_lat;
+        d->result.latency = old_lat;
     }
 
     return 0;
@@ -334,9 +335,9 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
 static inline double
 wdog_result_weight (wdog_dst_t* const d, double const max_lat)
 {
-    assert (d->pending.ready); // this must be called only for fresh data
+    assert (d->result.ready); // this must be called only for fresh data
 
-    switch (d->pending.state)
+    switch (d->result.state)
     {
     case GLB_DST_NOTFOUND:
     case GLB_DST_NOTREADY:
@@ -344,7 +345,7 @@ wdog_result_weight (wdog_dst_t* const d, double const max_lat)
     case GLB_DST_AVOID:
         return 0.0;
     case GLB_DST_READY:
-        if (max_lat > 0) return d->dst.weight * max_lat / d->pending.latency;
+        if (max_lat > 0) return d->dst.weight * max_lat / d->result.latency;
         return d->dst.weight;
     }
 
@@ -355,7 +356,7 @@ static void
 wdog_dst_free (wdog_dst_t* d)
 {
     wdog_backend_thread_ctx_destroy (d->ctx);
-    free (d->pending.others);
+    free (d->result.others);
 }
 
 // collects and processes results, returns the number of results collected
@@ -392,13 +393,13 @@ wdog_collect_results (glb_wdog_t* const wdog)
             continue;
         }
 
-        if (d->pending.ready) {
+        if (d->result.ready) {
             results++;
             new_weight = wdog_result_weight (d, max_lat);
         }
         else {
             // have heard nothing from the backend thread, put dest on hold
-            new_weight = 0.0;
+            new_weight = d->weight > 0.0 ? 0.0 : d->weight;
         }
 
         static double const WEIGHT_TOLERANCE = 0.1; // 10%
@@ -413,6 +414,9 @@ wdog_collect_results (glb_wdog_t* const wdog)
                            d->weight, new_weight,
                            ret, strerror (ret > 0 ? 0 : -ret));
             if (ret >= 0) {
+                if (new_weight < 0.0 && wdog->pool) { // clean up the pool!
+                    glb_pool_drop_dst (wdog->pool, &d->dst.addr);
+                }
                 d->weight = new_weight;
             }
         }
@@ -500,7 +504,7 @@ wdog_dst_cleanup (glb_wdog_t* wdog)
 }
 
 glb_wdog_t*
-glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router)
+glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router, glb_pool_t* pool)
 {
     assert (router);
     assert (cnf->watchdog);
@@ -524,6 +528,7 @@ glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router)
 
         ret->cnf    = cnf;
         ret->router = router;
+        ret->pool   = pool;
 
         pthread_mutex_init (&ret->lock, NULL);
         pthread_cond_init  (&ret->cond, NULL);

@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 
-// unfotunately I see no way to use glb_pool.c polling code in here
+// unfortunately I see no way to use glb_pool.c polling code in here
 // so it is yet another implementation
 #include <poll.h>
 
@@ -49,10 +49,8 @@ struct glb_ctrl
 {
     glb_cnf_t*    cnf;
     glb_router_t* router;
-    glb_wdog_t*   wdog;
-#ifdef GLBD
     glb_pool_t*   pool;
-#endif
+    glb_wdog_t*   wdog;
     pthread_t     thread;
     int           fifo;
     int           inet_sock;
@@ -151,11 +149,10 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         ctrl_respond (ctrl, fd, req);
         return 0;
     }
-    else if (!strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
-#ifdef GLBD
+    else if (ctrl->pool &&
+             !strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
         glb_pool_print_stats (ctrl->pool, req, sizeof(req));
         ctrl_respond (ctrl, fd, req);
-#endif /* GLBD */
         return 0;
     }
     else { // change destiantion request
@@ -188,12 +185,12 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
 
         ctrl_respond (ctrl, fd, "Ok\n");
 
-#ifdef GLBD
-        if (dst.weight < 0.0) {
+        if (ctrl->pool && dst.weight < 0.0 && ctrl->wdog) {
             // destination was removed from router, drop all connections to it
+            // watchdog will do it itself
             glb_pool_drop_dst (ctrl->pool, &dst.addr);
         }
-#endif /* GLBD */
+
         return 0;
     }
 }
@@ -269,10 +266,8 @@ ctrl_thread (void* arg)
 glb_ctrl_t*
 glb_ctrl_create (glb_cnf_t*    const cnf,
                  glb_router_t* const router,
-                 glb_wdog_t*   const wdog,
-#ifdef GLBD
                  glb_pool_t*   const pool,
-#endif /* GLBD */
+                 glb_wdog_t*   const wdog,
                  uint16_t      const port,
                  int           const fifo,
                  int           const sock)
@@ -293,10 +288,8 @@ glb_ctrl_create (glb_cnf_t*    const cnf,
     if (ret) {
         ret->cnf          = cnf;
         ret->router       = router;
-        ret->wdog         = wdog;
-#ifdef GLBD
         ret->pool         = pool;
-#endif /* GLBD */
+        ret->wdog         = wdog;
         ret->fifo         = fifo;
         ret->inet_sock    = sock;
         ret->default_port = port;

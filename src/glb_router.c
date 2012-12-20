@@ -188,26 +188,27 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
         router->conns -= d->conns; assert (router->conns >= 0);
 #endif
         if ((i + 1) < router->n_dst) {
-            // it is not the last, move the rest to close the gap
-            router_dst_t* next = d + 1;
-            size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
-            memmove (d, next, len);
+            // it is not the last, copy the last one over
+            *d = router->dst[router->n_dst - 1];
+//            router_dst_t* next = d + 1;
+//            size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
+//            memmove (d, next, len);
         }
 
-        tmp = realloc (router->dst,
-                       (router->n_dst - 1) * sizeof(router_dst_t));
+        router->n_dst--;
+        assert (router->n_dst >= 0);
+        if (router->n_dst)
+            router->rrb_next = router->rrb_next % router->n_dst;
+        else
+            router->rrb_next = 0;
+
+        tmp = realloc (router->dst, router->n_dst * sizeof(router_dst_t));
 
         if (!tmp && (router->n_dst > 1)) {
-            i = -ENOMEM;
+            i = -ENOMEM; // this should actually be survivable, but no point
         }
         else {
             router->dst = tmp;
-            router->n_dst--;
-            assert (router->n_dst >= 0);
-            if (router->n_dst)
-                router->rrb_next = router->rrb_next % router->n_dst;
-            else
-                router->rrb_next = 0;
         }
     }
     else if (d->dst.weight != dst->weight) {
@@ -548,7 +549,7 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
 
     // avoid socket leak
     if (ret < 0) {
-        glb_log_error ("router_connect_dst() failed.");
+        glb_log_debug ("router_connect_dst() failed.");
         close (sock);
         sock = ret;
     }

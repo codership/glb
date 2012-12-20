@@ -173,7 +173,7 @@ int main (int argc, char* argv[])
     }
 
     if (cnf->watchdog) {
-        wdog = glb_wdog_create (cnf, router);
+        wdog = glb_wdog_create (cnf, router, pool);
         if (!wdog) {
             glb_log_fatal ("Failed to create destination watchdog. Exiting.");
             goto failure;
@@ -181,7 +181,7 @@ int main (int argc, char* argv[])
     }
 
     inc_port = glb_socket_addr_get_port (&cnf->inc_addr);
-    ctrl = glb_ctrl_create (cnf, router, wdog, pool,
+    ctrl = glb_ctrl_create (cnf, router, pool, wdog,
                             inc_port, ctrl_fifo, ctrl_sock);
     if (!ctrl) {
         glb_log_fatal ("Failed to create control thread. Exiting.");

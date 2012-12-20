@@ -47,7 +47,7 @@ __glb_init()
 
             if (__glb_cnf->watchdog)
             {
-                wdog = glb_wdog_create(__glb_cnf, __glb_router);
+                wdog = glb_wdog_create(__glb_cnf, __glb_router, NULL);
             }
 
             if (__glb_cnf->ctrl_set)
@@ -58,7 +58,7 @@ __glb_init()
                 int const sock = glb_socket_create(&__glb_cnf->ctrl_addr, 0);
 
                 if (sock > 0)
-                    glb_ctrl_create(__glb_cnf, __glb_router, wdog,
+                    glb_ctrl_create(__glb_cnf, __glb_router, NULL, wdog,
                                     default_port, 0, sock);
             }
         }

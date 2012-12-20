@@ -28,7 +28,7 @@ typedef void (*glb_backend_destroy_t) (glb_backend_ctx_t* backend);
 
 typedef enum glb_dst_state
 {
-    GLB_DST_NOTFOUND = -1,//! destination not reachable (probably dead)
+    GLB_DST_NOTFOUND = 0, //! destination not reachable (probably dead)
     GLB_DST_NOTREADY,     //! destination not ready to accept connections
     GLB_DST_AVOID,        //! destination better be avoided (overloaded/blocked)
     GLB_DST_READY         //! destination fully functional

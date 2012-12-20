@@ -257,7 +257,7 @@ int proc_wait (struct proc* proc)
           }
           else {       // command didn't complete with exit()
               glb_log_error("Process was aborted.");
-              proc->err_ = errno ? errno : ECHILD;
+//              proc->err_ = errno ? errno : ECHILD;
           }
 
           if (proc->err_) {
@@ -396,12 +396,12 @@ exec_thread (void* arg)
                 }
                 else {
                     ctx->errn = EPROTO;
-                    glb_log_error ("Failed to parse program output: '%s'", res);
+                    glb_log_error ("Failed to parse process output: '%s'", res);
                 }
             }
             else {
                 ctx->errn = errno;
-                glb_log_error ("Failed to read program output: %d (%s)",
+                glb_log_error ("Failed to read process output: %d (%s)",
                                errno, strerror(errno));
             }
         }
@@ -415,19 +415,22 @@ exec_thread (void* arg)
 
         if (pthread_mutex_lock (&ctx->lock)) abort();
 
-        ctx->result.state   = state;   // destination always ready
-        ctx->result.latency = latency; // same latency for all destinations
-        ctx->result.others  = others;  // no auto-discovered destinations
+        ctx->result.state      = state;
+        ctx->result.latency    = latency;
+        ctx->result.others     = others;
         ctx->result.others_len = others_len;
-        ctx->result.ready   = true;    // new data ready
+        ctx->result.ready      = true;
 
         if (ctx->errn) break;
 
-        glb_timespec_add (&next, ctx->interval); // next wakeup
+        /* We want to check working nodes very frequently to learn when they
+         * go down. For failed nodes we can make longer intervals to minimize
+         * the noise. */
+        int interval_mod = state > GLB_DST_NOTFOUND ? 1 : 10;
 
-        /* this unlocks the context and watchdog can have full access to it */
+        glb_timespec_add (&next, ctx->interval * interval_mod); // next wakeup
+
         pthread_cond_timedwait (&ctx->cond, &ctx->lock, &next);
-        /* here the context is locked again */
     }
 
 cleanup:

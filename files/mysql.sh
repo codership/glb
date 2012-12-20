@@ -19,7 +19,8 @@
 # should be assigned to the Galera donor node:
 #
 # 1 - forcefully cut all connections to it
-# 2 - stop directing connections to it, but leave the established intact
+# 2 - stop directing connections to it, but leave established ones intact
+#     (default)
 # 3 - treat the donor as a regular working node
 #
 # The rest of the command line is the options passed to mysql command as is.
@@ -28,7 +29,7 @@
 ADDR=$1
 shift
 
-DONOR_STATE=1
+DONOR_STATE=2
 if [ "$1" = "-d" ]
 then
     shift
@@ -59,13 +60,15 @@ else
     OTHERS=
 fi
 
-# convert state to glbd code
+# convert wsrep state to glbd code
 case $STATE in
     4) STATE="3"
     ;;
+    3) STATE="2"
+    ;;
     2) STATE="$DONOR_STATE"
     ;;
-    0|1|3|5) STATE="1"
+    0|1|5) STATE="1"
     ;;
     *) STATE="0"
 esac
