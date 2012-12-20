@@ -1,4 +1,4 @@
-FILES IN THIS DIRECTORY
+FILES IN THIS DIRECTORY:
 
 glbd.sh, glbd.cfg:
     start/stop script and configuration template to run glbd as a "service".
@@ -36,3 +36,10 @@ Router:
       127.0.0.1:3303  :    1.000   0.000     0
 ----------------------------------------------------
 Destinations: 2, total connections: 0
+
+
+mysql.sh:
+    A script for the "exec" watchdog backend to test MySQL availability.
+    In the case of MySQL/Galera cluster it also checks node state and takes it
+    into account. See inside comments for details.
+

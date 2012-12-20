@@ -29,6 +29,8 @@ Features:
    OS does not support epoll API, consider using several threads even on a
    single core machine as it will lessen poll() overhead proportionally and
    can improve overall performance by a factor of 2 or more.
+ - optional watchdog module can monitor destinations and adjust routing table
+   automatically.
 
 libglb is a shared library that provides 0-effort connection balancing to
 any Linux application that uses standard libc connect() call by overloading
@@ -165,6 +167,37 @@ In other words source tracking should be considered a best effort feature and
 will work best for short-lived connections.
 
 
+WATCHDOG:
+=========
+(NOTE: this is a work in progress and neither functionality nor terminology is
+       final.)
+
+Without the watchdog GLB can check destination availability only via the
+ability to establish TCP connection to destination. For most use cases TCP
+connectivity is an insufficient check. E.g. for HTTP server it is important to
+be able to serve webpages and for DBMS server - to be able to execute requests.
+Watchdog module implements asynchronus monitoring of destinations via backends
+made to check particular service availability.
+
+Watchdog is enabled with a -w|--watchdog option. Its parameter is a string
+containig the backend ID string, optionally followed by a colon and backend
+configuration options. Example:
+
+$ glbd -w exec:"mysql.sh -utest -ptestpass" -t 2 3306 192.168.0.1 192.168.0.2
+
+This initializes "exec" backend that executes external programs. In this case
+it will periodically execute mysql.sh script (can be found in the files/
+directory, must be placed in PATH) with provided parameters to check MySQL
+servers at 192.168.0.1 and 192.168.0.2 (in parallel threads). To pass server
+address to a script, 'exec' backend will insert host:port string as the first
+argument after a script/command name, so the actual command that would be
+executed in this case looks like:
+
+"mysql.sh 192.168.0.1:3306 -utest -ptestpass"
+
+Check interval is set with -i|--interval parameter (fractional seconds, 1.0).
+
+
 RUNNING GLBD AS A "SERVICE":
 ============================
 See README in the files/ directory.
@@ -221,3 +254,7 @@ GLB_CONTROL=[IP:]PORT
     to library functionality limited only to connect() call, no traffic
     statistics or connection count is maintained, so "getstat" command is a
     noop and "getinfo" only prints out a routing table.
+
+GLB_WATCHDOG=<watchdog specification>
+    Interpreted the same way as --watchdog parameter.
+

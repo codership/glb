@@ -1,5 +1,7 @@
 #!/bin/sh -u
 #
+# Copyright (C) 2012 Codership Oy <info@codership.com>
+#
 # This is a script for glbd exec watchdog backend to monitor the availability
 # of MySQL server.
 #
@@ -13,14 +15,14 @@
 # and the rest of the command line, so that server address is the first
 # argument for the script.
 #
-# -d option (optional) specifies the state that should be assigned to the
-# Galera donor node:
+# -d option (optional, should always be the first) specifies the state that
+# should be assigned to the Galera donor node:
 #
-# 0 - forcefully cut all connections to it
-# 1 - stop directing connections to it, but leave the established intact
-# 2 - treat the donor as a regular working node
+# 1 - forcefully cut all connections to it
+# 2 - stop directing connections to it, but leave the established intact
+# 3 - treat the donor as a regular working node
 #
-# The rest of the command line is the options passed to mysql command.
+# The rest of the command line is the options passed to mysql command as is.
 #
 #ADDR=(${1//:/ }) bash-specific
 ADDR=$1
@@ -59,13 +61,13 @@ fi
 
 # convert state to glbd code
 case $STATE in
-    4) STATE="2"
+    4) STATE="3"
     ;;
     2) STATE="$DONOR_STATE"
     ;;
-    0|1|3|5) STATE="0"
+    0|1|3|5) STATE="1"
     ;;
-    *) STATE="-1"
+    *) STATE="0"
 esac
 
 echo "$STATE $OTHERS"
