@@ -235,13 +235,7 @@ cleanup_attr:
 int glb_proc_startc (pid_t* pid, const char* cmd,
                      FILE** std_in, FILE** std_out, FILE** std_err)
 {
-    char* pargv[4] =
-    {
-        strdup ("sh"),
-        strdup ("-c"),
-        strdup (cmd),
-        NULL
-    };
+    char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
 
     int err;
 
@@ -250,9 +244,7 @@ int glb_proc_startc (pid_t* pid, const char* cmd,
     else
         err = ENOMEM;
 
-    free (pargv[2]);
-    free (pargv[1]);
-    free (pargv[0]);
+    free (pargv[2]); free (pargv[1]); free (pargv[0]);
 
     return err;
 }

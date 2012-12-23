@@ -14,6 +14,16 @@
 #include <errno.h>    // ENOMEM
 #include <sys/time.h> // gettimeofday()
 
+void
+glb_backend_probe (glb_backend_thread_ctx_t* ctx, glb_wdog_check_t* res)
+{
+    if (pthread_mutex_lock (&ctx->lock)) abort();
+    ctx->waiting++;
+    pthread_cond_signal (&ctx->cond);
+    pthread_cond_wait (&ctx->cond, &ctx->lock);
+    *res = ctx->result;
+    if (pthread_mutex_lock (&ctx->lock)) abort();
+}
 
 /*! Sample dummy backend context. */
 struct glb_backend_ctx

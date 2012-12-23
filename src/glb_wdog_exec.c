@@ -75,9 +75,9 @@ exec_thread (void* arg)
     char* cmd = NULL;
 
     /* read buffer */
-    int const res_size = 4096;
-    char* const res = malloc (res_size);
-    if (!res) {
+    size_t const res_size = 4096;
+    char*  const res_buf  = malloc (res_size);
+    if (!res_buf) {
         ctx->errn = ENOMEM;
         pthread_cond_signal (&ctx->cond);
         goto cleanup;
@@ -89,6 +89,10 @@ exec_thread (void* arg)
         pthread_cond_signal (&ctx->cond);
         goto cleanup;
     }
+
+    char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
+
+    if (!pargv[0] || !pargv[1] || !pargv[2]) goto cleanup;
 
     glb_log_debug ("exec thread %lld, cmd: '%s'", ctx->id, cmd);
 
@@ -109,21 +113,21 @@ exec_thread (void* arg)
 
         glb_time_t start = glb_time_now();
 
-        ctx->errn = glb_proc_startc (&pid, cmd, NULL, &io, NULL);
+        ctx->errn = glb_proc_start (&pid, pargv, NULL, &io, NULL);
 
         if (!ctx->errn)
         {
             assert (io);
             assert (pid);
 
-            char* ret = fgets (res, res_size, io);
+            char* ret = fgets (res_buf, res_size, io);
 
             if (ret)
             {
                 r.latency = glb_time_seconds (glb_time_now() - start);
 
                 char* endptr;
-                long long st = strtoll (res, &endptr, 10);
+                long st = strtol (res_buf, &endptr, 10);
                 if (('\0' == endptr[0] || isspace(endptr[0])) &&
                     st >= GLB_DST_NOTFOUND && st <= GLB_DST_READY)
                 {
@@ -137,7 +141,9 @@ exec_thread (void* arg)
                 }
                 else {
                     ctx->errn = EPROTO;
-                    glb_log_error ("Failed to parse process output: '%s'", res);
+                    res_buf[res_size - 1] = '\0';
+                    glb_log_error ("Failed to parse process output: '%s'",
+                                   res_buf);
                 }
             }
             else {
@@ -150,12 +156,6 @@ exec_thread (void* arg)
         ctx->errn = glb_proc_end(pid);
         if (io) fclose (io);
 
-        if (pthread_mutex_lock (&ctx->lock)) abort();
-
-        if (ctx->errn) break;
-
-        ctx->result = r;
-
         /* We want to check working nodes very frequently to learn when they
          * go down. For failed nodes we can make longer intervals to minimize
          * the noise. */
@@ -163,19 +163,38 @@ exec_thread (void* arg)
 
         glb_timespec_add (&next, ctx->interval * interval_mod); // next wakeup
 
-        pthread_cond_timedwait (&ctx->cond, &ctx->lock, &next);
+        if (pthread_mutex_lock (&ctx->lock)) abort();
+
+        switch (ctx->waiting)
+        {
+        case 0:  break;
+        case 1:  pthread_cond_signal (&ctx->cond); break;
+        default: pthread_cond_broadcast (&ctx->cond);
+        }
+        ctx->waiting = 0;
+
+        if (ctx->errn) break;
+
+        ctx->result = r;
+
+        if (ETIMEDOUT != pthread_cond_timedwait (&ctx->cond, &ctx->lock, &next))
+        {
+            /* interrupted by a signal, shift the beginning of next interval */
+            next = glb_timespec_now();
+        }
     }
 
-cleanup:
-
-    free (cmd);
-    free (res);
-
     memset (&ctx->result, 0, sizeof(ctx->result));
-
+    ctx->result.state = GLB_DST_NOTFOUND;
     ctx->join = true; /* ready to be joined */
 
     if (pthread_mutex_unlock(&ctx->lock)) abort();
+
+cleanup:
+
+    free (pargv[2]); free (pargv[1]); free (pargv[0]);
+    free (cmd);
+    free (res_buf);
 
     return NULL;
 }

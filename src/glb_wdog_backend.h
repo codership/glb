@@ -57,10 +57,16 @@ typedef struct glb_backend_thread_ctx
     uint16_t           port;
     glb_time_t         interval;//! check interval (nanoseconds)
     glb_wdog_check_t   result;  //! check result
+    unsigned int       waiting; //! someone is waiting for result
     bool               quit;    //! signal for thread to quit
     bool               join;    //! thread is ready to be joined
     int                errn;    //! errno
 } glb_backend_thread_ctx_t;
+
+
+/*! Force destination check right away. Implementation seems to be generic. */
+extern void glb_backend_probe (glb_backend_thread_ctx_t* ctx,
+                               glb_wdog_check_t*         res);
 
 
 /*! Backend watchdog thread. glb_backend_ctx structure will be passed to it in
@@ -68,7 +74,7 @@ typedef struct glb_backend_thread_ctx
  *  a specified interval and update check structure, setting ready member to 1.
  *  It also should respect quit member and exit if it is true. Before exit it
  *  should set join to true.
- *  See example implementation in glb_wog_bakend.c */
+ *  See dummy implementation in glb_wdog_bakend.c */
 typedef void* (*glb_backend_thread_t) (void* arg);
 
 
