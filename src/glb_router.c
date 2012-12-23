@@ -472,10 +472,10 @@ router_connect_dst (glb_router_t*   const router,
             dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
-#endif
+            glb_sockaddr_str_t a = glb_socket_addr_to_string (&dst->dst.addr);
             glb_log_warn ("Failed to connect to %s: %d (%s)",
-                          glb_socket_addr_to_string (&dst->dst.addr, false),
-                          error, strerror(error));
+                          a.str, error, strerror(error));
+#endif
             dst->failed = time(NULL);
             router_redo_map(router);
             router->map_failed = dst->failed;
@@ -484,8 +484,10 @@ router_connect_dst (glb_router_t*   const router,
         else {
             *addr = dst->dst.addr;
             if (redirect) {
-                glb_log_warn ("Redirecting to %s",
-                              glb_socket_addr_to_string (addr, false));
+#ifdef GLBD
+                glb_sockaddr_str_t a = glb_socket_addr_to_string (addr);
+                glb_log_warn ("Redirecting to %s", a.str);
+#endif
             }
             error = 0; // return success
             break;
@@ -575,8 +577,9 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     }
 
     if (i == router->n_dst) {
+        glb_sockaddr_str_t a = glb_socket_addr_to_string(dst);
         glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
-                      glb_socket_addr_to_string(dst, false));
+                      a.str);
     }
 
     GLB_MUTEX_UNLOCK (&router->lock);
@@ -602,12 +605,12 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
+        glb_sockaddr_str_t addr = glb_socket_addr_to_astring(&d->dst.addr);
 
         len += snprintf (buf + len, buf_len - len,
-                         "%s : %8.3f %7.3f %7.3f %5d\n",
-                         glb_socket_addr_to_string(&d->dst.addr, true),
-                         d->dst.weight, 1.0/(d->usage + 1.0), d->map,
-                         d->conns);
+                        "%s : %8.3f %7.3f %7.3f %5d\n", addr.str,
+                         d->dst.weight, 1.0/(d->usage + 1.0), d->map, d->conns);
+
         if (len == buf_len) {
             buf[len - 1] = '\0';
             return (len - 1);
@@ -663,10 +666,11 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
+        glb_sockaddr_str_t addr = glb_socket_addr_to_astring(&d->dst.addr);
 
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f\n",
-                         glb_socket_addr_to_string(&d->dst.addr, true),
-                         d->dst.weight, d->map);
+                         addr.str, d->dst.weight, d->map);
+
         if (len == buf_len) {
             buf[len - 1] = '\0';
             return (len - 1);

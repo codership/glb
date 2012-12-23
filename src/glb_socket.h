@@ -22,9 +22,19 @@ glb_socket_init(const struct glb_cnf* cnf);
 
 #endif /* GLBD */
 
-// behaves like inet_ntoa() - returns static buffer
-extern const char*
-glb_socket_addr_to_string (const glb_sockaddr_t* addr, bool aligned);
+typedef struct glb_sockaddr_str
+{
+    char str[22]; /* Maximum length of IPv4 address is 21 chars + '\0' */
+} glb_sockaddr_str_t;
+
+/*! Return a nul-terminated string containing socKet address. */
+extern glb_sockaddr_str_t
+glb_socket_addr_to_string (const glb_sockaddr_t* addr);
+
+/*! Return a nul-terminated string containing socKet address,
+ *  with ':' aligned at position 15 */
+extern glb_sockaddr_str_t
+glb_socket_addr_to_astring (const glb_sockaddr_t* addr);
 
 static inline bool
 glb_socket_addr_is_equal (const glb_sockaddr_t* left,
@@ -44,6 +54,9 @@ glb_socket_addr_set_port (glb_sockaddr_t* addr, uint16_t port);
 
 extern short
 glb_socket_addr_get_port (const glb_sockaddr_t* addr);
+
+extern glb_sockaddr_str_t
+glb_socket_addr_get_host (const glb_sockaddr_t* addr);
 
 #define GLB_SOCK_NODELAY      1U
 #define GLB_SOCK_DEFER_ACCEPT 2U

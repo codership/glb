@@ -239,9 +239,9 @@ ctrl_thread (void* arg)
             ctrl_add_client (ctrl, client_sock);
 #ifdef GLBD
             if (ctrl->cnf->verbose) {
-                glb_log_info ("Ctrl: accepted connection from %s\n",
-                              glb_socket_addr_to_string (
-                                  (glb_sockaddr_t*)&client, false));
+                glb_sockaddr_str_t a =
+                    glb_socket_addr_to_string ((glb_sockaddr_t*)&client);
+                glb_log_info ("Ctrl: accepted connection from %s\n", a.str);
             }
 #endif
             continue;

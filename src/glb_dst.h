@@ -49,8 +49,9 @@ glb_dst_is_equal (const glb_dst_t* d1, const glb_dst_t* d2)
 static inline void
 glb_dst_print (char* buf, size_t buf_len, const glb_dst_t* dst)
 {
+    glb_sockaddr_str_t addr = glb_socket_addr_to_astring(&dst->addr);
     snprintf (buf, buf_len, "%s, w: %5.3f",
-              glb_socket_addr_to_string(&dst->addr, true), dst->weight);
+              addr.str, dst->weight);
     buf[buf_len - 1] = '\0';
 }
 

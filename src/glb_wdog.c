@@ -81,32 +81,27 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
                                 const glb_dst_t*   const dst,
                                 long long          const interval)
 {
-    char* addr = strdup (glb_socket_addr_to_string (&dst->addr, false));
+    glb_sockaddr_str_t const h    = glb_socket_addr_get_host (&dst->addr);
+    short              const port = glb_socket_addr_get_port (&dst->addr);
 
-    if (addr)
+    char* const host = strdup (h.str);
+
+    if (host)
     {
-        char* colon = strrchr (addr, ':');
+        glb_backend_thread_ctx_t* const ret = calloc (1, sizeof(*ret));
 
-        if (colon) {
-            *colon = '\0';
-            long port = strtol (colon + 1, NULL, 10);
-            assert (port > 0 && port <= 65535);
-
-            glb_backend_thread_ctx_t* ret = calloc (1, sizeof(*ret));
-
-            if (ret) {
-                glb_log_debug ("Created context for %s:%ld", addr, port);
-                ret->backend = backend;
-                pthread_mutex_init (&ret->lock, NULL);
-                pthread_cond_init  (&ret->cond, NULL);
-                ret->host = addr;
-                ret->port = port;
-                ret->interval = interval;
-                return ret;
-            }
+        if (ret) {
+            glb_log_debug ("Created context for %s:%hu", host, port);
+            ret->backend = backend;
+            pthread_mutex_init (&ret->lock, NULL);
+            pthread_cond_init  (&ret->cond, NULL);
+            ret->host = host;
+            ret->port = port;
+            ret->interval = interval;
+            return ret;
         }
 
-        free (addr);
+        free (host);
     }
 
     return NULL;

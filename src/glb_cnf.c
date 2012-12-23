@@ -154,14 +154,14 @@ void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
 {
     ulong i;
+    glb_sockaddr_str_t inc_addr  = glb_socket_addr_to_string (&cnf->inc_addr);
+    glb_sockaddr_str_t ctrl_addr = glb_socket_addr_to_string (&cnf->ctrl_addr);
 
     glb_print_version(out);
-    fprintf (out, "Incoming address: %s, ",
-             glb_socket_addr_to_string (&cnf->inc_addr, false));
+    fprintf (out, "Incoming address: %s, ", inc_addr.str);
     fprintf (out, "control FIFO: %s\n", cnf->fifo_name);
     fprintf (out, "Control  address:  %s\n",
-             cnf->ctrl_set ?
-             glb_socket_addr_to_string (&cnf->ctrl_addr, false) : "none");
+             cnf->ctrl_set ? ctrl_addr.str : "none");
     fprintf (out, "Number of threads: %d, max conn: %d, policy: '%s', "
              "nodelay: %s, defer accept: %s, verbose: %s, daemon: %s\n",
              cnf->n_threads,

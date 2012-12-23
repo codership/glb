@@ -31,58 +31,47 @@ glb_socket_init(const glb_cnf_t* cnf)
 
 #endif /* GLBD */
 
-//static const size_t addr_string_len = 512; heh, my GCC refuses to see it as
-//a constant! here goes type safety...
-#define addr_string_len 512
-static char addr_string[addr_string_len] = { 0, };
-
-/* return the length of string */
-static inline int
-socket_inaddr_to_string (char*         const out,
-                         const uint8_t const a[4],
-                         uint16_t      const p,
-                         bool          const aligned)
-{
-    if (aligned)
-    {
-        char ip[16];
-        long ip_len;
-        char port[7];
-        long port_len;
-
-        ip_len = snprintf (ip, 16, "%hhu.%hhu.%hhu.%hhu",
-                           a[0], a[1], a[2], a[3]);
-        assert (ip_len < 16);
-
-        port_len = snprintf (port, 7, ":%hu", p);
-        assert (port_len < 7);
-
-        snprintf (addr_string, addr_string_len, "                     ");
-
-        // make so that ':' is on position 15
-        memcpy (addr_string + 15 - ip_len, ip, ip_len);
-        memcpy (addr_string + 15, port, port_len);
-
-        return 15 + port_len;
-    }
-    else
-    {
-        return snprintf (out, 21, "%hhu.%hhu.%hhu.%hhu:%hu",
-                         a[0], a[1], a[2], a[3], p);
-    }
-}
-
 // maximum IP address length = 21: aaa.bbb.ccc.ddd:ppppp
 //                                                ^ position 15
-const char*
-glb_socket_addr_to_string (const glb_sockaddr_t* addr, bool aligned)
+
+glb_sockaddr_str_t
+glb_socket_addr_to_string (const glb_sockaddr_t* addr)
 {
     uint8_t* a = (void*)&addr->sin_addr.s_addr;
     uint16_t p = ntohs (addr->sin_port);
+    glb_sockaddr_str_t ret = {{ 0, }};
 
-    socket_inaddr_to_string (addr_string, a, p, aligned);
+    snprintf (ret.str, sizeof(ret.str),
+              "%hhu.%hhu.%hhu.%hhu:%hu", a[0], a[1], a[2], a[3], p);
 
-    return addr_string;
+    return ret;
+}
+
+glb_sockaddr_str_t
+glb_socket_addr_to_astring (const glb_sockaddr_t* addr)
+{
+    uint8_t* a = (void*)&addr->sin_addr.s_addr;
+    uint16_t p = ntohs (addr->sin_port);
+    glb_sockaddr_str_t ret = {{ 0, }};
+
+    char ip[16];
+    long ip_len;
+    char port[7];
+    long port_len;
+
+    ip_len = snprintf (ip, 16, "%hhu.%hhu.%hhu.%hhu", a[0], a[1], a[2], a[3]);
+    assert (ip_len < 16);
+
+    port_len = snprintf (port, 7, ":%hu", p);
+    assert (port_len < 7);
+
+    snprintf (ret.str, sizeof(ret.str), "                     ");
+
+    // make so that ':' is on position 15
+    memcpy (ret.str + 15 - ip_len, ip, ip_len);
+    memcpy (ret.str + 15, port, port_len);
+
+    return ret;
 }
 
 // Initialize glb_sockaddr_t struct
@@ -117,6 +106,18 @@ short
 glb_socket_addr_get_port (const glb_sockaddr_t* addr)
 {
     return ntohs (addr->sin_port);
+}
+
+glb_sockaddr_str_t
+glb_socket_addr_get_host (const glb_sockaddr_t* addr)
+{
+    uint8_t* a = (void*)&addr->sin_addr.s_addr;
+    glb_sockaddr_str_t ret = {{ 0, }};
+
+    snprintf (ret.str, sizeof(ret.str) - 1,
+              "%hhu.%hhu.%hhu.%hhu", a[0], a[1], a[2], a[3]);
+
+    return ret;
 }
 
 #ifdef GLBD
