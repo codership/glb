@@ -68,9 +68,9 @@ case $STATE in
     ;;
     2) STATE="$DONOR_STATE"
     ;;
-    0|1|5) STATE="1"
+    1|5) STATE="1"
     ;;
-    *) STATE="0"
+    0|*) STATE="0"
 esac
 
 echo "$STATE $OTHERS"

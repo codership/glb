@@ -2,6 +2,7 @@
 # $Id$
 
 COMMON_SRCS = \
+	glb_proc.c      \
 	glb_socket.c    \
 	glb_dst.c       \
 	glb_cnf.c       \
