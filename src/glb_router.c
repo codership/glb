@@ -269,7 +269,7 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
         pthread_mutex_init (&ret->lock, NULL);
         pthread_cond_init  (&ret->free, NULL);
 
-        glb_socket_addr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
+        glb_sockaddr_init (&ret->sock_out, "0.0.0.0", 0); // client socket
 
         ret->cnf        = cnf;
         ret->busy_count = 0;
@@ -472,7 +472,7 @@ router_connect_dst (glb_router_t*   const router,
             dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
-            glb_sockaddr_str_t a = glb_socket_addr_to_string (&dst->dst.addr);
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
             glb_log_warn ("Failed to connect to %s: %d (%s)",
                           a.str, error, strerror(error));
 #endif
@@ -485,7 +485,7 @@ router_connect_dst (glb_router_t*   const router,
             *addr = dst->dst.addr;
             if (redirect) {
 #ifdef GLBD
-                glb_sockaddr_str_t a = glb_socket_addr_to_string (addr);
+                glb_sockaddr_str_t a = glb_sockaddr_to_str (addr);
                 glb_log_warn ("Redirecting to %s", a.str);
 #endif
             }
@@ -543,7 +543,7 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     case GLB_POLICY_LEAST:
     case GLB_POLICY_ROUND:  break;
     case GLB_POLICY_RANDOM: hint = router_random_hint(router); break;
-    case GLB_POLICY_SOURCE: hint = glb_socket_addr_hash(src_addr); break;
+    case GLB_POLICY_SOURCE: hint = glb_sockaddr_hash(src_addr); break;
     };
 
     // attmept to connect until we run out of destinations
@@ -568,7 +568,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
-        if (glb_socket_addr_is_equal (&d->dst.addr, dst)) {
+        if (glb_sockaddr_is_equal (&d->dst.addr, dst)) {
             d->conns--; router->conns--;
             assert(d->conns >= 0);
             d->usage = router_dst_usage(d);
@@ -577,7 +577,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
     }
 
     if (i == router->n_dst) {
-        glb_sockaddr_str_t a = glb_socket_addr_to_string(dst);
+        glb_sockaddr_str_t a = glb_sockaddr_to_str (dst);
         glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
                       a.str);
     }
@@ -605,7 +605,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
-        glb_sockaddr_str_t addr = glb_socket_addr_to_astring(&d->dst.addr);
+        glb_sockaddr_str_t addr = glb_sockaddr_to_astr (&d->dst.addr);
 
         len += snprintf (buf + len, buf_len - len,
                         "%s : %8.3f %7.3f %7.3f %5d\n", addr.str,
@@ -666,7 +666,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
-        glb_sockaddr_str_t addr = glb_socket_addr_to_astring(&d->dst.addr);
+        glb_sockaddr_str_t addr = glb_sockaddr_to_astr (&d->dst.addr);
 
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f\n",
                          addr.str, d->dst.weight, d->map);

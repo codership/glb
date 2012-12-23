@@ -231,7 +231,7 @@ glb_cmd_parse (int argc, char* argv[])
     if (glb_parse_addr (&tmp->inc_addr, argv[optind], cmd_inc_addr_default)) {
         exit (EXIT_FAILURE);
     }
-    inc_port = glb_socket_addr_get_port (&tmp->inc_addr);
+    inc_port = glb_sockaddr_get_port (&tmp->inc_addr);
 
 #if 0 // don't open socket by default for security considerations.
     // if control address was not specified

@@ -89,7 +89,7 @@ glb_parse_addr (glb_sockaddr_t* addr,
 
 //    printf ("Option: %s, found addr = '%s', port = '%s'\n",
 //            str, addr_str, port_str);
-    return glb_socket_addr_init (addr, addr_str, port);
+    return glb_sockaddr_init (addr, addr_str, port);
 }
 
 // parses array list of destinations
@@ -154,8 +154,8 @@ void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
 {
     ulong i;
-    glb_sockaddr_str_t inc_addr  = glb_socket_addr_to_string (&cnf->inc_addr);
-    glb_sockaddr_str_t ctrl_addr = glb_socket_addr_to_string (&cnf->ctrl_addr);
+    glb_sockaddr_str_t inc_addr  = glb_sockaddr_to_str (&cnf->inc_addr);
+    glb_sockaddr_str_t ctrl_addr = glb_sockaddr_to_str (&cnf->ctrl_addr);
 
     glb_print_version(out);
     fprintf (out, "Incoming address: %s, ", inc_addr.str);

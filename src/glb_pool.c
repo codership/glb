@@ -340,7 +340,7 @@ pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
 
         if (end) {
             count--;
-            if (glb_socket_addr_is_equal(&end->dst_addr, dst)) {
+            if (glb_sockaddr_is_equal(&end->dst_addr, dst)) {
                 // remove conn, but don't try to notify router 'cause it's
                 // already dropped this destination
                 pool_remove_conn (pool, fd, false);

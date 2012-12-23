@@ -81,8 +81,8 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
                                 const glb_dst_t*   const dst,
                                 long long          const interval)
 {
-    glb_sockaddr_str_t const h    = glb_socket_addr_get_host (&dst->addr);
-    short              const port = glb_socket_addr_get_port (&dst->addr);
+    glb_sockaddr_str_t const h    = glb_sockaddr_get_host (&dst->addr);
+    short              const port = glb_sockaddr_get_port (&dst->addr);
 
     char* const host = strdup (h.str);
 

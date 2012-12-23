@@ -53,7 +53,7 @@ __glb_init()
             if (__glb_cnf->ctrl_set)
             {
                 uint16_t const default_port =
-                    glb_socket_addr_get_port(&__glb_cnf->inc_addr);
+                    glb_sockaddr_get_port(&__glb_cnf->inc_addr);
 
                 int const sock = glb_socket_create(&__glb_cnf->ctrl_addr, 0);
 

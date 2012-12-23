@@ -67,8 +67,8 @@ listener_thread (void* arg)
         }
 
         if (listener->cnf->verbose) {
-            glb_sockaddr_str_t ca = glb_socket_addr_to_string (&client);
-            glb_sockaddr_str_t sa = glb_socket_addr_to_string (&server);
+            glb_sockaddr_str_t ca = glb_sockaddr_to_str (&client);
+            glb_sockaddr_str_t sa = glb_sockaddr_to_str (&server);
             glb_log_info ("Accepted connection from %s to %s\n", ca.str,sa.str);
         }
         continue;

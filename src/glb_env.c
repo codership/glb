@@ -131,7 +131,7 @@ glb_env_parse ()
 
     const char** dst_list = NULL;
     int          dst_num  = 0;
-    uint16_t     bind_port = glb_socket_addr_get_port (&ret->inc_addr);
+    uint16_t     bind_port = glb_sockaddr_get_port (&ret->inc_addr);
 
     if (!env_parse_target_string (getenv (env_targets), &dst_list, &dst_num))
     {

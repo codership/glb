@@ -35,7 +35,7 @@ glb_socket_init(const glb_cnf_t* cnf)
 //                                                ^ position 15
 
 glb_sockaddr_str_t
-glb_socket_addr_to_string (const glb_sockaddr_t* addr)
+glb_sockaddr_to_str (const glb_sockaddr_t* addr)
 {
     uint8_t* a = (void*)&addr->sin_addr.s_addr;
     uint16_t p = ntohs (addr->sin_port);
@@ -48,7 +48,7 @@ glb_socket_addr_to_string (const glb_sockaddr_t* addr)
 }
 
 glb_sockaddr_str_t
-glb_socket_addr_to_astring (const glb_sockaddr_t* addr)
+glb_sockaddr_to_astr (const glb_sockaddr_t* addr)
 {
     uint8_t* a = (void*)&addr->sin_addr.s_addr;
     uint16_t p = ntohs (addr->sin_port);
@@ -76,9 +76,9 @@ glb_socket_addr_to_astring (const glb_sockaddr_t* addr)
 
 // Initialize glb_sockaddr_t struct
 long
-glb_socket_addr_init (glb_sockaddr_t* addr,
-                      const char*     hostname,
-                      uint16_t        port)
+glb_sockaddr_init (glb_sockaddr_t* addr,
+                   const char*     hostname,
+                   uint16_t        port)
 {
     struct hostent* host = gethostbyname (hostname);
 
@@ -97,19 +97,19 @@ glb_socket_addr_init (glb_sockaddr_t* addr,
 }
 
 void
-glb_socket_addr_set_port (glb_sockaddr_t* addr, uint16_t port)
+glb_sockaddr_set_port (glb_sockaddr_t* addr, uint16_t port)
 {
     addr->sin_port   = htons (port);
 }
 
 short
-glb_socket_addr_get_port (const glb_sockaddr_t* addr)
+glb_sockaddr_get_port (const glb_sockaddr_t* addr)
 {
     return ntohs (addr->sin_port);
 }
 
 glb_sockaddr_str_t
-glb_socket_addr_get_host (const glb_sockaddr_t* addr)
+glb_sockaddr_get_host (const glb_sockaddr_t* addr)
 {
     uint8_t* a = (void*)&addr->sin_addr.s_addr;
     glb_sockaddr_str_t ret = {{ 0, }};
@@ -145,7 +145,7 @@ fnv32a_mix(const void* buf, size_t buf_len)
 }
 
 uint32_t
-glb_socket_addr_hash (const glb_sockaddr_t* addr)
+glb_sockaddr_hash (const glb_sockaddr_t* addr)
 {
     return fnv32a_mix (&addr->sin_addr, sizeof(addr->sin_addr));
 }

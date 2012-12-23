@@ -180,7 +180,7 @@ int main (int argc, char* argv[])
         }
     }
 
-    inc_port = glb_socket_addr_get_port (&cnf->inc_addr);
+    inc_port = glb_sockaddr_get_port (&cnf->inc_addr);
     ctrl = glb_ctrl_create (cnf, router, pool, wdog,
                             inc_port, ctrl_fifo, ctrl_sock);
     if (!ctrl) {
