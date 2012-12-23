@@ -36,13 +36,13 @@ exec_create_cmd (const glb_backend_thread_ctx_t* ctx)
     assert (ctx);
     assert (ctx->backend);
     assert (ctx->backend->cmd);
-    assert (ctx->addr);
+    assert (ctx->host);
 
     const char* const cmd = ctx->backend->cmd;
     size_t const cmd_len  = strlen(cmd);
 
-    /* we need to insert address:port as a first argument to command */
-    size_t const ret_len = cmd_len + strlen(ctx->addr) + 7;
+    /* we need to insert host:port as a first argument to command */
+    size_t const ret_len = cmd_len + strlen(ctx->host) + 7;
     char* ret = malloc (ret_len);
 
     if (ret)
@@ -58,8 +58,8 @@ exec_create_cmd (const glb_backend_thread_ctx_t* ctx)
         memcpy (ret, cmd, cmd_offset);
         ptrdiff_t addr_offset = cmd_offset;
         addr_offset += sprintf (ret + cmd_offset, " %s:%hu",
-                                ctx->addr, ctx->port);
-        memcpy (ret  + addr_offset,
+                                ctx->host, ctx->port);
+        memcpy (ret + addr_offset,
                 cmd + cmd_offset,
                 cmd_len - cmd_offset + 1); // plus trailing '\0'
     }
@@ -124,7 +124,8 @@ exec_thread (void* arg)
 
             if (ret)
             {
-                r.latency = glb_time_seconds (glb_time_now() - start);
+                r.timestamp = glb_time_now();
+                r.latency   = glb_time_seconds (r.timestamp - start);
 
                 char* endptr;
                 long st = strtol (res_buf, &endptr, 10);

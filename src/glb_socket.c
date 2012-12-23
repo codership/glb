@@ -36,28 +36,51 @@ glb_socket_init(const glb_cnf_t* cnf)
 #define addr_string_len 512
 static char addr_string[addr_string_len] = { 0, };
 
+/* return the length of string */
+static inline int
+socket_inaddr_to_string (char*         const out,
+                         const uint8_t const a[4],
+                         uint16_t      const p,
+                         bool          const aligned)
+{
+    if (aligned)
+    {
+        char ip[16];
+        long ip_len;
+        char port[7];
+        long port_len;
+
+        ip_len = snprintf (ip, 16, "%hhu.%hhu.%hhu.%hhu",
+                           a[0], a[1], a[2], a[3]);
+        assert (ip_len < 16);
+
+        port_len = snprintf (port, 7, ":%hu", p);
+        assert (port_len < 7);
+
+        snprintf (addr_string, addr_string_len, "                     ");
+
+        // make so that ':' is on position 15
+        memcpy (addr_string + 15 - ip_len, ip, ip_len);
+        memcpy (addr_string + 15, port, port_len);
+
+        return 15 + port_len;
+    }
+    else
+    {
+        return snprintf (out, 21, "%hhu.%hhu.%hhu.%hhu:%hu",
+                         a[0], a[1], a[2], a[3], p);
+    }
+}
+
 // maximum IP address length = 21: aaa.bbb.ccc.ddd:ppppp
 //                                                ^ position 15
 const char*
-glb_socket_addr_to_string (const glb_sockaddr_t* addr)
+glb_socket_addr_to_string (const glb_sockaddr_t* addr, bool aligned)
 {
     uint8_t* a = (void*)&addr->sin_addr.s_addr;
-    char ip[16];
-    long ip_len;
-    char port[7];
-    long port_len;
+    uint16_t p = ntohs (addr->sin_port);
 
-    ip_len = snprintf (ip, 16, "%hhu.%hhu.%hhu.%hhu", a[0], a[1], a[2], a[3]);
-    assert (ip_len < 16);
-
-    port_len = snprintf (port, 7, ":%hu", ntohs (addr->sin_port));
-    assert (port_len < 7);
-
-    snprintf (addr_string, addr_string_len, "                     ");
-
-    // make so that ':' is on position 15
-    memcpy (addr_string + 15 - ip_len, ip, ip_len);
-    memcpy (addr_string + 15, port, port_len);
+    socket_inaddr_to_string (addr_string, a, p, aligned);
 
     return addr_string;
 }

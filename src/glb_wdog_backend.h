@@ -38,6 +38,7 @@ typedef enum glb_dst_state
 typedef struct glb_wdog_check
 {
     glb_dst_state_t state;    //! observed state of the destination
+    glb_time_t      timestamp;//! result timestamp
     double          latency;  //! communication latency (seconds)
     char*           others;   //! other cluster memebers if any in the usual fmt
     size_t          others_len; //! length of others buffer, not actual string
@@ -53,7 +54,7 @@ typedef struct glb_backend_thread_ctx
     pthread_t          id;      //! thread id
     pthread_mutex_t    lock;    //! mutex to protect access to structure
     pthread_cond_t     cond;    //! signal to thread
-    char*              addr;    //! address of the destination to watch
+    char*              host;    //! address of the destination to watch
     uint16_t           port;
     glb_time_t         interval;//! check interval (nanoseconds)
     glb_wdog_check_t   result;  //! check result
@@ -64,7 +65,7 @@ typedef struct glb_backend_thread_ctx
 } glb_backend_thread_ctx_t;
 
 
-/*! Force destination check right away. Implementation seems to be generic. */
+/*! Probe destination on demand. Implementation seems to be generic. */
 extern void glb_backend_probe (glb_backend_thread_ctx_t* ctx,
                                glb_wdog_check_t*         res);
 

@@ -24,7 +24,7 @@ glb_socket_init(const struct glb_cnf* cnf);
 
 // behaves like inet_ntoa() - returns static buffer
 extern const char*
-glb_socket_addr_to_string (const glb_sockaddr_t* addr);
+glb_socket_addr_to_string (const glb_sockaddr_t* addr, bool aligned);
 
 static inline bool
 glb_socket_addr_is_equal (const glb_sockaddr_t* left,

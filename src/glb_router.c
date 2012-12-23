@@ -474,7 +474,7 @@ router_connect_dst (glb_router_t*   const router,
             dst->usage = router_dst_usage(dst);
 #endif
             glb_log_warn ("Failed to connect to %s: %d (%s)",
-                          glb_socket_addr_to_string (&dst->dst.addr),
+                          glb_socket_addr_to_string (&dst->dst.addr, false),
                           error, strerror(error));
             dst->failed = time(NULL);
             router_redo_map(router);
@@ -485,7 +485,7 @@ router_connect_dst (glb_router_t*   const router,
             *addr = dst->dst.addr;
             if (redirect) {
                 glb_log_warn ("Redirecting to %s",
-                              glb_socket_addr_to_string (addr));
+                              glb_socket_addr_to_string (addr, false));
             }
             error = 0; // return success
             break;
@@ -576,7 +576,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
 
     if (i == router->n_dst) {
         glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
-                      glb_socket_addr_to_string(dst));
+                      glb_socket_addr_to_string(dst, false));
     }
 
     GLB_MUTEX_UNLOCK (&router->lock);
@@ -605,7 +605,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
         len += snprintf (buf + len, buf_len - len,
                          "%s : %8.3f %7.3f %7.3f %5d\n",
-                         glb_socket_addr_to_string(&d->dst.addr),
+                         glb_socket_addr_to_string(&d->dst.addr, true),
                          d->dst.weight, 1.0/(d->usage + 1.0), d->map,
                          d->conns);
         if (len == buf_len) {
@@ -665,7 +665,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
         router_dst_t* d = &router->dst[i];
 
         len += snprintf (buf + len, buf_len - len, "%s : %8.3f %7.3f\n",
-                         glb_socket_addr_to_string(&d->dst.addr),
+                         glb_socket_addr_to_string(&d->dst.addr, true),
                          d->dst.weight, d->map);
         if (len == buf_len) {
             buf[len - 1] = '\0';

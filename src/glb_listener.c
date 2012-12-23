@@ -67,10 +67,9 @@ listener_thread (void* arg)
         }
 
         if (listener->cnf->verbose) {
-            glb_log_info ("Accepted connection from %s ",
-                          glb_socket_addr_to_string (&client));
-            glb_log_info ("to %s\n",
-                          glb_socket_addr_to_string (&server));
+            glb_log_info ("Accepted connection from %s to %s\n",
+                          glb_socket_addr_to_string (&client, false),
+                          glb_socket_addr_to_string (&server, false));
         }
         continue;
 

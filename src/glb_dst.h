@@ -50,7 +50,7 @@ static inline void
 glb_dst_print (char* buf, size_t buf_len, const glb_dst_t* dst)
 {
     snprintf (buf, buf_len, "%s, w: %5.3f",
-              glb_socket_addr_to_string(&dst->addr), dst->weight);
+              glb_socket_addr_to_string(&dst->addr, true), dst->weight);
     buf[buf_len - 1] = '\0';
 }
 

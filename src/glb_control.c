@@ -240,7 +240,8 @@ ctrl_thread (void* arg)
 #ifdef GLBD
             if (ctrl->cnf->verbose) {
                 glb_log_info ("Ctrl: accepted connection from %s\n",
-                         glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
+                              glb_socket_addr_to_string (
+                                  (glb_sockaddr_t*)&client, false));
             }
 #endif
             continue;

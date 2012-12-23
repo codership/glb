@@ -81,11 +81,11 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
                                 const glb_dst_t*   const dst,
                                 long long          const interval)
 {
-    char* addr = strdup (glb_socket_addr_to_string (&dst->addr));
+    char* addr = strdup (glb_socket_addr_to_string (&dst->addr, false));
 
     if (addr)
     {
-        char* colon = strchr (addr, ':');
+        char* colon = strrchr (addr, ':');
 
         if (colon) {
             *colon = '\0';
@@ -99,7 +99,7 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
                 ret->backend = backend;
                 pthread_mutex_init (&ret->lock, NULL);
                 pthread_cond_init  (&ret->cond, NULL);
-                ret->addr = addr;
+                ret->host = addr;
                 ret->port = port;
                 ret->interval = interval;
                 return ret;
@@ -115,7 +115,7 @@ wdog_backend_thread_ctx_create (glb_backend_ctx_t* const backend,
 static void
 wdog_backend_thread_ctx_destroy (glb_backend_thread_ctx_t* ctx)
 {
-    free (ctx->addr);
+    free (ctx->host);
     free ((void*)ctx->result.others);
     pthread_mutex_destroy (&ctx->lock);
     pthread_cond_destroy  (&ctx->cond);
