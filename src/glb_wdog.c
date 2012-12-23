@@ -404,7 +404,7 @@ wdog_collect_results (glb_wdog_t* const wdog)
              fabs(d->weight/new_weight - 1.0) > WEIGHT_TOLERANCE)) {
             glb_dst_t dst = d->dst;
             dst.weight = new_weight;
-            int ret = glb_router_change_dst (wdog->router, &dst);
+            int ret = glb_router_change_dst (wdog->router, &dst, d->ctx);
             glb_log_debug ("Changing weight %6.3f -> %6.3f:  %d (%s)",
                            d->weight, new_weight,
                            ret, strerror (ret > 0 ? 0 : -ret));

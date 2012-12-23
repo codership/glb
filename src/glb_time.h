@@ -48,6 +48,15 @@ glb_timespec_add (struct timespec* t, glb_time_t i)
     t->tv_nsec = i % 1000000000;
 }
 
+static inline struct timespec
+glb_time_to_timespec (glb_time_t t)
+{
+    struct timespec ts;
+    ts.tv_sec  = t / 1000000000;
+    ts.tv_nsec = t % 1000000000;
+    return ts;
+}
+
 /*! Convert glb_time_t to seconds */
 static inline double
 glb_time_seconds (glb_time_t t)

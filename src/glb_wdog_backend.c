@@ -15,7 +15,9 @@
 #include <sys/time.h> // gettimeofday()
 
 void
-glb_backend_probe (glb_backend_thread_ctx_t* ctx, glb_wdog_check_t* res)
+glb_backend_probe (glb_backend_thread_ctx_t* const ctx,
+                   glb_wdog_check_t*         const res,
+                   const struct timespec*    const until)
 {
     memset (res, 0, sizeof(*res));
     res->state = GLB_DST_NOTFOUND;
@@ -26,11 +28,11 @@ glb_backend_probe (glb_backend_thread_ctx_t* ctx, glb_wdog_check_t* res)
     {
         ctx->waiting++;
         pthread_cond_signal (&ctx->cond);
-        pthread_cond_wait (&ctx->cond, &ctx->lock);
-        *res = ctx->result;
+        if (!pthread_cond_timedwait (&ctx->cond, &ctx->lock, until))
+            *res = ctx->result;
     }
 
-    if (pthread_mutex_lock (&ctx->lock)) abort();
+    if (pthread_mutex_unlock (&ctx->lock)) abort();
 }
 
 /*! Sample dummy backend context. */

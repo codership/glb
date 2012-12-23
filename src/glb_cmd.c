@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <getopt.h>
+#include <ctype.h> // isspace()
 
 typedef struct option option_t;
 extern char* optarg;
@@ -34,7 +35,8 @@ typedef enum cmd_opt
     CMD_OPT_SRC_TRACKING = 's',
     CMD_OPT_N_THREADS    = 't',
     CMD_OPT_VERBOSE      = 'v',
-    CMD_OPT_WATCHDOG     = 'w'
+    CMD_OPT_WATCHDOG     = 'w',
+    CMD_OPT_EXTRA_POLLS  = 'x'
 } cmd_opt_t;
 
 static option_t cmd_options[] =
@@ -59,6 +61,7 @@ static option_t cmd_options[] =
     { "threads",         RA, NULL, CMD_OPT_N_THREADS     },
     { "verbose",         NA, NULL, CMD_OPT_VERBOSE       },
     { "watchdog",        RA, NULL, CMD_OPT_WATCHDOG      },
+    { "extra",           RA, NULL, CMD_OPT_EXTRA_POLLS   },
     { 0, 0, 0, 0 }
 };
 
@@ -86,8 +89,8 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
     fprintf (out,
              "  -i|--interval D.DDD       "
-             "how often to poll destination for liveness\n"
-             "(floating point seconds, default 1.0).\n");
+             "how often to poll destinations for liveness\n"
+             "(fractional seconds, default 1.0).\n");
     fprintf (out,
              "  -m|--max_conn N           "
              "maximum allowed number of client connections (OS dependent).\n");
@@ -109,6 +112,9 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -v|--verbose              turn on verbose reporting.\n");
     fprintf (out,
              "  -w|--watchdog SPEC_STR    watchdog specification.\n");
+    fprintf (out,
+             "  -x|--extra D.DDD          "
+             "extra polling frequency (fractional seconds).\n");
     fprintf (out,
              "  -V|--version              print program version.\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
@@ -145,7 +151,7 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "abc:dfhi:m:nt:rsvw:V", cmd_options,
+    while ((opt = getopt_long (argc, argv, "abc:dfhi:m:nt:rsvw:x:V",cmd_options,
                                &opt_idx)) != -1) {
         switch (opt) {
         case CMD_OPT_DEFER_ACCEPT:
@@ -172,16 +178,16 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_INTERVAL:
             tmp->interval = glb_time_from_double(strtod (optarg, &endptr));
-            if ((*endptr != '\0' && *endptr != ' ') || errno ||
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno ||
                 tmp->interval <= 0) {
                 fprintf (stderr, "Bad check interval value: %s. "
-                         "Positive floating number expected.\n", optarg);
+                         "Positive real number expected.\n", optarg);
                 exit (EXIT_FAILURE);
             }
             break;
         case CMD_OPT_MAX_CONN:
             tmp->max_conn = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno) {
                 fprintf (stderr, "Bad max_conn value: %s. Integer expected.\n",
                          optarg);
                 exit (EXIT_FAILURE);
@@ -192,7 +198,7 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_N_THREADS:
             tmp->n_threads = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && *endptr != ' ') || errno) {
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno) {
                 fprintf (stderr, "Bad n_threads value: %s. Integer expected.\n",
                          optarg);
                 exit (EXIT_FAILURE);
@@ -209,6 +215,15 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_WATCHDOG:
             tmp->watchdog = optarg;
+            break;
+        case CMD_OPT_EXTRA_POLLS:
+            tmp->extra = glb_time_from_double(strtod (optarg, &endptr));
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno ||
+                tmp->extra < 0) {
+                fprintf (stderr, "Bad extra value: %s. "
+                         "Non-negative real number expected.\n", optarg);
+                exit (EXIT_FAILURE);
+            }
             break;
         case CMD_OPT_VERSION:
             glb_print_version (stdout);

@@ -67,7 +67,8 @@ typedef struct glb_backend_thread_ctx
 
 /*! Probe destination on demand. Implementation seems to be generic. */
 extern void glb_backend_probe (glb_backend_thread_ctx_t* ctx,
-                               glb_wdog_check_t*         res);
+                               glb_wdog_check_t*         res,
+                               const struct timespec*    until);
 
 
 /*! Backend watchdog thread. glb_backend_ctx structure will be passed to it in

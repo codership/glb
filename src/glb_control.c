@@ -170,7 +170,7 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
             err = glb_wdog_change_dst   (ctrl->wdog,   &dst, true);
         }
         else {
-            err = glb_router_change_dst (ctrl->router, &dst);
+            err = glb_router_change_dst (ctrl->router, &dst, NULL);
         }
 
         if (err < 0) {

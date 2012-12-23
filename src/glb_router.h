@@ -8,6 +8,7 @@
 #define _glb_router_h_
 
 #include "glb_cnf.h"
+#include "glb_wdog_backend.h"
 
 typedef struct glb_router glb_router_t;
 
@@ -24,7 +25,8 @@ glb_router_destroy ();
  * @return index of record changed or negative error code
  */
 extern int
-glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
+glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst,
+                       glb_backend_thread_ctx_t* probe_ctx);
 
 #ifdef GLBD
 
