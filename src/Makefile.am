@@ -27,6 +27,7 @@ glbd_SOURCES = \
 
 glbd_CFLAGS = $(AM_CFLAGS) -DGLBD
 
+if BUILD_LIBGLB
 lib_LTLIBRARIES   = libglb.la
 
 libglb_la_SOURCES = \
@@ -35,6 +36,7 @@ libglb_la_SOURCES = \
 	glb_lib.c
 
 libglb_la_LDFLAGS = -version-info 1:0:0
+endif
 
 # for make dist
 include_HEADERS = *.h

@@ -8,8 +8,6 @@
  * $Id$
  */
 
-#define _GNU_SOURCE 1
-
 #include "glb_env.h"
 #include "glb_router.h"
 #include "glb_wdog.h"

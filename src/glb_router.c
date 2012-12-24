@@ -7,8 +7,6 @@
  * $Id$
  */
 
-#define _GNU_SOURCE 1 /* for function overloading */
-
 #include "glb_router.h"
 #include "glb_log.h"
 #include "glb_cmd.h"

@@ -24,6 +24,17 @@ else
 fi
 AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")
 
+# Check for _GNU_SOURCE
+AC_ARG_ENABLE(gnu,
+              AC_HELP_STRING([--disable-gnu],
+                             [disable GNU extensions (disables libglb) [[default=enabled]]]),,
+              enable_gnu="yes")
+if test "$enable_gnu" != "no"
+then
+    AM_CPPFLAGS="$AM_CPPFLAGS -D_GNU_SOURCE"
+fi
+AM_CONDITIONAL(BUILD_LIBGLB, test "$enable_gnu" != "no")
+
 # Check for poll method
 AC_ARG_ENABLE([poll],
               [AC_HELP_STRING([--enable-poll],
@@ -40,7 +51,7 @@ AC_ARG_ENABLE(splice,
               enable_splice="no")
 if test "$enable_splice" == "yes"
 then
-    AM_CPPFLAGS="$AM_CPPFLAGS -D_GNU_SOURCE -DGLB_USE_SPLICE"
+    AM_CPPFLAGS="$AM_CPPFLAGS -DGLB_USE_SPLICE"
 fi
 AM_CONDITIONAL(ENABLE_SPLICE, test "$enable_splice" != "no")
 

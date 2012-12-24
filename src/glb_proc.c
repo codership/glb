@@ -7,16 +7,14 @@
  * Only GLB dependency is logging macros, which can easily be commented out
  * or redefined.
  *
+ * Spawning without creating the parent process memory copy (probably the only
+ * reason to use this instead of fork()) requires _GNU_SOURCE to be defined.
+ *
  * $Id$
  */
 
 #include "glb_proc.h"
 #include "glb_log.h"
-
-/* for process management */
-#ifndef _GNU_SOURCE
-# define _GNU_SOURCE // POSIX_SPAWN_USEVFORK flag
-#endif
 
 #include <stdbool.h>  // bool
 #include <errno.h>    // errno
@@ -27,11 +25,12 @@
 #include <fcntl.h>    // fcntl()
 #include <sys/wait.h> // waitpid()
 
-extern char** environ; // environment variables for proc_run
-
+/*! POSIX_SPAWN_USEVFORK requires _GNU_SOURCE */
 #ifndef POSIX_SPAWN_USEVFORK
 # define POSIX_SPAWN_USEVFORK 0
 #endif
+
+extern char** environ; // environment variables for proc_run
 
 static int const PIPE_READ  = 0;
 static int const PIPE_WRITE = 1;
@@ -46,7 +45,7 @@ proc_need_to_close_fd (int fd)
     return (flags >= 0 /* && !(flags & FD_CLOEXEC) */);
     /* FDs that have FD_CLOEXEC flag set will be closed only AFTER actions
      * specified by posix_spawn_file_actions_addclose() are applied. So if we
-     * need to dup2 an FD, it has to be closed first. */
+     * need to dup2 an FD, it has to be first closed explicitly. */
 }
 
 /* pipe child file descriptor to parent's and associate a stream with it */

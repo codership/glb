@@ -204,8 +204,13 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     int sock;
     int err;
 
-    /* Create the socket. */
+    /* Create the socket. We don't want CLOEXEC for libglb as we don't
+     * know if application will fork. Libglb opens only control sockets. */
+#if defined(SOCK_CLOEXEC) && defined(GLBD)
+    sock = socket (PF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#else
     sock = socket (PF_INET, SOCK_STREAM, 0);
+#endif
     if (sock < 0)
     {
         err = -errno;
@@ -214,9 +219,11 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
     }
 
 #ifdef GLBD
-    if ((err = glb_socket_setopt (sock, optflags)))       goto error;
+#ifndef SOCK_CLOEXEC
     if ((err = glb_set_fd_flag (sock, FD_CLOEXEC, true))) goto error;
-#endif
+#endif /* !SOCK_CLOEXEC */
+    if ((err = glb_socket_setopt (sock, optflags)))       goto error;
+#endif /* GLBD */
 
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)
     {

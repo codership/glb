@@ -16,6 +16,10 @@
 #include <string.h>
 #include <poll.h>
 
+#ifndef _GNU_SOURCE
+#include <fcntl.h>
+#endif /* _GNU_SOURCE */
+
 typedef struct pollfd pollfd_t;
 
 struct glb_listener
@@ -40,8 +44,14 @@ listener_thread (void* arg)
         int            server_sock;
         glb_sockaddr_t server;
 
+#ifdef _GNU_SOURCE
+        client_sock = accept4(listener->sock,
+                               (struct sockaddr*) &client, &client_size,
+                               SOCK_CLOEXEC);
+#else
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
+#endif /* _GNU_SOURCE */
 
         if (client_sock < 0) {
             glb_log_error ("Failed to accept connection: %d (%s)",
@@ -50,6 +60,10 @@ listener_thread (void* arg)
         }
 
         if (glb_terminate) goto err1;
+
+#ifndef _GNU_SOURCE
+        (void) fcntl (client_sock, F_SETFD, FD_CLOEXEC);
+#endif /* !_GNU_SOURCE */
 
         server_sock = glb_router_connect(listener->router, &client ,&server);
         if (server_sock < 0) {
