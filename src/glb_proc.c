@@ -24,6 +24,7 @@
 #include <string.h>   // strdup()
 #include <spawn.h>    // posix_spawn()
 #include <unistd.h>   // pipe()
+#include <fcntl.h>    // fcntl()
 #include <sys/wait.h> // waitpid()
 
 extern char** environ; // environment variables for proc_run
@@ -38,6 +39,16 @@ static int const STDIN_FD   = 0;
 static int const STDOUT_FD  = 1;
 static int const STDERR_FD  = 2;
 
+static inline bool
+proc_need_to_close_fd (int fd)
+{
+    int flags = fcntl(fd, F_GETFD);
+    return (flags >= 0 /* && !(flags & FD_CLOEXEC) */);
+    /* FDs that have FD_CLOEXEC flag set will be closed only AFTER actions
+     * specified by posix_spawn_file_actions_addclose() are applied. So if we
+     * need to dup2 an FD, it has to be closed first. */
+}
+
 /* pipe child file descriptor to parent's and associate a stream with it */
 static int
 proc_pipe_fds (posix_spawn_file_actions_t* fact,
@@ -49,10 +60,11 @@ proc_pipe_fds (posix_spawn_file_actions_t* fact,
     assert (pipe_fds);
     assert (stream);
 
-    int err;
+    int err = 0;
 
-    // close child's fd
-    err = posix_spawn_file_actions_addclose (fact, child_fd);
+    // close child's fd - it will be open there if it is open here
+    if (proc_need_to_close_fd (child_fd))
+        err = posix_spawn_file_actions_addclose (fact, child_fd);
     if (err)
     {
         glb_log_error ("posix_spawn_file_actions_addclose() failed: %d (%s)",
@@ -141,8 +153,10 @@ int glb_proc_start (pid_t* pid, char* pargv[],
         return err;
     }
 
-    err = posix_spawnattr_setflags (&attr, POSIX_SPAWN_SETSIGDEF |
-                                           POSIX_SPAWN_USEVFORK);
+    err = posix_spawnattr_setflags (&attr,
+//                                    POSIX_SPAWN_SETPGROUP |
+//                                    POSIX_SPAWN_SETSIGDEF |
+                                    POSIX_SPAWN_USEVFORK);
     if (err)
     {
         glb_log_error ("posix_spawnattr_setflags() failed: %d (%s)",

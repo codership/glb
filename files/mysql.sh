@@ -46,31 +46,38 @@ PORT=${PORT:-"3306"}
 
 QUERY="SHOW STATUS LIKE 'wsrep_local_state'; SHOW STATUS LIKE 'wsrep_incoming_addresses'"
 
-RES=$(mysql -B --disable-column-names -h$HOST -P$PORT $* -e "$QUERY")
+while read CMD
+do
+    [ "$CMD" != "poll" ] && break;
 
-if [ $? -eq 0 ]
-then
-    STATE=$(echo $RES | cut -d ' ' -f 2)
-    OTHERS=$(echo $RES | cut -d ' ' -f 4)
+    RES=$(mysql -B --disable-column-names -h$HOST -P$PORT $* -e "$QUERY")
+
+    if [ $? -eq 0 ]
+    then
+        STATE=$(echo $RES | cut -d ' ' -f 2)
+        OTHERS=$(echo $RES | cut -d ' ' -f 4)
     # If wsrep_local_state variable was not found on the server, we assume it
     # is a regular MySQL and is ready for connections (it accepted connection)
-    STATE=${STATE:-"4"}
-else
-    STATE=
-    OTHERS=
-fi
+        STATE=${STATE:-"4"}
+    else
+        STATE=
+        OTHERS=
+    fi
 
-# convert wsrep state to glbd code
-case $STATE in
-    4) STATE="3"
-    ;;
-    3) STATE="2"
-    ;;
-    2) STATE="$DONOR_STATE"
-    ;;
-    1|5) STATE="1"
-    ;;
-    0|*) STATE="0"
-esac
+    # convert wsrep state to glbd code
+    case $STATE in
+        4) STATE="3"
+        ;;
+        3) STATE="2"
+        ;;
+        2) STATE="$DONOR_STATE"
+        ;;
+        1|5) STATE="1"
+        ;;
+        0|*) STATE="0"
+    esac
 
-echo "$STATE $OTHERS"
+    echo "$STATE $OTHERS"
+done
+
+#echo "Got cmd: '$CMD', exiting." >&2

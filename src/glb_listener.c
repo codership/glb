@@ -32,7 +32,7 @@ listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
 
-    while (1) {
+    while (!glb_terminate) {
         int            ret;
         int            client_sock;
         glb_sockaddr_t client;
@@ -42,11 +42,14 @@ listener_thread (void* arg)
 
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
+
         if (client_sock < 0) {
             glb_log_error ("Failed to accept connection: %d (%s)",
                            errno, strerror (errno));
             goto err;
         }
+
+        if (glb_terminate) goto err1;
 
         server_sock = glb_router_connect(listener->router, &client ,&server);
         if (server_sock < 0) {
@@ -74,12 +77,13 @@ listener_thread (void* arg)
         continue;
 
     err2:
-        close (server_sock);
+        if (server_sock != -1) close (server_sock);
         glb_router_disconnect (listener->router, &server);
     err1:
-        close (client_sock);
+        if (client_sock != -1) close (client_sock);
     err:
-        usleep (100000); // to avoid busy loop in case of error
+        // to avoid busy loop in case of error
+        if (!glb_terminate) usleep (100000);
     }
 
     return NULL;
@@ -125,6 +129,28 @@ glb_listener_create (const glb_cnf_t* const cnf,
 extern void
 glb_listener_destroy (glb_listener_t* listener)
 {
-    glb_log_error ("glb_listener_destroy() not implemented");
+    /* need to connect to own socket to break the accept() call */
+    glb_sockaddr_t sockaddr;
+    glb_sockaddr_init (&sockaddr, "0.0.0.0", 0);
+    int socket = glb_socket_create (&sockaddr, 0);
+    if (socket >= 0)
+    {
+        int err = connect (socket, (struct sockaddr*)&listener->cnf->inc_addr,
+                           sizeof (listener->cnf->inc_addr));
+        close (socket);
+        if (err) {
+            glb_log_error ("Failed to connect to listener socket: %d (%s)",
+                           errno, strerror(errno));
+            glb_log_error ("glb_listener_destroy(): failed to join thread.");
+        }
+        else {
+            pthread_join (listener->thread, NULL);
+        }
+    }
+    else {
+        glb_log_error ("Failed to create socket: %d (%s)",
+                       -socket, strerror(-socket));
+    }
+    free (listener);
 }
 

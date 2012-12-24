@@ -10,6 +10,11 @@
 #include "glb_wdog_exec.h"
 #include "glb_proc.h"
 #include "glb_log.h"
+#if GLBD
+#include "glb_signal.h"
+#else
+bool const glb_terminate = false;
+#endif /* GLBD */
 
 #include <stdlib.h>   // calloc()/free()/abort()
 #include <string.h>   // strdup()
@@ -67,6 +72,22 @@ exec_create_cmd (const glb_backend_thread_ctx_t* ctx)
     return ret;
 }
 
+static int
+exec_send_cmd (const char* cmd, FILE* stream)
+{
+    if (EOF != fputs (cmd, stream))
+    {
+        if (EOF != fputc ('\n', stream))
+        {
+//            glb_log_debug ("Sent cmd '%s'", cmd);
+            fflush (stream);
+            return 0;
+        }
+    }
+
+    return EIO;
+}
+
 static void*
 exec_thread (void* arg)
 {
@@ -80,21 +101,36 @@ exec_thread (void* arg)
     if (!res_buf) {
         ctx->errn = ENOMEM;
         pthread_cond_signal (&ctx->cond);
-        goto cleanup;
+        goto init_error;
     }
 
     cmd = exec_create_cmd (ctx);
     if (!cmd) {
         ctx->errn = ENOMEM;
         pthread_cond_signal (&ctx->cond);
-        goto cleanup;
+        goto init_error;
     }
 
     char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
 
-    if (!pargv[0] || !pargv[1] || !pargv[2]) goto cleanup;
+    if (!pargv[0] || !pargv[1] || !pargv[2]) {
+        ctx->errn = ENOMEM;
+        goto init_error;
+    }
 
-    glb_log_debug ("exec thread %lld, cmd: '%s'", ctx->id, cmd);
+    pid_t pid     = -1;
+    FILE* std_in  = NULL;
+    FILE* std_out = NULL;
+
+    ctx->errn = glb_proc_start (&pid, pargv, &std_in, &std_out, NULL);
+
+init_error:
+
+    glb_log_debug ("exec thread: %lld, errno: %d (%s), pid: %lld, cmd: '%s'",
+                   ctx->id, ctx->errn, strerror(ctx->errn),(long long)pid, cmd);
+
+    /* this will skip main loop and fall through to cleanup */
+    if (ctx->errn) ctx->quit = true;
 
     struct timespec next = glb_timespec_now(); /* establish starting point */
 
@@ -108,19 +144,18 @@ exec_thread (void* arg)
         if (pthread_mutex_unlock (&ctx->lock)) abort();
 
         struct glb_wdog_check r = { 0, 0, 0, 0, 0 };
-        pid_t pid;
-        FILE* io;
 
         glb_time_t start = glb_time_now();
 
-        ctx->errn = glb_proc_start (&pid, pargv, NULL, &io, NULL);
+        assert (std_in);
+//        ctx->errn = glb_proc_start (&pid, pargv, NULL, &io, NULL);
+        ctx->errn = exec_send_cmd ("poll", std_in);
 
         if (!ctx->errn)
         {
-            assert (io);
-            assert (pid);
+            assert (std_out);
 
-            char* ret = fgets (res_buf, res_size, io);
+            char* ret = fgets (res_buf, res_size, std_out);
 
             if (ret)
             {
@@ -147,15 +182,12 @@ exec_thread (void* arg)
                                    res_buf);
                 }
             }
-            else {
+            else if (!glb_terminate) {
                 ctx->errn = errno;
                 glb_log_error ("Failed to read process output: %d (%s)",
                                errno, strerror(errno));
             }
         }
-
-        ctx->errn = glb_proc_end(pid);
-        if (io) fclose (io);
 
         /* We want to check working nodes very frequently to learn when they
          * go down. For failed nodes we can make longer intervals to minimize
@@ -168,8 +200,8 @@ exec_thread (void* arg)
 
         switch (ctx->waiting)
         {
-        case 0:  break;
-        case 1:  pthread_cond_signal (&ctx->cond); break;
+        case 0:                                       break;
+        case 1:  pthread_cond_signal    (&ctx->cond); break;
         default: pthread_cond_broadcast (&ctx->cond);
         }
         ctx->waiting = 0;
@@ -191,7 +223,27 @@ exec_thread (void* arg)
 
     if (pthread_mutex_unlock(&ctx->lock)) abort();
 
-cleanup:
+//cleanup:
+
+    if (pid > 0 && !glb_terminate) {
+        assert(std_in);
+        assert(std_out);
+
+        int err = exec_send_cmd ("quit", std_in);
+        if (err) {
+            glb_log_error ("Failed to send 'quit' to the process");
+        }
+
+        err = glb_proc_end(pid);
+        if (err) {
+            glb_log_error ("Failed to end process %lld: %d (%s)",
+                           (long long)pid, err, strerror(err));
+        }
+
+    }
+
+    if (std_in)  fclose (std_in);
+    if (std_out) fclose (std_out);
 
     free (pargv[2]); free (pargv[1]); free (pargv[0]);
     free (cmd);

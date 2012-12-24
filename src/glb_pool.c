@@ -39,8 +39,8 @@ typedef enum pool_ctl_code
 {
     POOL_CTL_ADD_CONN,
     POOL_CTL_DROP_DST,
-    POOL_CTL_SHUTDOWN,
     POOL_CTL_STATS,
+    POOL_CTL_SHUTDOWN,
     POOL_CTL_MAX
 } pool_ctl_code_t;
 
@@ -93,6 +93,7 @@ typedef struct pool
     int              fd_max;
     glb_router_t*    router;
     glb_pool_stats_t stats;
+    bool             shutdown;
 
     pool_conn_end_t* route_map[ POOL_MAX_FD ]; // connection ctx look-up by fd
 } pool_t;
@@ -359,6 +360,27 @@ pool_handle_stats (pool_t* pool, pool_ctl_t* ctl)
     pool->stats = glb_zero_stats;
 }
 
+static void
+pool_handle_shutdown (pool_t* pool)
+{
+    int fd;
+    int count = pool->fd_max - 1; // ctl_recv is not in route_map
+
+    for (fd = 0; count; fd++) {
+        pool_conn_end_t* end = pool->route_map[fd];
+
+        assert (fd < POOL_MAX_FD);
+
+        if (end) {
+            pool_remove_conn (pool, fd, false);
+            count -= 2;
+        }
+    }
+
+    close (pool->ctl_recv);
+    pool->shutdown = true;
+}
+
 static long
 pool_handle_ctl (pool_t* pool)
 {
@@ -385,6 +407,9 @@ pool_handle_ctl (pool_t* pool)
         break;
     case POOL_CTL_STATS:
         pool_handle_stats    (pool, &ctl);
+        break;
+    case POOL_CTL_SHUTDOWN:
+        pool_handle_shutdown (pool);
         break;
     default: // nothing else is implemented
         glb_log_warn ("Unsupported CTL: %d\n", ctl.code);
@@ -637,7 +662,7 @@ pool_thread (void* arg)
     GLB_MUTEX_LOCK (&pool->lock);
     GLB_MUTEX_UNLOCK (&pool->lock);
 
-    while (1) {
+    while (!pool->shutdown) {
         long ret;
 
         ret = pool_fds_wait (pool);
@@ -658,6 +683,8 @@ pool_thread (void* arg)
                            errno, strerror(errno));
         }
     }
+
+    glb_log_debug ("Pool %d thread exiting.", pool->id);
 
     return NULL;
 }
@@ -726,7 +753,7 @@ pool_init (const glb_cnf_t* cnf, pool_t* pool, long id, glb_router_t* router)
     return 0;
 }
 
-extern glb_pool_t*
+glb_pool_t*
 glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router)
 {
     size_t ret_size = sizeof(glb_pool_t) + cnf->n_threads * sizeof(pool_t);
@@ -758,18 +785,6 @@ glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router)
     ret->last_stats = ret->last_info;
 
     return ret;
-}
-
-extern void
-glb_pool_destroy (glb_pool_t* pool)
-{
-    long i;
-    for (i = 0; i < pool->n_pools; i++) {
-        pool_t* p = &pool->pool[i];
-        pthread_join (p->thread, NULL);
-    }
-    // TODO: proper resource deallocation
-    glb_log_warn ("glb_pool_destroy() not implemented yet!");
 }
 
 // finds the least busy pool
@@ -975,3 +990,29 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
 
     return len;
 }
+
+void
+glb_pool_destroy (glb_pool_t* pool)
+{
+    long i;
+    pool_ctl_t shutdown_ctl = { POOL_CTL_SHUTDOWN, NULL };
+    int err = pool_bcast_ctl (pool, &shutdown_ctl);
+
+    if (err) glb_log_debug ("shutdown broadcast failed: %d", -err);
+
+    for (i = 0; i < pool->n_pools; i++) {
+        pool_t* p = &pool->pool[i];
+        pthread_join (p->thread, NULL);
+        close (p->ctl_send);
+#ifdef USE_EPOLL
+        close (p->epoll_fd);
+#endif
+        pthread_cond_destroy  (&p->cond);
+        pthread_mutex_destroy (&p->lock);
+    }
+
+    pthread_mutex_destroy (&pool->lock);
+    free (pool);
+}
+
+

@@ -315,8 +315,14 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
 
     if (d->result.ready && GLB_DST_READY == d->result.state) {
         // smooth latency measurement with the previous one
-        d->result.latency = (d->result.latency + old_lat * 2.0) / 3.0;
+        d->result.latency = (d->result.latency + old_lat * 3.0) / 4.0;
         if (*max_lat < d->result.latency) *max_lat = d->result.latency;
+#if GLBD
+#ifndef NDEBUG
+//        glb_sockaddr_str_t a = glb_sockaddr_to_str (&d->dst.addr);
+//        glb_log_debug ("%s latency: %6.4f", a.str, d->result.latency);
+#endif /* NDEBUG */
+#endif /* GLBD */
     }
     else {
         // preserve previously measured latency
@@ -405,9 +411,14 @@ wdog_collect_results (glb_wdog_t* const wdog)
             glb_dst_t dst = d->dst;
             dst.weight = new_weight;
             int ret = glb_router_change_dst (wdog->router, &dst, d->ctx);
-            glb_log_debug ("Changing weight %6.3f -> %6.3f:  %d (%s)",
-                           d->weight, new_weight,
+#if GLBD
+#ifndef NDEBUG
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&d->dst.addr);
+            glb_log_debug ("Changing weight for %s: %6.3f -> %6.3f:  %d (%s)",
+                           a.str, d->weight, new_weight,
                            ret, strerror (ret > 0 ? 0 : -ret));
+#endif /* NDEBUG */
+#endif /* GLBD */
             if (ret >= 0) {
                 if (new_weight < 0.0 && wdog->pool) { // clean up the pool!
                     glb_pool_drop_dst (wdog->pool, &d->dst.addr);
@@ -480,6 +491,8 @@ wdog_dst_cleanup (glb_wdog_t* wdog)
     {
         wdog_dst_t* d = &wdog->dst[i];
 
+        glb_log_debug ("Signaling backend thread %u to quit.", d->ctx->id);
+
         GLB_MUTEX_LOCK (&d->ctx->lock);
         if (!d->ctx->quit)
         {
@@ -495,6 +508,7 @@ wdog_dst_cleanup (glb_wdog_t* wdog)
         wdog_dst_t* d = &wdog->dst[i];
         pthread_join (d->ctx->id, NULL);
         wdog_backend_thread_ctx_destroy (d->ctx);
+        if (d->weight >= 0.0) glb_pool_drop_dst (wdog->pool, &d->dst.addr);
     }
 }
 
@@ -560,16 +574,11 @@ glb_wdog_destroy(glb_wdog_t* wdog)
     GLB_MUTEX_LOCK (&wdog->lock);
     wdog->quit = true;
     pthread_cond_signal (&wdog->cond);
-    pthread_cond_wait (&wdog->cond, &wdog->lock);
+    GLB_MUTEX_UNLOCK (&wdog->lock);
+    pthread_join (wdog->thd, NULL);
     wdog_dst_cleanup (wdog);
     pthread_cond_destroy  (&wdog->cond);
-    GLB_MUTEX_UNLOCK (&wdog->lock);
     pthread_mutex_destroy (&wdog->lock);
-    int i;
-    for (i = 0; i < wdog->n_dst; i++)
-    {
-        wdog_dst_free (&wdog->dst[i]);
-    }
     wdog->backend.destroy (wdog->backend.ctx);
     free (wdog->dst);
     free (wdog);

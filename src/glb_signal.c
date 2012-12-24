@@ -26,7 +26,8 @@ signal_handler(int signum)
 {
     switch(signum) {
 //    case SIGALRM: should not be getting this signal either
-//        break;
+    case SIGPIPE: // ignore?
+        break;
     case GLB_SIGNAL_OK: // used by child to report OK
         exit (EXIT_SUCCESS);
     case SIGCHLD:
@@ -37,7 +38,6 @@ signal_handler(int signum)
     case SIGTERM:
     case SIGINT:
     case SIGQUIT:
-    case SIGPIPE:
     case SIGABRT:
         glb_log_info ("Received signal %d. Terminating.", signum);
         glb_terminate = 1;

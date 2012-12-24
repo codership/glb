@@ -77,7 +77,7 @@ router_dst_probe (router_dst_t* const d, glb_time_t now)
     glb_wdog_check_t p;
     struct timespec until = glb_time_to_timespec(now);
     until.tv_sec += 1; // 1 second timeout
-    glb_log_debug ("Probing dest.");
+
     glb_backend_probe (d->probe_ctx, &p, &until);
 
     if (GLB_DST_READY == p.state)
@@ -182,6 +182,7 @@ glb_router_change_dst (glb_router_t*             const router,
             router->wait_count--;
             assert (router->wait_count >= 0);
         }
+        assert (0 == router->busy_count);
     }
 
     if (!d) { // add destination to the list
@@ -249,7 +250,6 @@ glb_router_change_dst (glb_router_t*             const router,
     router_redo_map (router);
 
     assert (router->n_dst >= 0);
-    assert (0 == router->busy_count);
 
     if (router->wait_count > 0) pthread_cond_signal (&router->free);
     GLB_MUTEX_UNLOCK (&router->lock);
