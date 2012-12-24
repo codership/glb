@@ -2,7 +2,7 @@
 - Implemented initial watchdog framework that asynchronously monitors
   destinations using server-spceific probes and updates routing table
   accordingly. (Destination discovery is not supported yet)
-- Implemented basic watchdog module that pawns destination probes via shell,
+- Implemented basic watchdog module that spawns destination probes via shell,
   allowing various probing scripts to be written.
 - Added ability to use watchdog probes to probe destinations immediately before
   connect.
