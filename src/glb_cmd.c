@@ -89,7 +89,7 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
     fprintf (out,
              "  -i|--interval D.DDD       "
-             "how often to poll destinations for liveness\n"
+             "how often to probe destinations for liveness\n"
              "(fractional seconds, default 1.0).\n");
     fprintf (out,
              "  -m|--max_conn N           "

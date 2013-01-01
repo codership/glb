@@ -32,6 +32,9 @@ AC_ARG_ENABLE(gnu,
 if test "$enable_gnu" != "no"
 then
     AM_CPPFLAGS="$AM_CPPFLAGS -D_GNU_SOURCE"
+else
+    AC_MSG_WARN([You have chosen to disable GNU libc extensions.
+    This disables libc call overloading and makes libglb impossible.])
 fi
 AM_CONDITIONAL(BUILD_LIBGLB, test "$enable_gnu" != "no")
 
