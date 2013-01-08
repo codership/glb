@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * NOTE: connection count and usage make sense only for standalone balancer
  *       so all operations on them are #ifdef GLBD ... #endif
@@ -96,6 +96,12 @@ router_dst_is_good_for_map (router_dst_t* const d,
                             long          const retry)
 {
     return ((d->dst.weight > 0.0) && (difftime (now, d->failed) > retry));
+}
+
+static inline bool
+router_uses_map (const glb_router_t* const router)
+{
+    return (router->cnf->policy >= GLB_POLICY_RANDOM);
 }
 
 static void
@@ -250,7 +256,7 @@ glb_router_change_dst (glb_router_t*             const router,
 #endif
     }
 
-    router_redo_map (router, time (NULL));
+    if (router_uses_map(router)) router_redo_map (router, time (NULL));
 
     assert (router->n_dst >= 0);
 
@@ -427,7 +433,8 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
         n -= 1;
     }
 #else /* OLD */
-    if (router->map_failed != 0 &&
+    if (router_uses_map (router) &&
+        router->map_failed != 0  &&
         difftime (now, router->map_failed) > ROUTER_RETRY_INTERVAL(router))
     {
         router_redo_map (router, now);
@@ -488,7 +495,8 @@ router_dst_failed (glb_router_t* router, router_dst_t* dst)
 {
     time_t now = time(NULL);
 
-    if (router_dst_is_good_for_map (dst, now, ROUTER_RETRY_INTERVAL(router)))
+    if (router_uses_map (router) &&
+        router_dst_is_good_for_map (dst, now, ROUTER_RETRY_INTERVAL(router)))
         router_redo_map (router, now);
 
     dst->failed        = now;

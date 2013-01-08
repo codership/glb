@@ -1,5 +1,7 @@
-2013-01-07 alex 
-- Merged in asynchronous connection processing from 0.9.1.
+2013-01-08 alex 
+- Merged in asynchronous connection processing from 0.9.1 and other missing
+  fixes from the trunk.
+  Version 1.0.0alpha3
 
 2012-12-23 alex 
 - Implemented initial watchdog framework that asynchronously monitors
