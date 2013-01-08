@@ -53,13 +53,17 @@ listener_thread (void* arg)
                               (struct sockaddr*) &client, &client_size);
 #endif /* _GNU_SOURCE */
 
-        if (client_sock < 0) {
-            glb_log_error ("Failed to accept connection: %d (%s)",
-                           errno, strerror (errno));
+        if (client_sock < 0 || glb_terminate) {
+            if (client_sock < 0) {
+                glb_log_error ("Failed to accept connection: %d (%s)",
+                               errno, strerror (errno));
+            }
+            else {
+                glb_log_debug ("Listener thread termonating.");
+            }
+
             goto err;
         }
-
-        if (glb_terminate) goto err1;
 
 #ifndef _GNU_SOURCE
         (void) fcntl (client_sock, F_SETFD, FD_CLOEXEC);
