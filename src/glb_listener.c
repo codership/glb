@@ -40,8 +40,6 @@ listener_thread (void* arg)
         int            server_sock;
         glb_sockaddr_t server;
 
-        assert (1 == ret);
-
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
         if (client_sock < 0) {
@@ -50,7 +48,8 @@ listener_thread (void* arg)
             goto err;
         }
 
-        server_sock = glb_router_connect(listener->router, &client ,&server);
+        ret = glb_router_connect(listener->router, &client ,&server,
+                                 &server_sock);
         if (server_sock < 0) {
             if (server_sock != -EMFILE)
                 glb_log_error("Failed to connect to destination: %d (%s)",
@@ -58,10 +57,12 @@ listener_thread (void* arg)
             goto err1;
         }
 
+        assert (0 == ret || -EINPROGRESS == ret);
+
         glb_socket_setopt(client_sock, GLB_SOCK_NODELAY); // ignore error here
 
         ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
-                                 &server);
+                                 &server, 0 == ret);
         if (ret < 0) {
             glb_log_error ("Failed to add connection to pool: "
                            "%d (%s)", -ret, strerror (-ret));
@@ -78,7 +79,7 @@ listener_thread (void* arg)
 
     err2:
         close (server_sock);
-        glb_router_disconnect (listener->router, &server);
+        glb_router_disconnect (listener->router, &server, false);
     err1:
         close (client_sock);
     err:

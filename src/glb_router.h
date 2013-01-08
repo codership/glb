@@ -34,17 +34,18 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst);
  *
  * Not thread-safe. Supposed to be called ONLY from the listener main loop.
  *
- * @return file descriptor or negative error code
+ * @return 0 or negative error code
  */
 extern int
 glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
-                    glb_sockaddr_t* dst_addr);
+                    glb_sockaddr_t* dst_addr, int* sock);
 
 /*!
  * Decrements connection reference count for destination
  */
 extern void
-glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr);
+glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr,
+                       bool failed);
 
 #else /* GLBD */
 

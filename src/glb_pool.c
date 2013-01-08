@@ -50,31 +50,39 @@ typedef struct pool_ctl
     void*           data;
 } pool_ctl_t;
 
+// connection end can be either client or server
+// and server end can be either complete or incomplete
+typedef enum pool_end
+{
+    POOL_END_INCOMPLETE = 0,
+    POOL_END_COMPLETE,
+    POOL_END_CLIENT
+} pool_end_t;
+
 typedef struct pool_conn_end
 {
-    bool            inc;      // to differentiate between the ends
-    int             sock;     // fd of connection
-    int             fds_idx;  // index in the file descriptor set (for poll())
-    uint32_t        events;   // events waited by descriptor
-    size_t          sent;
-    size_t          total;
-    glb_sockaddr_t  dst_addr; // destinaiton id
+    size_t     sent;
+    size_t     total;
 #ifdef GLB_USE_SPLICE
-    int             splice[2];
+    int        splice[2];
 #endif
-    uint8_t         buf[];    // has pool_buf_size
+    int        sock;     // fd of connection
+    int        fds_idx;  // index in the file descriptor set (for poll())
+    uint32_t   events;   // events waited by descriptor
+    pool_end_t end;      // to differentiate between the ends
+    uint8_t    buf[];    // has pool_buf_size
 } pool_conn_end_t;
+
+/* We want to allocate memory for both ends in one malloc() call and have it
+ * nicely aligned. This is presumably a page multiple and
+ * should be enough for two ethernet frames (what about jumbo?) */
+/* Overall layout: |dst addr|inc end|....inc buf....|dst end|....dst buf....| */
+#define pool_conn_size (BUFSIZ << 1) // total 2 buffers
+#define pool_end_size  ((pool_conn_size - sizeof(glb_sockaddr_t)) >> 1)
+#define pool_buf_size  (pool_end_size - sizeof(pool_conn_end_t))
 
 #define POOL_MAX_FD (1 << 16) // highest possible file descriptor + 1
                               // only affects the map size
-
-// We want to allocate memory for both ends in one malloc() call and have it
-// nicely aligned. This is presumably a page multiple and
-// should be enough for two ethernet frames (what about jumbo?)
-#define pool_end_size  (BUFSIZ)
-#define pool_conn_size (pool_end_size << 2)
-#define pool_buf_size  (pool_end_size - sizeof(pool_conn_end_t))
-
 typedef struct pool
 {
     const glb_cnf_t* cnf;
@@ -181,7 +189,7 @@ pool_conn_end_by_fd (pool_t* pool, int fd)
 {
     // map points to the other end, but that's enough
     register pool_conn_end_t* other_end = pool->route_map[fd];
-    if (other_end->inc) {
+    if (POOL_END_CLIENT == other_end->end) {
         return (pool_conn_end_t*)((uint8_t*)other_end + pool_end_size);
     } else {
         return (pool_conn_end_t*)((uint8_t*)other_end - pool_end_size);
@@ -256,9 +264,13 @@ pool_fds_wait (pool_t* pool)
 static inline void
 pool_set_conn_end (pool_t* pool, pool_conn_end_t* end1, pool_conn_end_t* end2)
 {
-    end1->fds_idx = pool_fds_add (pool, end1->sock, POOL_FD_READ);
+    pool_fd_ops_t event =
+        POOL_END_INCOMPLETE == end1->end ? POOL_FD_WRITE : POOL_FD_READ;
+
+    end1->fds_idx = pool_fds_add (pool, end1->sock, event);
     if (end1->fds_idx < 0) abort();
-    end1->events = POOL_FD_READ;
+
+    end1->events = event;
     pool->route_map[end1->sock] = end2;
 }
 
@@ -279,7 +291,7 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     pool_conn_end_t* src    = pool->route_map[dst_fd];
 
 #ifndef NDEBUG
-    if (notify_router && !src->inc) {
+    if (notify_router && src->end != POOL_END_CLIENT) {
         glb_log_warn ("Connection close from server");
     }
 #endif
@@ -287,8 +299,13 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     pool->n_conns--;
     pool->stats.conns_closed++;
 
+    glb_sockaddr_t* dst_addr = POOL_END_CLIENT == src->end ?
+        ((glb_sockaddr_t*)src) - 1 : ((glb_sockaddr_t*)dst) - 1;
+
+    bool failed = POOL_END_INCOMPLETE == src->end; // closing before completion
+
     if (notify_router)
-        glb_router_disconnect (pool->router, &dst->dst_addr);
+        glb_router_disconnect (pool->router, dst_addr, failed);
 
 #ifdef GLB_USE_SPLICE
     close (dst->splice[0]); close (dst->splice[1]);
@@ -299,13 +316,9 @@ pool_remove_conn (pool_t* pool, int src_fd, bool notify_router)
     pool_reset_conn_end (pool, dst);
     pool_reset_conn_end (pool, src);
 
-    if (dst->inc) {
-        free (dst); // frees both ends
-    }
-    else {
-        assert (src->inc);
-        free (src); // frees both ends
-    }
+    assert (POOL_END_CLIENT == ((pool_conn_end_t*)(dst_addr + 1))->end);
+
+    free (dst_addr); // frees both ends
 }
 
 static void
@@ -313,6 +326,10 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
 {
     pool_conn_end_t* inc_end = ctl->data;
     pool_conn_end_t* dst_end = ctl->data + pool_end_size;
+
+    assert (POOL_END_CLIENT == inc_end->end);
+    assert (POOL_END_COMPLETE   == dst_end->end ||
+            POOL_END_INCOMPLETE == dst_end->end);
 
     pool_set_conn_end (pool, inc_end, dst_end);
     pool_set_conn_end (pool, dst_end, inc_end);
@@ -326,25 +343,37 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     }
 }
 
+static inline const glb_sockaddr_t*
+pool_conn_end_dstaddr (pool_conn_end_t* end)
+{
+    const glb_sockaddr_t* const ret =
+        ((glb_sockaddr_t*)(POOL_END_CLIENT == end->end ?
+                           (uint8_t*)end : ((uint8_t*)end) - pool_end_size)) -1;
+    return ret;
+}
+
 static void
 pool_handle_drop_dst (pool_t* pool, pool_ctl_t* ctl)
 {
-    const glb_sockaddr_t* dst = ctl->data;
+    assert (POOL_CTL_DROP_DST == ctl->code);
+
+    const glb_sockaddr_t* const dst = ctl->data;
     int fd;
     int count = pool->fd_max - 1; // ctl_recv is not in route_map
 
     for (fd = 0; count; fd++) {
-        pool_conn_end_t* end = pool->route_map[fd];
+        pool_conn_end_t* const end = pool->route_map[fd];
 
         assert (fd < POOL_MAX_FD);
 
         if (end) {
             count--;
-            if (glb_socket_addr_is_equal(&end->dst_addr, dst)) {
+            const glb_sockaddr_t* const end_dst = pool_conn_end_dstaddr (end);
+            if (glb_socket_addr_is_equal (dst, end_dst)) {
                 // remove conn, but don't try to notify router 'cause it's
                 // already dropped this destination
                 pool_remove_conn (pool, fd, false);
-                count--; // 1 connection means 2 file descriptors
+                count--; // removing connection removes 2 file descriptors
             }
         }
     }
@@ -412,9 +441,9 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
                   dst->total - dst->sent, SPLICE_F_NONBLOCK);
 #endif
 
-    if (ret > 0) {
+    if (GLB_LIKELY(ret > 0)) {
         pool->stats.send_bytes += ret;
-        pool->stats.tx_bytes   += dst->inc * ret;
+        pool->stats.tx_bytes   += (POOL_END_CLIENT == dst->end) * ret;
 
         dst->sent += ret;
         if (dst->sent == dst->total) {        // all data sent, reset pointers
@@ -423,7 +452,8 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
         }
         else {                                // there is unsent data left
             glb_log_debug ("Setting WRITE flag on %s: sent = %zu, total = "
-                           "%zu, bufsiz = %zu", dst->inc ? "client" : "server",
+                           "%zu, bufsiz = %zu",
+                           POOL_END_CLIENT == dst->end ? "client" : "server",
                            dst->sent, dst->total,pool_buf_size);
             dst_events |= POOL_FD_WRITE;      // set   WRITE flag
         }
@@ -438,19 +468,27 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
     else {
         ret = -errno;
         switch (-ret) {
-        case ESPIPE:
-        case EBUSY:
-        case EINTR:
-        case ENOBUFS:
-        case EAGAIN:
+        case EINTR:    // 4
+        case EAGAIN:   // 11
+        case EBUSY:    // 16
+        case ENOBUFS:  // 105
+        case ENOTCONN: // 107
             glb_log_debug ("Send data error: %d (%s)", -ret, strerror(-ret));
             dst_events |= POOL_FD_WRITE;
             ret = 0; // pretend nothing happened
             break;
-        case EPIPE:
-            glb_log_debug ("pool_remove_conn() from pool_send_data()");
-            pool_remove_conn(pool, dst->sock, true);
-            break;
+        case EPIPE:    // 32
+            /* according to man 2 send,
+             * Linux can return EPIPE on unconnected socket. WTF? */
+            if (POOL_END_INCOMPLETE != dst->end) {
+                glb_log_debug ("pool_remove_conn() from pool_send_data()");
+                pool_remove_conn(pool, dst->sock, true);
+            }
+            else {
+                /* POOL_FD_WRITE is already set there, just wait for it */
+                ret = 0;
+            }
+            return ret;
         default:
             glb_log_warn ("Send data failed, unhandled error: %d (%s)",
                           -ret, strerror(-ret));
@@ -460,12 +498,14 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
     pool->stats.n_send++;
 
     if (dst_events != dst->events) { // events changed
-        glb_log_debug ("Old flags on %s: %s %s", dst->inc ? "client":"server",
+        glb_log_debug ("Old flags on %s: %s %s",
+                       POOL_END_CLIENT == dst->end ? "client":"server",
                        dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
                        dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
         dst->events = dst_events;
         pool_fds_set_events (pool, dst);
-        glb_log_debug ("New flags on %s: %s %s", dst->inc ? "client":"server",
+        glb_log_debug ("New flags on %s: %s %s",
+                       POOL_END_CLIENT == dst->end ? "client":"server",
                        dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
                        dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
     }
@@ -492,7 +532,7 @@ pool_handle_read (pool_t* pool, int src_fd)
                       pool_buf_size - dst->total,
                       SPLICE_F_MORE | SPLICE_F_MOVE);
 #endif
-        if (ret > 0) {
+        if (GLB_LIKELY(ret > 0)) {
             dst->total += ret;
             // now try to send whatever we have received so far
             // (since we're here, POOL_FD_READ on src is not cleared, no need
@@ -501,6 +541,10 @@ pool_handle_read (pool_t* pool, int src_fd)
             if ((send_err = pool_send_data (pool, dst, NULL)) < 0) {
                 glb_log_warn ("pool_send_data(): %zd (%s)",
                               -send_err, strerror(-send_err));
+                if (-EPIPE == send_err) {
+                    /* connection removed in pool_send_data(), nothing to do */
+                    return send_err;
+                }
             }
 
             if (dst->total == pool_buf_size) {
@@ -514,7 +558,7 @@ pool_handle_read (pool_t* pool, int src_fd)
             pool->stats.recv_bytes += ret;
 
             // increment only if it's coming from incoming interface
-            pool->stats.rx_bytes   += (!dst->inc) * ret;
+            pool->stats.rx_bytes   += (POOL_END_CLIENT != dst->end) * ret;
         }
         else {
             if (0 == ret) { // socket closed, must close another end and cleanup
@@ -538,14 +582,46 @@ pool_handle_read (pool_t* pool, int src_fd)
     return ret;
 }
 
+static int
+pool_handle_conn_complete (pool_t* pool, pool_conn_end_t* end)
+{
+    int ret = -1;
+    socklen_t ret_size = sizeof(ret);
+
+    assert (POOL_END_INCOMPLETE == end->end);
+
+    getsockopt (end->sock, SOL_SOCKET, SO_ERROR, &ret, &ret_size);
+
+    if (ret) {
+        glb_log_info ("Connection to ... failed: %d (%s)",
+                      ret, strerror (ret));
+        pool_remove_conn (pool, end->sock, true);
+    }
+    else {
+        end->end = POOL_END_COMPLETE;
+        end->events = POOL_FD_READ;
+        pool_fds_set_events (pool, end);
+    }
+
+    return ret;
+}
+
 static inline ssize_t
 pool_handle_write (pool_t* pool, int dst_fd)
 {
     pool_conn_end_t* src = pool->route_map[dst_fd];
     pool_conn_end_t* dst = pool->route_map[src->sock];
 
-    glb_log_debug ("pool_handle_write() to %s: %zu",
-                   dst->inc ? "client" : "server", dst->total - dst->sent);
+    if (pool->cnf->verbose) {
+        glb_log_debug ("pool_handle_write() to %s: %zu",
+                       POOL_END_CLIENT == dst->end ? "client" : "server",
+                       dst->total - dst->sent);
+    }
+
+    if (GLB_UNLIKELY(POOL_END_INCOMPLETE == dst->end) &&
+        pool_handle_conn_complete (pool, dst)) return 0;
+
+    assert (dst->end != POOL_END_INCOMPLETE);
 
     if (dst->total) {
         ssize_t send_err;
@@ -557,6 +633,7 @@ pool_handle_write (pool_t* pool, int dst_fd)
                           -send_err, strerror(-send_err));
         }
     }
+
     return 0;
 }
 
@@ -812,40 +889,44 @@ int
 glb_pool_add_conn (glb_pool_t*     pool,
                    int             inc_sock,
                    int             dst_sock,
-                   glb_sockaddr_t* dst_addr)
+                   glb_sockaddr_t* dst_addr,
+                   bool            complete)
 {
-    pool_t* p     = pool_get_pool (pool);
-    int     ret   = -ENOMEM;
-    void*   route = NULL;
-
-    GLB_MUTEX_LOCK (&pool->lock);
+    int             ret   = -ENOMEM;
+    glb_sockaddr_t* route = NULL;
 
     route = malloc (pool_conn_size);
     if (route) {
-        pool_conn_end_t* inc_end = route;
-        pool_conn_end_t* dst_end = route + pool_end_size;
-        pool_ctl_t       add_conn_ctl = { POOL_CTL_ADD_CONN, route };
+        glb_sockaddr_t*  const dst_adr = route;
+        pool_conn_end_t* const inc_end = (pool_conn_end_t*)(dst_adr + 1);
+        pool_conn_end_t* const dst_end =
+            (pool_conn_end_t*)(((uint8_t*)inc_end) + pool_end_size);
 
-        inc_end->inc      = true;
+        *dst_adr          = *dst_addr; // needed for cleanups
+
+        inc_end->end      = POOL_END_CLIENT;
         inc_end->sock     = inc_sock;
         inc_end->sent     = 0;
         inc_end->total    = 0;
-        inc_end->dst_addr = *dst_addr; // needed for cleanups
 
-        dst_end->inc      = false;
+        dst_end->end      = complete ? POOL_END_COMPLETE : POOL_END_INCOMPLETE;
         dst_end->sock     = dst_sock;
         dst_end->sent     = 0;
         dst_end->total    = 0;
-        dst_end->dst_addr = *dst_addr; // needed for cleanups
 
 #ifdef GLB_USE_SPLICE
         if (pipe (inc_end->splice)) abort();
         if (pipe (dst_end->splice)) abort();
 #endif
-        ret = pool_send_ctl (p, &add_conn_ctl);
-    }
+        pool_ctl_t add_conn_ctl = { POOL_CTL_ADD_CONN, inc_end };
 
-    GLB_MUTEX_UNLOCK (&pool->lock);
+        GLB_MUTEX_LOCK (&pool->lock);
+        {
+            pool_t* p = pool_get_pool (pool);
+            ret = pool_send_ctl (p, &add_conn_ctl);
+        }
+        GLB_MUTEX_UNLOCK (&pool->lock);
+    }
 
     return ret;
 }

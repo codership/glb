@@ -1,3 +1,8 @@
+2013-01-07 alex 
+- Added asynchronous connection processing - by default. -Y option to turn on
+  old bevaviour.
+  Version 0.9.1
+
 2012-12-19 alex 
 - Fixed division by 0 when destination list is empty introduced by
   "round-robin" policy support.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -21,6 +21,7 @@ extern char* optarg;
 typedef enum cmd_opt
 {
     CMD_OPT_VERSION      = 'V',
+    CMD_OPT_SYNCHRONOUS  = 'Y',
     CMD_OPT_DEFER_ACCEPT = 'a',
     CMD_OPT_ROUND_ROBIN  = 'b',
     CMD_OPT_CONTROL      = 'c',
@@ -100,6 +101,9 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  -v|--verbose              turn on verbose reporting.\n");
     fprintf (out,
+             "  -Y                        "
+             "connect synchronously (one-at-a-time).\n");
+    fprintf (out,
              "  -V|--version              print program version.\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
              "  [IP:]PORT                 "
@@ -132,9 +136,16 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "abc:dfhm:nt:rsvV", cmd_options,
+    while ((opt = getopt_long (argc, argv, "VYabc:dfhm:nt:rsv", cmd_options,
                                &opt_idx)) != -1) {
         switch (opt) {
+        case CMD_OPT_VERSION:
+            glb_print_version (stdout);
+            if (argc == 2) exit(0);
+            break;
+        case CMD_OPT_SYNCHRONOUS:
+            tmp->synchronous = true;
+            break;
         case CMD_OPT_DEFER_ACCEPT:
             tmp->defer_accept = true;
             break;
@@ -184,10 +195,6 @@ glb_cmd_parse (int argc, char* argv[])
             break;
         case CMD_OPT_VERBOSE:
             tmp->verbose = true;
-            break;
-        case CMD_OPT_VERSION:
-            glb_print_version (stdout);
-            if (argc == 2) exit(0);
             break;
         default:
             fprintf (stderr, "Option '%s' (%d) not supported yet. Ignoring.\n",

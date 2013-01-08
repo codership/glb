@@ -7,6 +7,7 @@
 #include "glb_socket.h"
 #include "glb_cnf.h"
 #include "glb_log.h"
+#include "glb_misc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -166,6 +167,14 @@ glb_socket_setopt (int sock, uint32_t const optflags)
         ret = -errno;
     }
 #endif /* TCP_DEFER_ACCEPT */
+
+    if ((optflags & GLB_SOCK_NONBLOCK) &&
+        glb_fd_set_flag (sock, O_NONBLOCK, true))
+    {
+        glb_log_warn ("Setting O_NONBLCK failed: %d (%s)",
+                      errno, strerror(errno));
+        ret = -errno;
+    }
 
     return ret;
 }

@@ -34,6 +34,7 @@ typedef struct glb_cnf
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
+    bool           synchronous;  // connect synchronously
 #endif /* GLBD */
     bool           ctrl_set;     // was set? (false)
     glb_policy_t   policy;       // algorithm to use for load-balancing

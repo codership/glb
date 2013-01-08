@@ -47,6 +47,7 @@ glb_socket_addr_get_port (const glb_sockaddr_t* addr);
 
 #define GLB_SOCK_NODELAY      1U
 #define GLB_SOCK_DEFER_ACCEPT 2U
+#define GLB_SOCK_NONBLOCK     4U
 
 // Returns socket (file descriptor) bound to a given address
 // with default options set
