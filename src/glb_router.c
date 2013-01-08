@@ -99,10 +99,9 @@ router_dst_is_good_for_map (router_dst_t* const d,
 }
 
 static void
-router_redo_map (glb_router_t* router)
+router_redo_map (glb_router_t* router, time_t now)
 {
-    time_t const now   = time(NULL);
-    long   const retry = ROUTER_RETRY_INTERVAL(router);
+    long const retry = ROUTER_RETRY_INTERVAL(router);
     int i;
 
     // pass 1: calculate total weight of available destinations
@@ -235,6 +234,12 @@ glb_router_change_dst (glb_router_t*             const router,
         }
         else {
             router->dst = tmp;
+            router->n_dst--;
+            assert (router->n_dst >= 0);
+            if (router->n_dst)
+                router->rrb_next = router->rrb_next % router->n_dst;
+            else
+                router->rrb_next = 0;
         }
     }
     else if (d->dst.weight != dst->weight) {
@@ -245,7 +250,7 @@ glb_router_change_dst (glb_router_t*             const router,
 #endif
     }
 
-    router_redo_map (router);
+    router_redo_map (router, time (NULL));
 
     assert (router->n_dst >= 0);
 
@@ -425,7 +430,7 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
     if (router->map_failed != 0 &&
         difftime (now, router->map_failed) > ROUTER_RETRY_INTERVAL(router))
     {
-        router_redo_map (router);
+        router_redo_map (router, now);
         router->map_failed = 0;
     }
 
@@ -478,6 +483,18 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
 
 #endif /* GLBD */
 
+static inline void
+router_dst_failed (glb_router_t* router, router_dst_t* dst)
+{
+    time_t now = time(NULL);
+
+    if (router_dst_is_good_for_map (dst, now, ROUTER_RETRY_INTERVAL(router)))
+        router_redo_map (router, now);
+
+    dst->failed        = now;
+    router->map_failed = now;
+}
+
 // connect to a best destination, possiblly failing over to a next best
 static int
 router_connect_dst (glb_router_t*   const router,
@@ -505,10 +522,11 @@ router_connect_dst (glb_router_t*   const router,
         ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
                            sizeof (dst->dst.addr));
 
+        error = ret ? errno : 0;
+
         GLB_MUTEX_LOCK (&router->lock);
 
-        if (ret != 0) {
-            error = errno;
+        if (error && error != EINPROGRESS) {
             // connect failed, undo usage count, update destination failed mark
 #ifdef GLBD
             dst->conns--; router->conns--;
@@ -518,9 +536,7 @@ router_connect_dst (glb_router_t*   const router,
             glb_log_warn ("Failed to connect to %s: %d (%s)",
                           a.str, error, strerror(error));
 #endif
-            dst->failed = time(NULL);
-            router_redo_map(router);
-            router->map_failed = dst->failed;
+            router_dst_failed (router, dst);
             redirect = true;
         }
         else {
@@ -531,7 +547,6 @@ router_connect_dst (glb_router_t*   const router,
                 glb_log_warn ("Redirecting to %s", a.str);
 #endif
             }
-            error = 0; // return success
             break;
         }
     }
@@ -545,7 +560,7 @@ router_connect_dst (glb_router_t*   const router,
 
     GLB_MUTEX_UNLOCK (&router->lock);
 
-    return -error; // all attempts failed, return last errno
+    return -error;
 }
 
 static inline uint32_t
@@ -558,25 +573,29 @@ router_random_hint (glb_router_t* router)
 }
 
 #ifdef GLBD
-// returns socket number or negative error code
+// returns 0 or negative error code
 int
 glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
-                    glb_sockaddr_t* dst_addr)
+                    glb_sockaddr_t* dst_addr, int* sock)
 {
-    int sock, ret;
+    int ret;
 
     /* Here it is assumed that this function is called only from one thread. */
     if (router->conns >= router->cnf->max_conn) {
         glb_log_warn ("Maximum connection limit of %ld exceeded. Rejecting "
                       "connection attempt.", router->cnf->max_conn);
-        return -EMFILE;
+        *sock = -EMFILE;
+        return *sock;
     }
 
     // prepare a socket
-    sock = glb_socket_create (&router->sock_out, GLB_SOCK_NODELAY);
-    if (sock < 0) {
+    int const nonblock = router->cnf->synchronous ? 0 : GLB_SOCK_NONBLOCK;
+
+    *sock = glb_socket_create (&router->sock_out, GLB_SOCK_NODELAY | nonblock);
+
+    if (*sock < 0) {
         glb_log_error ("glb_socket_create() failed");
-        return sock;
+        return *sock;
     }
 
     uint32_t hint = 0;
@@ -589,20 +608,21 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     };
 
     // attmept to connect until we run out of destinations
-    ret = router_connect_dst (router, sock, hint, dst_addr);
+    ret = router_connect_dst (router, *sock, hint, dst_addr);
 
     // avoid socket leak
-    if (ret < 0) {
-        glb_log_debug ("router_connect_dst() failed.");
-        close (sock);
-        sock = ret;
+    if (ret < 0 && ret != -EINPROGRESS) {
+        glb_log_error ("router_connect_dst() failed.");
+        close (*sock);
+        *sock = ret;
     }
 
-    return sock;
+    return ret;
 }
 
 void
-glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
+glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst,
+                       bool failed)
 {
     long i;
 
@@ -613,18 +633,19 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst)
         if (glb_sockaddr_is_equal (&d->dst.addr, dst)) {
             d->conns--; router->conns--;
             assert(d->conns >= 0);
-            d->usage = router_dst_usage(d);
+            d->usage = router_dst_usage (d);
+            if (failed) router_dst_failed (router, d);
             break;
         }
     }
+
+    GLB_MUTEX_UNLOCK (&router->lock);
 
     if (i == router->n_dst) {
         glb_sockaddr_str_t a = glb_sockaddr_to_str (dst);
         glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
                       a.str);
     }
-
-    GLB_MUTEX_UNLOCK (&router->lock);
 }
 
 size_t

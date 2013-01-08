@@ -1,3 +1,6 @@
+2013-01-07 alex 
+- Merged in asynchronous connection processing from 0.9.1.
+
 2012-12-23 alex 
 - Implemented initial watchdog framework that asynchronously monitors
   destinations using server-spceific probes and updates routing table

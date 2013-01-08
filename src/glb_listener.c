@@ -46,8 +46,8 @@ listener_thread (void* arg)
 
 #ifdef _GNU_SOURCE
         client_sock = accept4(listener->sock,
-                               (struct sockaddr*) &client, &client_size,
-                               SOCK_CLOEXEC);
+                              (struct sockaddr*) &client, &client_size,
+                              SOCK_CLOEXEC);
 #else
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
@@ -65,7 +65,8 @@ listener_thread (void* arg)
         (void) fcntl (client_sock, F_SETFD, FD_CLOEXEC);
 #endif /* !_GNU_SOURCE */
 
-        server_sock = glb_router_connect(listener->router, &client ,&server);
+        ret = glb_router_connect(listener->router, &client ,&server,
+                                 &server_sock);
         if (server_sock < 0) {
             if (server_sock != -EMFILE)
                 glb_log_error("Failed to connect to destination: %d (%s)",
@@ -73,10 +74,12 @@ listener_thread (void* arg)
             goto err1;
         }
 
+        assert (0 == ret || -EINPROGRESS == ret);
+
         glb_socket_setopt(client_sock, GLB_SOCK_NODELAY); // ignore error here
 
         ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
-                                 &server);
+                                 &server, 0 == ret);
         if (ret < 0) {
             glb_log_error ("Failed to add connection to pool: "
                            "%d (%s)", -ret, strerror (-ret));
@@ -91,10 +94,14 @@ listener_thread (void* arg)
         continue;
 
     err2:
-        if (server_sock != -1) close (server_sock);
-        glb_router_disconnect (listener->router, &server);
+        assert (server_sock > 0);
+        close  (server_sock);
+        glb_router_disconnect (listener->router, &server, false);
+
     err1:
-        if (client_sock != -1) close (client_sock);
+        assert (client_sock > 0);
+        close  (client_sock);
+
     err:
         // to avoid busy loop in case of error
         if (!glb_terminate) usleep (100000);

@@ -36,6 +36,7 @@ typedef struct glb_cnf
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
+    bool           synchronous;  // connect synchronously
 #endif /* GLBD */
     glb_time_t     interval;     // health check interval (nanoseconds)
     glb_time_t     extra;        // extra check interval (nanoseconds)

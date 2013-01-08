@@ -58,6 +58,7 @@ glb_sockaddr_get_host (const glb_sockaddr_t* addr);
 
 #define GLB_SOCK_NODELAY      1U
 #define GLB_SOCK_DEFER_ACCEPT 2U
+#define GLB_SOCK_NONBLOCK     4U
 
 // Returns socket (file descriptor) bound to a given address
 // with default options set

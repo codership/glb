@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -22,6 +22,7 @@ extern char* optarg;
 typedef enum cmd_opt
 {
     CMD_OPT_VERSION      = 'V',
+    CMD_OPT_SYNCHRONOUS  = 'Y',
     CMD_OPT_DEFER_ACCEPT = 'a',
     CMD_OPT_ROUND_ROBIN  = 'b',
     CMD_OPT_CONTROL      = 'c',
@@ -117,6 +118,9 @@ glb_cmd_help (FILE* out, const char* progname)
              "extra polling frequency (fractional seconds).\n");
     fprintf (out,
              "  -V|--version              print program version.\n");
+    fprintf (out,
+             "  -Y                        "
+             "connect synchronously (one-at-a-time).\n");
     fprintf (out, "LISTEN_ADDRESS:\n"
              "  [IP:]PORT                 "
              "where to listen for incoming TCP connections at.\n"
@@ -151,9 +155,16 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "abc:dfhi:m:nt:rsvw:x:V",cmd_options,
+    while ((opt = getopt_long (argc, argv,"VYabc:dfhi:m:nt:rsvw:x:",cmd_options,
                                &opt_idx)) != -1) {
         switch (opt) {
+        case CMD_OPT_VERSION:
+            glb_print_version (stdout);
+            if (argc == 2) exit(0);
+            break;
+        case CMD_OPT_SYNCHRONOUS:
+            tmp->synchronous = true;
+            break;
         case CMD_OPT_DEFER_ACCEPT:
             tmp->defer_accept = true;
             break;
@@ -224,10 +235,6 @@ glb_cmd_parse (int argc, char* argv[])
                          "Non-negative real number expected.\n", optarg);
                 exit (EXIT_FAILURE);
             }
-            break;
-        case CMD_OPT_VERSION:
-            glb_print_version (stdout);
-            if (argc == 2) exit(0);
             break;
         default:
             fprintf (stderr, "Option '%s' (%d) not supported yet. Ignoring.\n",

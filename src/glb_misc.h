@@ -57,4 +57,30 @@ glb_set_fd_flag (int const fd, int const flag, bool const on)
     return -errno;
 }
 
+#if __GNUC__ >= 3
+#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
+#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
+#else
+#  define GLB_LIKELY(x)   (x)
+#  define GLB_UNLIKELY(x) (x)
+#endif
+
+static inline int
+glb_fd_set_flag (int fd, int flag, bool on)
+{
+    int flags = fcntl (fd, F_GETFL);
+
+    if (flags >= 0)
+    {
+        if (on && !(flags & flag))
+            return fcntl (fd, F_SETFL, flags | flag);
+        else if (!on && (flags & flag))
+            return fcntl (fd, F_SETFL, flags & (~flag));
+
+        return 0;
+    }
+
+    return -errno;
+}
+
 #endif // _glb_misc_h_
