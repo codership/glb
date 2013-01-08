@@ -1,6 +1,8 @@
-2013-01-07 alex 
-- Added asynchronous connection processing - by default. -Y option to turn on
-  old bevaviour.
+2013-01-08 alex 
+- Added asynchronous connection processing by default. -Y option to turn back
+  old synchronous (one-at-a-time) bevaviour.
+- Avoid destination map recalculation when not using 'random' or 'source'
+  policies.
   Version 0.9.1
 
 2012-12-19 alex 
