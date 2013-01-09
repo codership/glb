@@ -74,9 +74,9 @@ allocate_resources(const glb_cnf_t* conf,
     }
 
     if (conf->daemonize) { // make sure those survive fork()
-        glb_set_fd_flag (*ctrl_fifo,   FD_CLOEXEC, false);
-        glb_set_fd_flag (*ctrl_sock,   FD_CLOEXEC, false);
-        glb_set_fd_flag (*listen_sock, FD_CLOEXEC, false);
+        glb_fd_setfd (*ctrl_fifo,   FD_CLOEXEC, false);
+        glb_fd_setfd (*ctrl_sock,   FD_CLOEXEC, false);
+        glb_fd_setfd (*listen_sock, FD_CLOEXEC, false);
     }
 
     glb_fifo_name = conf->fifo_name;
@@ -148,9 +148,9 @@ int main (int argc, char* argv[])
         glb_daemon_start();
         /* at this point we're a child process:
          * 1) make at least those sockets unforkable */
-        glb_set_fd_flag (ctrl_fifo,   FD_CLOEXEC, true);
-        glb_set_fd_flag (ctrl_sock,   FD_CLOEXEC, true);
-        glb_set_fd_flag (listen_sock, FD_CLOEXEC, true);
+        glb_fd_setfd (ctrl_fifo,   FD_CLOEXEC, true);
+        glb_fd_setfd (ctrl_sock,   FD_CLOEXEC, true);
+        glb_fd_setfd (listen_sock, FD_CLOEXEC, true);
     }
     /*     2) remove SIGCHLD handler */
     signal (SIGCHLD, SIG_DFL);

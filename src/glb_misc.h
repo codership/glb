@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -10,9 +10,7 @@
 #include "glb_log.h"
 
 #include <pthread.h>
-#include <string.h>
-#include <time.h>
-#include <sys/time.h>
+#include <string.h> // strerror()
 
 static inline void GLB_MUTEX_LOCK (pthread_mutex_t* mtx)
 {
@@ -40,18 +38,34 @@ static inline void GLB_MUTEX_UNLOCK (pthread_mutex_t* mtx)
 /* Even though there is currently only FD_CLOEXEC defined, it is good to
  * play safe. */
 static inline int
-glb_set_fd_flag (int const fd, int const flag, bool const on)
+glb_fd_setfd (int const fd, int const flag, bool const on)
 {
-    int flags = fcntl (fd, F_GETFD);
+    int const old_flags = fcntl (fd, F_GETFD);
 
-    if (flags >= 0)
+    if (old_flags >= 0)
     {
-        if (on)
-            flags |= flag;
-        else
-            flags &= ~(flag);
+        int const new_flags =
+            on ? (old_flags | flag) : (old_flags & ~flag);
 
-        if (fcntl (fd, F_SETFD, flags) >= 0) return 0;
+        if (new_flags == old_flags ||
+            fcntl (fd, F_SETFD, new_flags) >= 0) return 0;
+    }
+
+    return -errno;
+}
+
+static inline int
+glb_fd_setfl (int const fd, int const flag, bool const on)
+{
+    int const old_flags = fcntl (fd, F_GETFL);
+
+    if (old_flags >= 0)
+    {
+        int const new_flags =
+            on ? (old_flags | flag) : (old_flags & ~flag);
+
+        if (new_flags == old_flags ||
+            fcntl (fd, F_SETFL, new_flags) >= 0) return 0;
     }
 
     return -errno;
@@ -64,23 +78,5 @@ glb_set_fd_flag (int const fd, int const flag, bool const on)
 #  define GLB_LIKELY(x)   (x)
 #  define GLB_UNLIKELY(x) (x)
 #endif
-
-static inline int
-glb_fd_set_flag (int fd, int flag, bool on)
-{
-    int flags = fcntl (fd, F_GETFL);
-
-    if (flags >= 0)
-    {
-        if (on && !(flags & flag))
-            return fcntl (fd, F_SETFL, flags | flag);
-        else if (!on && (flags & flag))
-            return fcntl (fd, F_SETFL, flags & (~flag));
-
-        return 0;
-    }
-
-    return -errno;
-}
 
 #endif // _glb_misc_h_

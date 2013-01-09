@@ -193,7 +193,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
 #endif /* TCP_DEFER_ACCEPT */
 
     if ((optflags & GLB_SOCK_NONBLOCK) &&
-        glb_fd_set_flag (sock, O_NONBLOCK, true))
+        glb_fd_setfl (sock, O_NONBLOCK, true))
     {
         glb_log_warn ("Setting O_NONBLCK failed: %d (%s)",
                       errno, strerror(errno));
