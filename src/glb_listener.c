@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -50,10 +50,10 @@ listener_thread (void* arg)
 
         ret = glb_router_connect(listener->router, &client ,&server,
                                  &server_sock);
-        if (server_sock < 0) {
+        if (server_sock < 0 && ret != -EINPROGRESS) {
             if (server_sock != -EMFILE)
                 glb_log_error("Failed to connect to destination: %d (%s)",
-                              -server_sock, strerror(-server_sock));
+                              -ret, strerror(-ret));
             goto err1;
         }
 
@@ -61,8 +61,10 @@ listener_thread (void* arg)
 
         glb_socket_setopt(client_sock, GLB_SOCK_NODELAY); // ignore error here
 
-        ret = glb_pool_add_conn (listener->pool, client_sock, server_sock,
-                                 &server, 0 == ret);
+        ret = glb_pool_add_conn (listener->pool,
+                                 client_sock, &client,
+                                 server_sock, &server,
+                                 0 == ret);
         if (ret < 0) {
             glb_log_error ("Failed to add connection to pool: "
                            "%d (%s)", -ret, strerror (-ret));

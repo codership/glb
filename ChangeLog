@@ -1,8 +1,10 @@
-2013-01-08 alex 
+2013-01-10 alex 
 - Added asynchronous connection processing by default. -Y option to turn back
   old synchronous (one-at-a-time) bevaviour.
 - Avoid destination map recalculation when not using 'random' or 'source'
   policies.
+- A more intuitive weghting algorithm where weight 100 means that the dest.
+  will get ~100 connections before a destination with weight 1 will be tried.
   Version 0.9.1
 
 2012-12-19 alex 

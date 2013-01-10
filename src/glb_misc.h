@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -12,10 +12,18 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
+#if __GNUC__ >= 3
+#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
+#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
+#else
+#  define GLB_LIKELY(x)   (x)
+#  define GLB_UNLIKELY(x) (x)
+#endif
+
 #define GLB_MUTEX_LOCK(mtx)                                             \
 {                                                                       \
     int ret;                                                            \
-    if ((ret = pthread_mutex_lock (mtx))) {                             \
+    if (GLB_UNLIKELY((ret = pthread_mutex_lock (mtx)) != 0)) {          \
         glb_log_fatal ("Failed to lock mutex: %d (%s)", ret, strerror(ret));\
         abort();                                                        \
     }                                                                   \
@@ -24,19 +32,11 @@
 #define GLB_MUTEX_UNLOCK(mtx)                                           \
 {                                                                       \
     int ret;                                                            \
-    if ((ret = pthread_mutex_unlock (mtx))) {                           \
+    if (GLB_UNLIKELY((ret = pthread_mutex_unlock (mtx)) != 0)) {        \
         glb_log_fatal ("Failed to unlock mutex: %d (%s)", ret, strerror(ret));\
         abort();                                                        \
     }                                                                   \
 }
-
-#if __GNUC__ >= 3
-#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
-#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
-#else
-#  define GLB_LIKELY(x)   (x)
-#  define GLB_UNLIKELY(x) (x)
-#endif
 
 static inline int
 glb_fd_set_flag (int fd, int flag, bool on)
