@@ -33,8 +33,6 @@ add/remove destinations
  * $Id$
  */
 
-#undef NDEBUG // for now
-
 #include "glb_wdog.h"
 #include "glb_wdog_backend.h"
 #include "glb_wdog_exec.h"
@@ -48,6 +46,8 @@ add/remove destinations
 #include <errno.h>
 #include <time.h>     // nanosleep()
 #include <sys/time.h> // gettimeofday()
+
+#undef NDEBUG // for now
 
 typedef struct wdog_dst
 {
@@ -184,6 +184,7 @@ glb_wdog_change_dst (glb_wdog_t*      const wdog,
                     memset (d, 0, sizeof(*d));
                     d->explicit = explicit;
                     d->dst      = *dst;
+                    d->weight   = -1.0; // not yet in router list
                     d->ctx      = ctx;
                 }
                 else {
@@ -412,12 +413,13 @@ wdog_collect_results (glb_wdog_t* const wdog)
             dst.weight = new_weight;
             int ret = glb_router_change_dst (wdog->router, &dst, d->ctx);
 #if GLBD
-#ifndef NDEBUG
+//#ifndef NDEBUG
+#if glb_log_debug
             glb_sockaddr_str_t a = glb_sockaddr_to_str (&d->dst.addr);
             glb_log_debug ("Changing weight for %s: %6.3f -> %6.3f:  %d (%s)",
                            a.str, d->weight, new_weight,
                            ret, strerror (ret > 0 ? 0 : -ret));
-#endif /* NDEBUG */
+#endif /* glb_log_debug */
 #endif /* GLBD */
             if (ret >= 0) {
                 if (new_weight < 0.0 && wdog->pool) { // clean up the pool!

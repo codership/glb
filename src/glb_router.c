@@ -143,7 +143,8 @@ router_redo_map (glb_router_t* router, time_t now)
 #ifdef GLBD
 static inline double
 router_dst_usage (router_dst_t* d)
-{ return (d->dst.weight / (d->conns + router_div_prot)); }
+/* +1 stands for what would be the usage of dst if we connect to it */
+{ return (d->dst.weight / (d->conns + 1)); }
 #endif
 
 /*! return index of the deleted destination or negative error code*/
@@ -174,7 +175,7 @@ glb_router_change_dst (glb_router_t*             const router,
         glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
 #endif
-        return -EADDRNOTAVAIL;
+        return -ENONET;
     }
 
     if (!d || dst->weight < 0) {
@@ -221,13 +222,11 @@ glb_router_change_dst (glb_router_t*             const router,
         if ((i + 1) < router->n_dst) {
             // it is not the last, copy the last one over
             *d = router->dst[router->n_dst - 1];
-//            router_dst_t* next = d + 1;
-//            size_t len = (router->n_dst - i - 1)*sizeof(router_dst_t);
-//            memmove (d, next, len);
         }
 
         router->n_dst--;
         assert (router->n_dst >= 0);
+
         if (router->n_dst)
             router->rrb_next = router->rrb_next % router->n_dst;
         else
@@ -235,17 +234,11 @@ glb_router_change_dst (glb_router_t*             const router,
 
         tmp = realloc (router->dst, router->n_dst * sizeof(router_dst_t));
 
-        if (!tmp && (router->n_dst > 1)) {
+        if (!tmp && (router->n_dst > 0)) {
             i = -ENOMEM; // this should actually be survivable, but no point
         }
         else {
             router->dst = tmp;
-            router->n_dst--;
-            assert (router->n_dst >= 0);
-            if (router->n_dst)
-                router->rrb_next = router->rrb_next % router->n_dst;
-            else
-                router->rrb_next = 0;
         }
     }
     else if (d->dst.weight != dst->weight) {
@@ -456,6 +449,15 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
     return NULL;
 }
 
+static inline uint32_t
+router_random_hint (glb_router_t* router)
+{
+    uint32_t ret = rand_r(&router->seed);
+    // the above returns only positive signed integers.
+    // Need to expand it to 32 bits below.
+    return ret ^ (ret << 1);
+}
+
 #ifdef GLBD
 
 #define glb_connect connect
@@ -463,13 +465,45 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
+    router_dst_t* ret = NULL;
+
     switch (router->cnf->policy) {
-    case GLB_POLICY_LEAST:  return router_choose_dst_least (router);
-    case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
-    case GLB_POLICY_RANDOM:
-    case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint);
+    case GLB_POLICY_LEAST:  ret = router_choose_dst_least (router); break;
+    case GLB_POLICY_ROUND:  ret = router_choose_dst_round (router); break;
+    case GLB_POLICY_RANDOM: hint = router_random_hint (router);
+    case GLB_POLICY_SOURCE: ret = router_choose_dst_hint  (router, hint);
     }
-    return NULL;
+
+    if (GLB_LIKELY(ret != NULL)) {
+        ret->conns++; router->conns++;
+        ret->usage = router_dst_usage(ret);
+    }
+
+    return ret;
+}
+
+int
+glb_router_choose_dst (glb_router_t*   const router,
+                       uint32_t        const src_hint,
+                       glb_sockaddr_t* const dst_addr)
+{
+    int ret;
+
+    GLB_MUTEX_LOCK (&router->lock);
+
+    router_dst_t* const dst = router_choose_dst (router, src_hint);
+
+    if (GLB_LIKELY(dst != NULL)) {
+        *dst_addr = dst->dst.addr;
+        ret = 0;
+    }
+    else {
+        ret = -EHOSTDOWN;
+    }
+
+    GLB_MUTEX_UNLOCK (&router->lock);
+
+    return ret;
 }
 
 #else /* GLBD */
@@ -482,7 +516,7 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
     switch (router->cnf->policy) {
     case GLB_POLICY_LEAST:  return NULL;
     case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
-    case GLB_POLICY_RANDOM:
+    case GLB_POLICY_RANDOM: hint = router_random_hint (router);
     case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint);
     }
     return NULL;
@@ -521,10 +555,7 @@ router_connect_dst (glb_router_t*   const router,
 
     // keep trying until we run out of destinations
     while ((dst = router_choose_dst (router, hint))) {
-#ifdef GLBD
-        dst->conns++; router->conns++;
-        dst->usage = router_dst_usage(dst);
-#endif
+
         GLB_MUTEX_UNLOCK (&router->lock);
 
         ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
@@ -571,15 +602,6 @@ router_connect_dst (glb_router_t*   const router,
     return -error;
 }
 
-static inline uint32_t
-router_random_hint (glb_router_t* router)
-{
-    uint32_t ret = rand_r(&router->seed);
-    // the above returns only positive signed integers.
-    // Need to expand it to 32 bits below.
-    return ret ^ (ret << 1);
-}
-
 #ifdef GLBD
 // returns 0 or negative error code
 int
@@ -589,52 +611,51 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     int ret;
 
     /* Here it is assumed that this function is called only from one thread. */
-    if (router->conns >= router->cnf->max_conn) {
+    if (GLB_UNLIKELY(router->conns >= router->cnf->max_conn)) {
         glb_log_warn ("Maximum connection limit of %ld exceeded. Rejecting "
                       "connection attempt.", router->cnf->max_conn);
         *sock = -EMFILE;
         return *sock;
     }
 
-    // prepare a socket
-    int const nonblock = router->cnf->synchronous ? 0 : GLB_SOCK_NONBLOCK;
+    uint32_t hint = router->cnf->policy < GLB_POLICY_SOURCE ?
+        0 : glb_sockaddr_hash (src_addr);
 
-    *sock = glb_socket_create (&router->sock_out, GLB_SOCK_NODELAY | nonblock);
-
-    if (*sock < 0) {
-        glb_log_error ("glb_socket_create() failed");
-        return *sock;
+    if (!router->cnf->synchronous) {
+        ret = glb_router_choose_dst (router, hint, dst_addr);
+        if (!ret) ret = -EINPROGRESS;
+        *sock = -1;
     }
+    else {
+        // prepare a socket
+        *sock = glb_socket_create (&router->sock_out,
+                                   GLB_SOCK_NODELAY /*| GLB_SOCK_NONBLOCK*/);
 
-    uint32_t hint = 0;
-    switch (router->cnf->policy)
-    {
-    case GLB_POLICY_LEAST:
-    case GLB_POLICY_ROUND:  break;
-    case GLB_POLICY_RANDOM: hint = router_random_hint(router); break;
-    case GLB_POLICY_SOURCE: hint = glb_sockaddr_hash(src_addr); break;
-    };
+        if (*sock < 0) {
+            glb_log_error ("glb_socket_create() failed");
+            return *sock;
+        }
 
-    // attmept to connect until we run out of destinations
-    ret = router_connect_dst (router, *sock, hint, dst_addr);
+        // attmept to connect until we run out of destinations
+        ret = router_connect_dst (router, *sock, hint, dst_addr);
 
-    // avoid socket leak
-    if (ret < 0 && ret != -EINPROGRESS) {
-        glb_log_error ("router_connect_dst() failed.");
-        close (*sock);
-        *sock = ret;
+        // avoid socket leak
+        if (ret < 0 /* && ret != -EINPROGRESS*/) {
+            glb_log_error ("router_connect_dst() failed.");
+            close (*sock);
+            *sock = ret;
+        }
     }
 
     return ret;
 }
 
-void
-glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst,
-                       bool failed)
+static inline int
+router_disconnect (glb_router_t*         const router,
+                   const glb_sockaddr_t* const dst,
+                   bool                  const failed)
 {
-    long i;
-
-    GLB_MUTEX_LOCK (&router->lock);
+    int i;
 
     for (i = 0; i < router->n_dst; i++) {
         router_dst_t* d = &router->dst[i];
@@ -647,6 +668,18 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst,
         }
     }
 
+    return i;
+}
+
+void
+glb_router_disconnect (glb_router_t*         const router,
+                       const glb_sockaddr_t* const dst,
+                       bool                  const failed)
+{
+    GLB_MUTEX_LOCK (&router->lock);
+
+    int const i = router_disconnect (router, dst, failed);
+
     GLB_MUTEX_UNLOCK (&router->lock);
 
     if (i == router->n_dst) {
@@ -654,6 +687,39 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst,
         glb_log_warn ("Attempt to disconnect from non-existing destination: %s",
                       a.str);
     }
+}
+
+int
+glb_router_choose_dst_again (glb_router_t*   const router,
+                             uint32_t        const src_hint,
+                             glb_sockaddr_t* const dst_addr)
+{
+    int ret;
+
+    GLB_MUTEX_LOCK (&router->lock);
+
+#ifndef NDEBUG
+    int const old_conns = router->conns;
+#endif
+
+    ret = router_disconnect (router, dst_addr, true);
+    assert (ret != router->n_dst);
+
+    router_dst_t* const dst = router_choose_dst (router, src_hint);
+
+    assert (old_conns == router->conns);
+
+    if (GLB_LIKELY(dst != NULL)) {
+        *dst_addr = dst->dst.addr;
+        ret = 0;
+    }
+    else {
+        ret = -EHOSTDOWN;
+    }
+
+    GLB_MUTEX_UNLOCK (&router->lock);
+
+    return ret;
 }
 
 size_t
@@ -678,9 +744,20 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
         router_dst_t* d = &router->dst[i];
         glb_sockaddr_str_t addr = glb_sockaddr_to_astr (&d->dst.addr);
 
-        len += snprintf (buf + len, buf_len - len,
-                        "%s : %8.3f %7.3f %7.3f %5d\n", addr.str,
-                         d->dst.weight, 1.0/(d->usage + 1.0), d->map, d->conns);
+        if (router_uses_map (router)) {
+            len += snprintf (buf + len, buf_len - len,
+                             "%s : %8.3f %7.3f %7.3f %5d\n",
+                             addr.str,
+                             d->dst.weight, 1.0 - (d->usage/d->dst.weight),
+                             d->map, d->conns);
+        }
+        else {
+            len += snprintf (buf + len, buf_len - len,
+                             "%s : %8.3f %7.3f    N/A  %5d\n",
+                             addr.str,
+                             d->dst.weight, 1.0 - (d->usage/d->dst.weight),
+                             d->conns);
+        }
 
         if (len == buf_len) {
             buf[len - 1] = '\0';
@@ -711,9 +788,8 @@ int __glb_router_connect(glb_router_t* const router, int const sockfd)
 {
     glb_sockaddr_t dst;
 
-    uint32_t hint =
-        GLB_POLICY_RANDOM == router->cnf->policy ?
-        router_random_hint(router) : router->seed;
+    uint32_t hint = router->seed;
+    // random hint will be generated in router_connect_dst()
 
     return router_connect_dst (router, sockfd, hint, &dst);
 }

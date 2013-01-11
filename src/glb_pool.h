@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -22,11 +22,12 @@ glb_pool_destroy (glb_pool_t* pool);
 
 // Adds connection to conneciton pool
 extern int
-glb_pool_add_conn (glb_pool_t*     pool,
-                   int             inc_sock,
-                   int             dst_sock,
-                   glb_sockaddr_t* dst_addr,
-                   bool            complete);
+glb_pool_add_conn (glb_pool_t*           pool,
+                   int                   inc_sock,
+                   const glb_sockaddr_t* inc_addr,
+                   int                   dst_sock,
+                   const glb_sockaddr_t* dst_addr,
+                   bool                  complete);
 
 // Closes all connecitons to a given destination
 extern int

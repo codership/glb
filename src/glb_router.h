@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -29,6 +29,27 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst,
                        glb_backend_thread_ctx_t* probe_ctx);
 
 #ifdef GLBD
+
+/*!
+ * Finds destination for connection and copies its address to dst_addr.
+ * @param src_hint 4-byte hash of client address if available
+ * @return 0 if found, -EHOSTDOWN if not
+ */
+extern int
+glb_router_choose_dst (glb_router_t*   const router,
+                       uint32_t        const src_hint,
+                       glb_sockaddr_t* const dst_addr);
+
+/*!
+ * Atomically marks destination referenced by dst_addr as unavailable plus
+ * finds new destination and copies its address to dst_addr.
+ * @param src_hint 4-byte hash of client address if available
+ * @return 0 if found, -EHOSTDOWN if not
+ */
+extern int
+glb_router_choose_dst_again (glb_router_t*   const router,
+                             uint32_t        const src_hint,
+                             glb_sockaddr_t* const dst_addr);
 
 /*!
  * Returns file descriptor of a new destinaiton conneciton and fills

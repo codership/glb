@@ -12,10 +12,18 @@
 #include <pthread.h>
 #include <string.h> // strerror()
 
+#if __GNUC__ >= 3
+#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
+#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
+#else
+#  define GLB_LIKELY(x)   (x)
+#  define GLB_UNLIKELY(x) (x)
+#endif
+
 static inline void GLB_MUTEX_LOCK (pthread_mutex_t* mtx)
 {
     int ret;
-    if ((ret = pthread_mutex_lock (mtx))) {
+    if (GLB_UNLIKELY((ret = pthread_mutex_lock (mtx)) != 0)) {
         glb_log_fatal ("Failed to lock mutex: %d (%s)", ret, strerror(ret));
         abort();
     }
@@ -24,7 +32,7 @@ static inline void GLB_MUTEX_LOCK (pthread_mutex_t* mtx)
 static inline void GLB_MUTEX_UNLOCK (pthread_mutex_t* mtx)
 {
     int ret;
-    if ((ret = pthread_mutex_unlock (mtx))) {
+    if (GLB_UNLIKELY((ret = pthread_mutex_unlock (mtx)) != 0)) {
         glb_log_fatal ("Failed to unlock mutex: %d (%s)", ret, strerror(ret));
         abort();
     }
@@ -70,13 +78,5 @@ glb_fd_setfl (int const fd, int const flag, bool const on)
 
     return -errno;
 }
-
-#if __GNUC__ >= 3
-#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
-#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
-#else
-#  define GLB_LIKELY(x)   (x)
-#  define GLB_UNLIKELY(x) (x)
-#endif
 
 #endif // _glb_misc_h_

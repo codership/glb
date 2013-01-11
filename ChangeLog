@@ -1,4 +1,4 @@
-2013-01-08 alex 
+2013-01-10 alex 
 - Merged in asynchronous connection processing from 0.9.1 and other missing
   fixes from the trunk.
   Version 1.0.0alpha3
