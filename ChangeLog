@@ -5,6 +5,9 @@
   policies.
 - A more intuitive weghting algorithm where weight 100 means that the dest.
   will get ~100 connections before a destination with weight 1 will be tried.
+- Made libglb connect() more compliant with standard connect() - i.e.
+  returning -1 in case of error instead of negative error code and setting
+  errno acordingly. Also improved handling of non-blocking sockets in libglb.
   Version 0.9.1
 
 2012-12-19 alex 

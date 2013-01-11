@@ -495,7 +495,7 @@ router_connect_dst (glb_router_t*   const router,
 {
     router_dst_t* dst;
     int  error    = EHOSTDOWN;
-    int  ret;
+    int  ret      = -1;
     bool redirect = false;
 
     GLB_MUTEX_LOCK (&router->lock);
@@ -736,7 +736,35 @@ int __glb_router_connect(glb_router_t* const router, int const sockfd)
     uint32_t hint = router->seed;
     // random hint will be generated in router_connect_dst()
 
-    return router_connect_dst (router, sockfd, hint, &dst);
+    // need to temporarily make socket blocking
+    int const orig_flags = fcntl (sockfd, F_GETFL);
+    if (orig_flags >= 0) {
+        int const block_flags = orig_flags & (~O_NONBLOCK);
+
+        if (orig_flags != block_flags) fcntl (sockfd, F_SETFL, block_flags);
+
+        int const ret = router_connect_dst (router, sockfd, hint, &dst);
+
+        if (orig_flags != block_flags) fcntl (sockfd, F_SETFL, orig_flags);
+
+        if (GLB_UNLIKELY(ret < 0)) {
+            errno = -ret;
+        }
+        else {
+            if (orig_flags == block_flags) {
+                // socket was blocking, no voodoo was made.
+                return 0;
+            }
+            else {
+                // socket was non-blocking, temporarily reverted to blocking
+                // for non-blocking socket connect() is expected to return -1
+                // and set errno to EINPROGRESS
+                errno = EINPROGRESS;
+            }
+        }
+    }
+
+    return -1;
 }
 
 size_t
