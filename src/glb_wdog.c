@@ -256,7 +256,7 @@ wdog_backend_factory (const glb_cnf_t* cnf,
 }
 
 static inline int
-wdog_copy_result (wdog_dst_t* d, double* max_lat)
+wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
 {
     double old_lat    = d->result.latency;
     char*  others     = d->result.others;
@@ -316,7 +316,7 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
 
     if (d->result.ready && GLB_DST_READY == d->result.state) {
         // smooth latency measurement with the previous one
-        d->result.latency = (d->result.latency + old_lat * 3.0) / 4.0;
+        d->result.latency = (d->result.latency + old_lat * lf) / (lf + 1);
         if (*max_lat < d->result.latency) *max_lat = d->result.latency;
 #if GLBD
 #ifndef NDEBUG
@@ -335,7 +335,8 @@ wdog_copy_result (wdog_dst_t* d, double* max_lat)
 
 // returns latency adjusted weight
 static inline double
-wdog_result_weight (wdog_dst_t* const d, double const max_lat)
+wdog_result_weight (wdog_dst_t* const d, double const max_lat,
+                    bool const use_latency)
 {
     assert (d->result.ready); // this must be called only for fresh data
 
@@ -347,8 +348,10 @@ wdog_result_weight (wdog_dst_t* const d, double const max_lat)
     case GLB_DST_AVOID:
         return 0.0;
     case GLB_DST_READY:
-        if (max_lat > 0) return d->dst.weight * max_lat / d->result.latency;
-        return d->dst.weight;
+        if (max_lat > 0 && use_latency)
+            return d->dst.weight * max_lat / d->result.latency;
+        else
+            return d->dst.weight;
     }
 
     return 0.0;
@@ -374,7 +377,7 @@ wdog_collect_results (glb_wdog_t* const wdog)
     int i;
     for (i = 0; i < wdog->n_dst; i++)
     {
-        wdog_copy_result (&wdog->dst[i], &max_lat);
+        wdog_copy_result (&wdog->dst[i], &max_lat, wdog->cnf->lat_factor);
     }
 
     int const old_n_dst = wdog->n_dst;
@@ -397,7 +400,8 @@ wdog_collect_results (glb_wdog_t* const wdog)
 
         if (d->result.ready) {
             results++;
-            new_weight = wdog_result_weight (d, max_lat);
+            new_weight = wdog_result_weight (d, max_lat,
+                                             wdog->cnf->lat_factor > 0);
         }
         else {
             // have heard nothing from the backend thread, put dest on hold

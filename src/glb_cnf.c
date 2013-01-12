@@ -162,10 +162,12 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     fprintf (out, "control FIFO: %s\n", cnf->fifo_name);
     fprintf (out, "Control  address:  %s\n",
              cnf->ctrl_set ? ctrl_addr.str : "none");
-    fprintf (out, "Number of threads: %d, max conn: %d, policy: '%s', "
+    fprintf (out, "Number of threads: %d, max conn: %d, lat.factor: %d, "
+             "policy: '%s', "
              "nodelay: %s, defer accept: %s, verbose: %s, daemon: %s\n",
              cnf->n_threads,
              cnf->max_conn,
+             cnf->lat_factor,
              policy_str[cnf->policy],
              cnf->nodelay ? "ON" : "OFF",
              cnf->defer_accept ? "ON" : "OFF",

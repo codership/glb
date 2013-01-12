@@ -30,6 +30,7 @@ typedef enum cmd_opt
     CMD_OPT_FIFO         = 'f',
     CMD_OPT_HELP         = 'h',
     CMD_OPT_INTERVAL     = 'i',
+    CMD_OPT_LATENCY      = 'l',
     CMD_OPT_MAX_CONN     = 'm',
     CMD_OPT_NODELAY      = 'n',
     CMD_OPT_RANDOM       = 'r',
@@ -52,6 +53,7 @@ static option_t cmd_options[] =
     { "fifo",            RA, NULL, CMD_OPT_FIFO          },
     { "help",            NA, NULL, CMD_OPT_HELP          },
     { "interval",        RA, NULL, CMD_OPT_INTERVAL      },
+    { "latency",         RA, NULL, CMD_OPT_LATENCY       },
     { "max_conn",        RA, NULL, CMD_OPT_MAX_CONN      },
     { "connections",     RA, NULL, CMD_OPT_MAX_CONN      },
     { "nodelay",         NA, NULL, CMD_OPT_NODELAY       },
@@ -92,6 +94,11 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -i|--interval D.DDD       "
              "how often to probe destinations for liveness\n"
              "(fractional seconds, default 1.0).\n");
+    fprintf (out,
+             "  -l|--latency <samples>    "
+             "when using latency reported by watchdog probes for destination\n"
+             "weight adjustment, how many smaples to average latency over.\n"
+             "(default: 0 - not using latency for weight adjustment)");
     fprintf (out,
              "  -m|--max_conn N           "
              "maximum allowed number of client connections (OS dependent).\n");
@@ -155,8 +162,8 @@ glb_cmd_parse (int argc, char* argv[])
     if (!tmp) exit (EXIT_FAILURE);
 
     // parse options
-    while ((opt = getopt_long (argc, argv,"VYabc:dfhi:m:nt:rsvw:x:",cmd_options,
-                               &opt_idx)) != -1) {
+    while ((opt = getopt_long (argc, argv, "VYabc:dfhi:l:m:nt:rsvw:x:",
+                               cmd_options, &opt_idx)) != -1) {
         switch (opt) {
         case CMD_OPT_VERSION:
             glb_print_version (stdout);
@@ -193,6 +200,15 @@ glb_cmd_parse (int argc, char* argv[])
                 tmp->interval <= 0) {
                 fprintf (stderr, "Bad check interval value: %s. "
                          "Positive real number expected.\n", optarg);
+                exit (EXIT_FAILURE);
+            }
+            break;
+        case CMD_OPT_LATENCY:
+            tmp->lat_factor = strtol (optarg, &endptr, 10);
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno ||
+                tmp->lat_factor < 0) {
+                fprintf (stderr, "Bad latency value: %s. "
+                         "Non-negative integer expected.\n", optarg);
                 exit (EXIT_FAILURE);
             }
             break;
