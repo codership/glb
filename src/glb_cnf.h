@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -16,8 +16,9 @@ typedef enum glb_policy
 {
     GLB_POLICY_LEAST = 0, /* least connected     */
     GLB_POLICY_ROUND,     /* round-robin         */
+    GLB_POLICY_SINGLE,    /* single dest. with the top weight */
     GLB_POLICY_RANDOM,    /* random choice       */
-    GLB_POLICY_SOURCE     /* same for one source */
+    GLB_POLICY_SOURCE     /* same dest. for same source */
 } glb_policy_t;
 
 #define GLB_POLICY_MAX (GLB_POLICY_SOURCE + 1)
@@ -31,11 +32,13 @@ typedef struct glb_cnf
     int            n_threads;    // number of routing threads (1 .. oo)
     int            max_conn;     // max allowed client connections
     bool           nodelay;      // use TCP_NODELAY?
+    bool           keepalive;    // use SO_KEEPALIVE?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
     bool           synchronous;  // connect synchronously
 #endif /* GLBD */
+    bool           top;          // only use top weighted destinations
     bool           ctrl_set;     // was set? (false)
     glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations

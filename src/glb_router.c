@@ -22,6 +22,9 @@
 #include <unistd.h> // for close()
 #include <time.h>
 #include <sys/time.h>
+#include <float.h> // for DBL_EPSILON
+
+static double const GLB_DBL_EPSILON = DBL_EPSILON;
 
 #ifdef GLBD
 #  include <stdio.h>
@@ -59,7 +62,9 @@ struct glb_router
     unsigned int    seed;     // seed for rng
     int             rrb_next; // round-robin cursor
     int             n_dst;
-    time_t          map_failed;
+    time_t          map_failed; // last time the map was redone after failed dst
+    time_t          top_failed; // last time top dst was redone after failed dst
+    router_dst_t*   top_dst;
     router_dst_t*   dst;
 };
 
@@ -69,10 +74,25 @@ static const double router_div_prot = 1.0e-09; // protection against div by 0
 static const double DST_RETRY_INTERVAL = 2.0;
 
 static inline bool
-router_dst_is_good (const router_dst_t* const d, time_t const now)
+router_dst_is_good (const router_dst_t* const d,
+                    double const min_weight,
+                    time_t const now)
 {
-    return (d->dst.weight > 0.0 &&
+    return (d->dst.weight >= min_weight &&
             difftime (now, d->failed) > DST_RETRY_INTERVAL);
+}
+
+static inline bool
+router_top_dst_is_good (const router_dst_t* const d, time_t const now)
+{
+    return (d && router_dst_is_good (d, GLB_DBL_EPSILON, now));
+}
+
+static inline double
+router_min_weight (const glb_router_t* const router, time_t const now)
+{
+    return (router_top_dst_is_good (router->top_dst, now) ?
+            router->top_dst->dst.weight : GLB_DBL_EPSILON);
 }
 
 static inline bool
@@ -82,8 +102,33 @@ router_uses_map (const glb_router_t* const router)
 }
 
 static void
+router_redo_top (glb_router_t* router, time_t now)
+{
+    int i;
+    static double const factor = 1.0 + GLB_DBL_EPSILON;
+    double top_weight = router_min_weight (router, now) * factor;
+
+    /* If router->top_dst is not failed, it will be changed only if there is a
+     * a non-failed dst with weight strictly higher than that of top_dst.
+     * If router->top_dst is failed, then it will be changed only if there is
+     * a non-failed dst with weight > 0. */
+
+    for (i = 0; i < router->n_dst; i++)
+    {
+        router_dst_t* d = &router->dst[i];
+
+        if (router_dst_is_good (d, top_weight, now))
+        {
+            top_weight = d->dst.weight * factor;
+            router->top_dst = d;
+        }
+    }
+}
+
+static void
 router_redo_map (glb_router_t* router, time_t now)
 {
+    double min_weight = router_min_weight(router, now);
     int i;
 
     // pass 1: calculate total weight of available destinations
@@ -92,7 +137,7 @@ router_redo_map (glb_router_t* router, time_t now)
     {
         router_dst_t* d = &router->dst[i];
 
-        if (router_dst_is_good (d, now))
+        if (router_dst_is_good (d, min_weight, now))
         {
             total += d->dst.weight;
             d->map = d->dst.weight;
@@ -186,6 +231,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
         assert (d);
         assert (i >= 0 && i < router->n_dst);
+        if (d == router->top_dst) router->top_dst = NULL;
 #ifdef GLBD
         router->conns -= d->conns; assert (router->conns >= 0);
 #endif
@@ -220,7 +266,9 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 #endif
     }
 
-    if (router_uses_map(router)) router_redo_map (router, time (NULL));
+    time_t const now = time (NULL);
+    if (router->cnf->top) router_redo_top (router, now);
+    if (router_uses_map(router)) router_redo_map (router, now);
 
     assert (router->n_dst >= 0);
     assert (0 == router->busy_count);
@@ -304,20 +352,20 @@ glb_router_destroy (glb_router_t* router)
 #ifdef GLBD
 // find a ready destination with minimal usage
 static router_dst_t*
-router_choose_dst_least (glb_router_t* router)
+router_choose_dst_least (glb_router_t* const router, time_t const now)
 {
+    double min_weight = router_min_weight (router, now);
     router_dst_t* ret = NULL;
 
     if (router->n_dst > 0) {
         double max_usage = 0.0;
         int    i;
-        time_t now = time(NULL);
 
         for (i = 0; i < router->n_dst; i++) {
             router_dst_t* d = &router->dst[i];
 
             if (d->usage > max_usage &&
-                difftime (now, d->failed) > DST_RETRY_INTERVAL) {
+                router_dst_is_good (d, min_weight, now)) {
                 ret = d;
                 max_usage = d->usage;
             }
@@ -330,9 +378,9 @@ router_choose_dst_least (glb_router_t* router)
 
 // find next suitable destination by round robin
 static router_dst_t*
-router_choose_dst_round (glb_router_t* router)
+router_choose_dst_round (glb_router_t* const router, time_t const now)
 {
-    time_t now = time(NULL);
+    double min_weight = router_min_weight (router, now);
     int    offset;
 
     for (offset = 0; offset < router->n_dst; offset++)
@@ -341,7 +389,7 @@ router_choose_dst_round (glb_router_t* router)
 
         router->rrb_next = (router->rrb_next + 1) % router->n_dst;
 
-        if (router_dst_is_good (d, now)) return d;
+        if (router_dst_is_good (d, min_weight, now)) return d;
     }
 
     return NULL;
@@ -349,11 +397,11 @@ router_choose_dst_round (glb_router_t* router)
 
 // find a ready destination by client source hint
 static router_dst_t*
-router_choose_dst_hint (glb_router_t* router, uint32_t hint)
+router_choose_dst_hint (glb_router_t* const router,
+                        uint32_t      const hint,
+                        time_t        const now)
 {
     if (router->n_dst <= 0) return NULL;
-
-    time_t now = time(NULL);
 
 #if OLD // old way
     /* First we attempt target predefined by hint (hint % router->n_dst).
@@ -401,6 +449,13 @@ router_choose_dst_hint (glb_router_t* router, uint32_t hint)
     return NULL;
 }
 
+static inline router_dst_t*
+router_choose_dst_single (glb_router_t* const router, time_t const now)
+{
+    return (router_top_dst_is_good (router->top_dst, now) ?
+            router->top_dst : NULL);
+}
+
 static inline uint32_t
 router_random_hint (glb_router_t* router)
 {
@@ -415,15 +470,24 @@ router_random_hint (glb_router_t* router)
 #define glb_connect connect
 
 static inline router_dst_t*
-router_choose_dst (glb_router_t* router, uint32_t hint)
+router_choose_dst (glb_router_t* const router, uint32_t hint)
 {
+    time_t const now = time(NULL);
     router_dst_t* ret = NULL;
 
+    if (router->cnf->top && router->top_failed != 0 &&
+        difftime (now, router->top_failed) > DST_RETRY_INTERVAL)
+    {
+        router_redo_top (router, now);
+        router->top_failed = 0;
+    }
+
     switch (router->cnf->policy) {
-    case GLB_POLICY_LEAST:  ret = router_choose_dst_least (router); break;
-    case GLB_POLICY_ROUND:  ret = router_choose_dst_round (router); break;
+    case GLB_POLICY_LEAST:  ret = router_choose_dst_least (router, now); break;
+    case GLB_POLICY_ROUND:  ret = router_choose_dst_round (router, now); break;
+    case GLB_POLICY_SINGLE: ret = router_choose_dst_single(router, now); break;
     case GLB_POLICY_RANDOM: hint = router_random_hint (router);
-    case GLB_POLICY_SOURCE: ret = router_choose_dst_hint  (router, hint);
+    case GLB_POLICY_SOURCE: ret = router_choose_dst_hint  (router, hint, now);
     }
 
     if (GLB_LIKELY(ret != NULL)) {
@@ -465,11 +529,21 @@ glb_router_choose_dst (glb_router_t*   const router,
 static inline router_dst_t*
 router_choose_dst (glb_router_t* router, uint32_t hint)
 {
+    time_t const now = time(NULL);
+
+    if (router->cnf->top && router->top_failed != 0 &&
+        difftime (now, router->top_failed) > DST_RETRY_INTERVAL)
+    {
+        router_redo_top (router, now);
+        router->top_failed = 0;
+    }
+
     switch (router->cnf->policy) {
     case GLB_POLICY_LEAST:  return NULL;
-    case GLB_POLICY_ROUND:  return router_choose_dst_round (router);
+    case GLB_POLICY_ROUND:  return router_choose_dst_round  (router, now);
+    case GLB_POLICY_SINGLE: return router_choose_dst_single (router, now);
     case GLB_POLICY_RANDOM: hint = router_random_hint (router);
-    case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint);
+    case GLB_POLICY_SOURCE: return router_choose_dst_hint  (router, hint, now);
     }
     return NULL;
 }
@@ -477,13 +551,25 @@ router_choose_dst (glb_router_t* router, uint32_t hint)
 #endif /* GLBD */
 
 static inline void
-router_dst_failed (glb_router_t* router, router_dst_t* dst)
+router_dst_failed (glb_router_t* const router, router_dst_t* const dst)
 {
-    time_t now = time(NULL);
-    if (router_uses_map (router) && router_dst_is_good (dst, now))
+    time_t const now          = time(NULL);
+    double const min_weight   = router_min_weight (router, now);
+    bool   const dst_was_good = router_dst_is_good (dst, min_weight, now);
+
+    dst->failed = now;
+
+    if (dst == router->top_dst)
+    {
+        router_redo_top (router, now);
+        router->top_failed = now;
+    }
+
+    if (router_uses_map (router) && dst_was_good)
+    {
         router_redo_map(router, now);
-    dst->failed        = now;
-    router->map_failed = now;
+        router->map_failed = now;
+    }
 }
 
 // connect to a best destination, possiblly failing over to a next best
@@ -575,8 +661,9 @@ glb_router_connect (glb_router_t* router, const glb_sockaddr_t* src_addr,
     }
     else {
         // prepare a socket
-        *sock = glb_socket_create (&router->sock_out,
-                                   GLB_SOCK_NODELAY /*| GLB_SOCK_NONBLOCK*/);
+        uint32_t const ka_opt = router->cnf->keepalive * GLB_SOCK_KEEPALIVE;
+
+        *sock = glb_socket_create (&router->sock_out,GLB_SOCK_NODELAY | ka_opt);
 
         if (*sock < 0) {
             glb_log_error ("glb_socket_create() failed");

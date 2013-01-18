@@ -20,6 +20,9 @@ extern char* optarg;
 
 typedef enum cmd_opt
 {
+    CMD_OPT_KEEPALIVE    = 'K',
+    CMD_OPT_SINGLE       = 'S',
+    CMD_OPT_TOP          = 'T',
     CMD_OPT_VERSION      = 'V',
     CMD_OPT_SYNCHRONOUS  = 'Y',
     CMD_OPT_DEFER_ACCEPT = 'a',
@@ -38,6 +41,9 @@ typedef enum cmd_opt
 
 static option_t cmd_options[] =
 {
+    { "keepalive",       NA, NULL, CMD_OPT_KEEPALIVE     },
+    { "single",          NA, NULL, CMD_OPT_SINGLE        },
+    { "top",             NA, NULL, CMD_OPT_TOP           },
     { "version",         NA, NULL, CMD_OPT_VERSION       },
     { "defer-accept",    NA, NULL, CMD_OPT_DEFER_ACCEPT  },
     { "round",           NA, NULL, CMD_OPT_ROUND_ROBIN   },
@@ -59,86 +65,29 @@ static option_t cmd_options[] =
     { 0, 0, 0, 0 }
 };
 
-void
-glb_cmd_help (FILE* out, const char* progname)
-{
-    fprintf (out,
-             "Usage:\n  %s [OPTIONS] LISTEN_ADDRESS "
-             "[DESTINATION_LIST]\nOPTIONS:\n", progname);
-    fprintf (out,
-             "  -h|--help                 this help message.\n");
-    fprintf (out,
-             "  -a|--defer-accept         "
-             "enable TCP_DEFER_ACCEPT on the listening socket\n"
-             "                            (default: disabled).\n");
-    fprintf (out,
-             "  -b|--round                "
-             "round-robin destination selection policy.\n");
-    fprintf (out,
-             "  -c|--control [HOST:]PORT  "
-             "listen for control requests on this address.\n");
-    fprintf (out,
-             "  -d|--daemon               run as a daemon.\n");
-    fprintf (out,
-             "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
-    fprintf (out,
-             "  -m|--max_conn N           "
-             "maximum allowed number of client connections (OS dependent).\n");
-    fprintf (out,
-             "  -n|--nodelay              "
-             "*DISABLE* TCP_NODELAY socket option\n"
-             "                            (default: enabled).\n");
-    fprintf (out,
-             "  -r|--random               "
-             "route connections to randomly selected destination.\n");
-    fprintf (out,
-             "  -s|--source               "
-             "turn on source tracking: route connections from one\n"
-             "                            source to the same destination.\n");
-    fprintf (out,
-             "  -t|--threads N            "
-             "number of working threads (connection pools).\n");
-    fprintf (out,
-             "  -v|--verbose              turn on verbose reporting.\n");
-    fprintf (out,
-             "  -Y                        "
-             "connect synchronously (one-at-a-time).\n");
-    fprintf (out,
-             "  -V|--version              print program version.\n");
-    fprintf (out, "LISTEN_ADDRESS:\n"
-             "  [IP:]PORT                 "
-             "where to listen for incoming TCP connections at.\n"
-             "                            "
-             "(without IP part - bind to all interfaces)\n"
-             );
-    fprintf (out, "DESTINATION_LIST:\n"
-             "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
-             " - a space-separated list of destinations\n"
-             "                            in the form address:port:weight.\n");
-    exit (EXIT_FAILURE);
-}
-
 
 // Defaults relevant to CLI
 static const char cmd_inc_addr_default[]  = "0.0.0.0";
 static const char cmd_ctrl_addr_default[] = "127.0.0.1";
 
-glb_cnf_t*
-glb_cmd_parse (int argc, char* argv[])
+static void
+cmd_parse_options (int argc, char* argv[], glb_cnf_t* tmp)
 {
-    glb_cnf_t*   tmp = glb_cnf_init(); // initialize to defaults
-    const char** dst_list = NULL;
-    int          opt = 0;
-    int          opt_idx = 0;
-    char*        endptr;
-    uint16_t     inc_port;
+    int   opt = 0;
+    int   opt_idx = 0;
+    char* endptr;
 
-    if (!tmp) exit (EXIT_FAILURE);
-
-    // parse options
-    while ((opt = getopt_long (argc, argv, "VYabc:dfhm:nt:rsv", cmd_options,
+    while ((opt = getopt_long (argc, argv, "KSTVYabc:dfhm:nt:rsv", cmd_options,
                                &opt_idx)) != -1) {
         switch (opt) {
+        case CMD_OPT_KEEPALIVE:
+            tmp->keepalive = false;
+            break;
+        case CMD_OPT_SINGLE:
+            tmp->policy = GLB_POLICY_SINGLE; // implies CMD_OPT_TOP
+        case CMD_OPT_TOP:
+            tmp->top = true;
+            break;
         case CMD_OPT_VERSION:
             glb_print_version (stdout);
             if (argc == 2) exit(0);
@@ -201,6 +150,91 @@ glb_cmd_parse (int argc, char* argv[])
                      cmd_options[opt_idx].name, opt);
         }
     }
+}
+
+void
+glb_cmd_help (FILE* out, const char* progname)
+{
+    fprintf (out,
+             "Usage:\n  %s [OPTIONS] LISTEN_ADDRESS "
+             "[DESTINATION_LIST]\nOPTIONS:\n", progname);
+    fprintf (out,
+             "  -h|--help                 this help message.\n");
+    fprintf (out,
+             "  -a|--defer-accept         "
+             "enable TCP_DEFER_ACCEPT on the listening socket\n"
+             "                            (default: disabled).\n");
+    fprintf (out,
+             "  -b|--round                "
+             "round-robin destination selection policy.\n");
+    fprintf (out,
+             "  -c|--control [HOST:]PORT  "
+             "listen for control requests on this address.\n");
+    fprintf (out,
+             "  -d|--daemon               run as a daemon.\n");
+    fprintf (out,
+             "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
+    fprintf (out,
+             "  -m|--max_conn N           "
+             "maximum allowed number of client connections (OS dependent).\n");
+    fprintf (out,
+             "  -n|--nodelay              "
+             "*DISABLE* TCP_NODELAY socket option\n"
+             "                            (default: enabled).\n");
+    fprintf (out,
+             "  -r|--random               "
+             "route connections to randomly selected destination.\n");
+    fprintf (out,
+             "  -s|--source               "
+             "turn on source tracking: route connections from one\n"
+             "                            source to the same destination.\n");
+    fprintf (out,
+             "  -t|--threads N            "
+             "number of working threads (connection pools).\n");
+    fprintf (out,
+             "  -v|--verbose              turn on verbose reporting.\n");
+    fprintf (out,
+             "  -K|--keepalive            "
+             "*DISABLE* SO_KEEPALIVE socket option on server-side\n"
+             "                            sockets (default: enabled).\n");
+    fprintf (out,
+             "  -S|--single               "
+             "direct all connections to a single destination\n"
+             "                            "
+             "with top weight.\n");
+    fprintf (out,
+             "  -T|--top                  "
+             "only balance between destinations with top weight.\n");
+    fprintf (out,
+             "  -V|--version              print program version.\n");
+    fprintf (out,
+             "  -Y                        "
+             "connect synchronously (one-at-a-time).\n");
+    fprintf (out, "LISTEN_ADDRESS:\n"
+             "  [IP:]PORT                 "
+             "where to listen for incoming TCP connections at.\n"
+             "                            "
+             "(without IP part - bind to all interfaces)\n"
+             );
+    fprintf (out, "DESTINATION_LIST:\n"
+             "  [H1[:P1[:W1]]] [H2[:P2[:W2]]]... "
+             " - a space-separated list of destinations\n"
+             "                            in the form address:port:weight.\n");
+    exit (EXIT_FAILURE);
+}
+
+
+glb_cnf_t*
+glb_cmd_parse (int argc, char* argv[])
+{
+    glb_cnf_t*   tmp = glb_cnf_init(); // initialize to defaults
+    const char** dst_list = NULL;
+    uint16_t     inc_port;
+
+    if (!tmp) exit (EXIT_FAILURE);
+
+    // parse options
+    cmd_parse_options (argc, argv, tmp);
 
     // first non-option argument
     if (optind >= argc) {
