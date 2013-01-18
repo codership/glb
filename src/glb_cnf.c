@@ -31,6 +31,7 @@ glb_cnf_init ()
         ret->n_threads = 1;
         ret->max_conn  = glb_get_conn_limit();
         ret->nodelay   = true;
+        ret->keepalive = true;
         ret->policy    = GLB_POLICY_LEAST;
 #else
         ret->policy    = GLB_POLICY_ROUND;
@@ -147,7 +148,7 @@ glb_print_version (FILE* out)
 
 static const char* policy_str[GLB_POLICY_MAX] =
 {
-    "least connected", "round-robin", "random", "source"
+    "least connected", "round-robin", "single", "random", "source"
 };
 
 void
@@ -163,13 +164,16 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     fprintf (out, "Control  address:  %s\n",
              cnf->ctrl_set ? ctrl_addr.str : "none");
     fprintf (out, "Number of threads: %d, max conn: %d, lat.factor: %d, "
-             "policy: '%s', "
-             "nodelay: %s, defer accept: %s, verbose: %s, daemon: %s\n",
+             "policy: '%s', top: %s, "
+             "nodelay: %s, keepalive: %s, defer accept: %s, verbose: %s, "
+             "daemon: %s\n",
              cnf->n_threads,
              cnf->max_conn,
              cnf->lat_factor,
              policy_str[cnf->policy],
+             cnf->top ? "YES" : "NO",
              cnf->nodelay ? "ON" : "OFF",
+             cnf->keepalive ? "ON" : "OFF",
              cnf->defer_accept ? "ON" : "OFF",
              cnf->verbose ? "ON" : "OFF",
              cnf->daemonize ? "YES" : "NO");

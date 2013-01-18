@@ -174,6 +174,53 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     }
 #endif
 
+    if ((optflags & GLB_SOCK_KEEPALIVE) &&
+        setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one)))
+    {
+        glb_log_warn ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
+                      errno, strerror(errno));
+        ret = -errno;
+    }
+    else
+    {
+#if defined(TCP_KEEPIDLE)
+        int idle_seconds = 10;
+        if (!setsockopt(sock, SOL_TCP, TCP_KEEPIDLE,
+                        &idle_seconds, sizeof(idle_seconds)))
+        {
+#if defined(TCP_KEEPINTVL)
+            int interval = 5;
+            if (!setsockopt(sock, SOL_TCP, TCP_KEEPINTVL,
+                            &interval, sizeof(interval)))
+            {
+#if defined(TCP_KEEPCNT)
+                int tries = 3;
+                if (setsockopt(sock, SOL_TCP, TCP_KEEPINTVL,
+                               &tries, sizeof(tries)))
+                {
+                    glb_log_warn ("Setting TCP_KEEPINTVL failed: %d (%s)",
+                                  errno, strerror(errno));
+                    ret = -errno;
+                }
+#endif /* TCP_KEEPCNT */
+            }
+            else
+            {
+                glb_log_warn ("Setting TCP_KEEPCNT failed: %d (%s)",
+                              errno, strerror(errno));
+                ret = -errno;
+            }
+#endif /* TCP_KEEPINTVL */
+        }
+        else
+        {
+            glb_log_warn ("Setting TCP_KEEPIDLE failed: %d (%s)",
+                          errno, strerror(errno));
+            ret = -errno;
+        }
+#endif /* TCP_KEEPIDLE */
+    }
+
     if ((optflags & GLB_SOCK_NODELAY) && glb_cnf->nodelay &&
         setsockopt(sock, SOL_TCP, TCP_NODELAY, &one, sizeof(one)))
     {
@@ -195,7 +242,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     if ((optflags & GLB_SOCK_NONBLOCK) &&
         glb_fd_setfl (sock, O_NONBLOCK, true))
     {
-        glb_log_warn ("Setting O_NONBLCK failed: %d (%s)",
+        glb_log_warn ("Setting O_NONBLOCK failed: %d (%s)",
                       errno, strerror(errno));
         ret = -errno;
     }

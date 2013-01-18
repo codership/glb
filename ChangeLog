@@ -1,3 +1,13 @@
+2013-01-18 alex 
+  Merged with version 0.9.2:
+- New option -T|--top: all policies use only top-weighted destinations for
+  routing. E.g. in the presence of destinations with weights 1 and 2 only
+  the latter will be used to route connections to until all of them fail.
+- New policy 'single': all connections are directed to only one destination
+  chosen by highest weight.
+- Added SO_KEEPALIVE option to server side sockets to avoid stalled connections
+  Version 1.0.0alpha4
+
 2013-01-10 alex 
 - Merged in asynchronous connection processing from 0.9.1 and other missing
   fixes from the trunk.

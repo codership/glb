@@ -335,8 +335,12 @@ static inline int
 pool_handle_async_conn (pool_t*          pool,
                         pool_conn_end_t* dst_end)
 {
+    uint32_t const ka_opt = pool->cnf->keepalive * GLB_SOCK_KEEPALIVE;
+
     dst_end->sock = glb_socket_create(&pool->addr_out,
-                                      GLB_SOCK_NODELAY | GLB_SOCK_NONBLOCK);
+                                      GLB_SOCK_NODELAY  |
+                                      GLB_SOCK_NONBLOCK |
+                                      ka_opt);
     int error;
     if (dst_end->sock > 0) {
         int ret = connect (dst_end->sock, (struct sockaddr*)&dst_end->addr,
