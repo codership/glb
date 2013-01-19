@@ -793,6 +793,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&router->lock);
             return (len - 1);
         }
     }
@@ -879,6 +880,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
                          d->dst.weight, d->map);
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&router->lock);
             return (len - 1);
         }
     }

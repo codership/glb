@@ -1104,12 +1104,14 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
         );
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&pool->lock);
             return (len - 1);
         }
 #else
         len += snprintf (buf + len, buf_len - len," %5d",pool->pool[i].n_conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&pool->lock);
             return (len - 1);
         }
 #endif
