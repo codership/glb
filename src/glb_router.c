@@ -217,6 +217,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
         }
         else {
             router->dst = tmp;
+            router->top_dst = NULL;
             d = router->dst + router->n_dst;
             router->n_dst++;
             d->dst    = *dst;
@@ -231,7 +232,7 @@ glb_router_change_dst (glb_router_t* router, const glb_dst_t* dst)
 
         assert (d);
         assert (i >= 0 && i < router->n_dst);
-        if (d == router->top_dst) router->top_dst = NULL;
+        router->top_dst = NULL;
 #ifdef GLBD
         router->conns -= d->conns; assert (router->conns >= 0);
 #endif
