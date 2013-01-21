@@ -21,11 +21,11 @@
 ADDR=$1
 shift
 
-# Place all arguments except for the last one in ARGS var
-ARGS=
+# Place all arguments except for the last one in OPTS var
+OPTS=
 while [ $# -gt 1 ]
 do
-    ARGS="$ARGS '$1'"
+    OPTS="$OPTS '$1'"
     shift
 done
 
@@ -36,7 +36,7 @@ while read CMD
 do
     [ "$CMD" != "poll" ] && break;
 
-    curl -qs $ARGS $URL > /dev/null
+    curl -qs $OPTS $URL > /dev/null
 
     if [ $? -eq 0 ]
     then
