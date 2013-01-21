@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -167,7 +167,7 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
 
         int err;
         if (ctrl->wdog) {
-            err = glb_wdog_change_dst   (ctrl->wdog,   &dst, true);
+            err = glb_wdog_change_dst (ctrl->wdog, &dst);
         }
         else {
             err = glb_router_change_dst (ctrl->router, &dst, NULL);

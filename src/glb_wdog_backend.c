@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
  * Example implementation of a dummy watchdog backend that does nothing.
  * Just copy the file, change "dummy" to "whatever" and you're nearly done.
@@ -8,6 +8,11 @@
  */
 
 #include "glb_wdog_backend.h"
+
+const char* glb_dst_state_str[] =
+{
+    "NOTFOUND", "NOTREADY", "   AVOID", "   READY"
+};
 
 #include <stdlib.h>   // calloc()/free()/abort()
 #include <string.h>   // strdup()

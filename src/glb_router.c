@@ -149,7 +149,7 @@ router_update_ctx (glb_router_t* router)
     router->ctx.retry      = router_retry_interval (router);
     router->ctx.min_weight = router_min_weight (router);
 //    glb_log_debug ("router: top_dst = %p, min_weight = %7.2f",
-//                  router->top_dst, router->ctx.min_weight);
+//                   router->top_dst, router->ctx.min_weight);
 }
 
 static inline bool
@@ -236,7 +236,6 @@ glb_router_change_dst (glb_router_t*             const router,
                        glb_backend_thread_ctx_t* const probe_ctx)
 {
     int           i;
-    void*         tmp;
     router_dst_t* d = NULL;
 
     GLB_MUTEX_LOCK (&router->lock);
@@ -251,13 +250,13 @@ glb_router_change_dst (glb_router_t*             const router,
 
     // sanity check
     if (!d && dst->weight < 0) {
-        GLB_MUTEX_UNLOCK (&router->lock);
 #ifdef GLBD
         char tmp[256];
         glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
 #endif
-        return -ENONET;
+        i = -ENONET;
+        goto out;
     }
 
     if (!d || dst->weight < 0) {
@@ -271,6 +270,8 @@ glb_router_change_dst (glb_router_t*             const router,
         assert (0 == router->busy_count);
     }
 
+    router_dst_t* tmp;
+
     if (!d) { // add destination to the list
 
         assert (i == router->n_dst);
@@ -282,6 +283,7 @@ glb_router_change_dst (glb_router_t*             const router,
         }
         else {
             router->dst = tmp;
+            router->top_dst = NULL;
             d = router->dst + router->n_dst;
             router->n_dst++;
             d->dst       = *dst;
@@ -298,7 +300,9 @@ glb_router_change_dst (glb_router_t*             const router,
 
         assert (d);
         assert (i >= 0 && i < router->n_dst);
-        if (d == router->top_dst) router->top_dst = NULL;
+
+        router->top_dst = NULL;
+
 #ifdef GLBD
         router->conns -= d->conns; assert (router->conns >= 0);
 #endif
@@ -332,7 +336,7 @@ glb_router_change_dst (glb_router_t*             const router,
 #endif
     }
     else {
-        return i; // ineffective change
+        goto out; // ineffective change
     }
 
     router_update_ctx (router);
@@ -340,10 +344,9 @@ glb_router_change_dst (glb_router_t*             const router,
     if (router_uses_map(router)) router_redo_map (router);
 
     assert (router->n_dst >= 0);
-
+out:
     if (router->wait_count > 0) pthread_cond_signal (&router->free);
     GLB_MUTEX_UNLOCK (&router->lock);
-
     return i;
 }
 
@@ -378,7 +381,7 @@ glb_router_create (const glb_cnf_t* cnf/*size_t n_dst, glb_dst_t const dst[]*/)
     if (!__glb_real_connect) return NULL;
 #endif
 
-    glb_router_t* ret = malloc (sizeof (glb_router_t));
+    glb_router_t* ret = calloc (1, sizeof (glb_router_t));
 
     if (ret) {
         long i;
@@ -875,6 +878,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&router->lock);
             return (len - 1);
         }
     }
@@ -888,6 +892,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
                      "------------------------------------------------------\n"
                      "Destinations: %d, total connections: %d of %d max\n",
                      n_dst, total_conns, router->cnf->max_conn);
+
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);
@@ -962,6 +967,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&router->lock);
             return (len - 1);
         }
     }
@@ -973,6 +979,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
     len += snprintf (buf + len, buf_len - len,
                      "-----------------------------------------\n"
                      "Destinations: %d\n", n_dst);
+
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);

@@ -201,6 +201,9 @@ int main (int argc, char* argv[])
         if (!cnf->daemonize) {
             char stats[BUFSIZ];
 
+            glb_wdog_print_info (wdog, stats, BUFSIZ);
+            puts (stats);
+
             glb_router_print_info (router, stats, BUFSIZ);
             puts (stats);
 

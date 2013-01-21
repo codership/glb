@@ -40,7 +40,7 @@ listener_thread (void* arg)
         int            ret;
         int            client_sock;
         glb_sockaddr_t client;
-        socklen_t      client_size;
+        socklen_t      client_size = sizeof(client);
         int            server_sock;
         glb_sockaddr_t server;
 

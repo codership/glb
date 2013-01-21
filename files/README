@@ -41,5 +41,10 @@ Destinations: 2, total connections: 0
 mysql.sh:
     A script for the "exec" watchdog backend to test MySQL availability.
     In the case of MySQL/Galera cluster it also checks node state and takes it
-    into account. See inside comments for details.
+    into account and reports contents of the wsrep_incoming_addresses.
+    See inside comments for details.
 
+curl.sh
+    An example script for the "exec" watchdog backend to test HTTP server
+    availability. It uses curl to fetch a supplied URL.
+    See inside comments for details.

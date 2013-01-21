@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
  * This is backend that polls destinations by running external scripts or
  * programs.
@@ -148,7 +148,7 @@ init_error:
         glb_time_t start = glb_time_now();
 
         assert (std_in);
-//        ctx->errn = glb_proc_start (&pid, pargv, NULL, &io, NULL);
+
         ctx->errn = exec_send_cmd ("poll", std_in);
 
         if (!ctx->errn)
@@ -188,6 +188,10 @@ init_error:
                                errno, strerror(errno));
             }
         }
+        else {
+            glb_log_error ("Failed to send 'poll' cmd to script: %d (%s)",
+                           ctx->errn, strerror (ctx->errn));
+        }
 
         /* We want to check working nodes very frequently to learn when they
          * go down. For failed nodes we can make longer intervals to minimize
@@ -215,7 +219,10 @@ init_error:
             /* interrupted by a signal, shift the beginning of next interval */
             next = glb_timespec_now();
         }
-    }
+    } /* MAIN LOOP */
+
+    glb_log_debug ("Watchdog thread for '%s:%hu' exiting: %d (%s)",
+                   ctx->host, ctx->port, ctx->errn, strerror(ctx->errn));
 
     memset (&ctx->result, 0, sizeof(ctx->result));
     ctx->result.state = GLB_DST_NOTFOUND;

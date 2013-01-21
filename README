@@ -184,7 +184,7 @@ WATCHDOG:
 Without the watchdog GLB can check destination availability only via the
 ability to establish TCP connection to destination. For most use cases TCP
 connectivity is an insufficient check. E.g. for HTTP server it is important to
-be able to serve webpages and for DBMS server - to be able to execute requests.
+be able to serve webpages and for DBMS server - to be able to execute queries.
 Watchdog module implements asynchronus monitoring of destinations via backends
 made to check particular service availability.
 
@@ -205,6 +205,14 @@ executed in this case looks like:
 "mysql.sh 192.168.0.1:3306 -utest -ptestpass"
 
 Check interval is set with -i|--interval parameter (fractional seconds, 1.0).
+
+
+DESTINATION DISCOVERY:
+======================
+If destinations can supply information about other members of the cluster it can
+be used to automatically populate watchdog destination list if -D|--discover
+option is supplied. Currently only MySQL/Galera nodes are known to do this, so
+it is a Galera-only option.
 
 
 RUNNING GLBD AS A "SERVICE":
@@ -267,3 +275,9 @@ GLB_CONTROL=[IP:]PORT
 GLB_WATCHDOG=<watchdog specification>
     Interpreted the same way as --watchdog parameter.
 
+GLB_OPTIONS='options string'
+    Allows to specify other GLB options to libglb in the form of command line
+    parameters for glbd. Options and their values cannot contain whitespaces
+    and commas and short options cannot be concatenated (i.e. '-qri 10' should go
+    as '-q -r -i 10'). Parsing errors and options unsupported by libglb (like -d)
+    will be silently ignored.

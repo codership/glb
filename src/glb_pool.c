@@ -673,8 +673,9 @@ pool_handle_conn_complete (pool_t* pool, pool_conn_end_t* dst_end)
     getsockopt (dst_end->sock, SOL_SOCKET, SO_ERROR, &ret, &ret_size);
 
     if (ret) {
-        glb_log_info ("Async connection to ... failed: %d (%s)",
-                      ret, strerror (ret));
+        glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst_end->addr);
+        glb_log_info ("Async connection to %s failed: %d (%s)",
+                      a.str, ret, strerror (ret));
 
         pool_conn_end_t* const inc_end =
             (pool_conn_end_t*)(((uint8_t*)dst_end) - pool_end_size);
@@ -685,7 +686,8 @@ pool_handle_conn_complete (pool_t* pool, pool_conn_end_t* dst_end)
         ret = glb_router_choose_dst_again (pool->router, hint, &dst_end->addr);
 
         if (!ret) {
-            glb_log_info ("Reconnecting.");
+            a = glb_sockaddr_to_str (&dst_end->addr);
+            glb_log_info ("Reconnecting to %s", a.str);
             pool_remove_conn (pool, dst_end->sock, false); dst_end->sock = -1;
 
             pool_ctl_t ctl = { POOL_CTL_ADD_CONN, inc_end };
@@ -859,6 +861,15 @@ pool_fds_init (pool_t* pool, int ctl_fd)
     pool->pollfds_len = 0;
 
     return pool_fds_add (pool, ctl_fd, POOL_FD_READ);
+}
+
+static void
+pool_fds_release (pool_t* pool)
+{
+    free (pool->pollfds);
+#ifdef USE_EPOLL
+    close (pool->epoll_fd);
+#endif /* USE_EPOLL */
 }
 
 static int
@@ -1119,12 +1130,14 @@ glb_pool_print_info (glb_pool_t* pool, char* buf, size_t buf_len)
         );
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&pool->lock);
             return (len - 1);
         }
 #else
         len += snprintf (buf + len, buf_len - len," %5d",pool->pool[i].n_conns);
         if (len == buf_len) {
             buf[len - 1] = '\0';
+            GLB_MUTEX_UNLOCK (&pool->lock);
             return (len - 1);
         }
 #endif
@@ -1159,9 +1172,7 @@ glb_pool_destroy (glb_pool_t* pool)
         pool_t* p = &pool->pool[i];
         pthread_join (p->thread, NULL);
         close (p->ctl_send);
-#ifdef USE_EPOLL
-        close (p->epoll_fd);
-#endif
+        pool_fds_release (p);
         pthread_cond_destroy  (&p->cond);
         pthread_mutex_destroy (&p->lock);
     }

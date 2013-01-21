@@ -42,6 +42,7 @@ typedef struct glb_cnf
     bool           daemonize;    // become a daemon?
     bool           synchronous;  // connect synchronously
 #endif /* GLBD */
+    bool           discover;     // automatically discover new destinations
     bool           top;          // only use top weighted destinations
     bool           ctrl_set;     // was set? (false)
     int            lat_factor;   // smoothe latency over that many samples

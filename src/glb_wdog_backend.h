@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
  * Declarations of watchdog backend interface.
  * See example dummy inplementation in glb_wdog_backend.c
@@ -33,6 +33,8 @@ typedef enum glb_dst_state
     GLB_DST_AVOID,        //! destination better be avoided (overloaded/blocked)
     GLB_DST_READY         //! destination fully functional
 } glb_dst_state_t;
+
+extern const char* glb_dst_state_str[];
 
 
 typedef struct glb_wdog_check

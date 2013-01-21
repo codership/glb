@@ -11,6 +11,7 @@
 
 #include <pthread.h>
 #include <string.h> // strerror()
+#include <stdlib.h> // abort()
 
 #if __GNUC__ >= 3
 #  define GLB_LIKELY(x)   __builtin_expect((x), 1)
@@ -78,5 +79,17 @@ glb_fd_setfl (int const fd, int const flag, bool const on)
 
     return -errno;
 }
+
+/*!
+ * convert string into array of tokens
+ *
+ * @param tok_str - input string to be parsed into tokens
+ * @param sep - additional separator to whitespace
+ */
+extern bool
+glb_parse_token_string (char*         tok_str,
+                        const char*** tok_list,
+                        int*          tok_num,
+                        int           sep);
 
 #endif // _glb_misc_h_

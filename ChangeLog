@@ -1,3 +1,10 @@
+2013-01-21 alex 
+- Added automatic Galera node discovery (-D|--discover option).
+- Added GLB_OPTIONS env. variable to set misc. options for libglb.
+- Added a sample curl script for checking HTTP servers.
+- Fixed a bunch of leaks and uninitialized values shown by valgrind.
+  Version 1.0.0beta
+
 2013-01-18 alex 
   Merged with version 0.9.2:
 - New option -T|--top: all policies use only top-weighted destinations for
