@@ -163,7 +163,7 @@ static void
 router_redo_top (glb_router_t* router)
 {
     int i;
-    static double const factor = 1.0 + GLB_DBL_EPSILON;
+    double const factor = 1.0 + GLB_DBL_EPSILON;
 //    double top_weight = router_min_weight (router, now) * factor;
     double top_weight = router->ctx.min_weight * factor;
 
