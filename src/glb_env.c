@@ -43,6 +43,7 @@ env_option_is (const char* opt, const glb_option_t* opts)
         while (NULL != opts->name)
         {
             if (!strcmp (opt + 2, opts->name)) return opts->val;
+            opts++;
         }
     }
     else              /* short option */
@@ -50,6 +51,7 @@ env_option_is (const char* opt, const glb_option_t* opts)
         while (NULL != opts->name)
         {
             if (opt[1] == opts->val) return opts->val;
+            opts++;
         }
     }
 
@@ -121,6 +123,9 @@ env_parse_options (glb_cnf_t* cnf, char* o)
             break;
         case GLB_OPT_SRC_TRACKING:
             cnf->policy = GLB_POLICY_SOURCE;
+            break;
+        case GLB_OPT_VERBOSE:
+            cnf->verbose = true;
             break;
 #if 0
         case GLB_OPT_WATCHDOG:
@@ -224,7 +229,6 @@ glb_env_parse ()
         assert(dst_num >= 0);
 
         glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
-
         if (tmp)
         {
             ret = tmp;

@@ -130,7 +130,7 @@ glb_parse_dst_list (const char* const dst_list[],
     return out;
 }
 
-#ifdef GLBD
+//#ifdef GLBD
 
 void
 glb_print_version (FILE* out)
@@ -160,23 +160,30 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
 
     glb_print_version(out);
     fprintf (out, "Incoming address: %s, ", inc_addr.str);
+#if GLBD
     fprintf (out, "control FIFO: %s\n", cnf->fifo_name);
+#endif
     fprintf (out, "Control  address:  %s\n",
              cnf->ctrl_set ? ctrl_addr.str : "none");
-    fprintf (out, "Number of threads: %d, max conn: %d, lat.factor: %d, "
-             "policy: '%s', top: %s, "
-             "nodelay: %s, keepalive: %s, defer accept: %s, verbose: %s, "
-             "daemon: %s\n",
+    fprintf (out,
+#if GLBD
+             "Number of threads: %d, max conn: %d, "
+             "nodelay: %s, keepalive: %s, defer accept: %s, daemon: %s, "
+#endif
+             "lat.factor: %d, policy: '%s', top: %s, verbose: %s\n",
+#if GLBD
              cnf->n_threads,
              cnf->max_conn,
-             cnf->lat_factor,
-             policy_str[cnf->policy],
-             cnf->top ? "YES" : "NO",
              cnf->nodelay ? "ON" : "OFF",
              cnf->keepalive ? "ON" : "OFF",
              cnf->defer_accept ? "ON" : "OFF",
-             cnf->verbose ? "ON" : "OFF",
-             cnf->daemonize ? "YES" : "NO");
+             cnf->daemonize ? "YES" : "NO",
+#endif
+             cnf->lat_factor,
+             policy_str[cnf->policy],
+             cnf->top ? "YES" : "NO",
+             cnf->verbose ? "ON" : "OFF"
+        );
     fprintf (out, "Destinations: %lu\n", (ulong)cnf->n_dst);
 
     for (i = 0; i < cnf->n_dst; i++) {
@@ -186,6 +193,6 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     }
 }
 
-#endif /* GLBD */
+//#endif /* GLBD */
 
 

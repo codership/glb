@@ -38,10 +38,10 @@ typedef struct glb_cnf
     bool           nodelay;      // use TCP_NODELAY?
     bool           keepalive;    // use SO_KEEPALIVE?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
-    bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
     bool           synchronous;  // connect synchronously
 #endif /* GLBD */
+    bool           verbose;      // be verbose?
     bool           discover;     // automatically discover new destinations
     bool           top;          // only use top weighted destinations
     bool           ctrl_set;     // was set? (false)

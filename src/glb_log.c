@@ -30,7 +30,7 @@ glb_log (glb_log_level_t level,
     if (len < 0) abort();
 
     if (buf_len > (size_t)len) {
-        va_start (ap, format); 
+        va_start (ap, format);
         vsnprintf (buf + len, buf_len - len, format, ap);
         va_end (ap);
     }
@@ -63,7 +63,7 @@ glb_log (glb_log_level_t level,
     }
     case GLB_LOG_PRINTF:
     {
-        FILE* out = stdout;
+        FILE* out = stderr;
         const char* lvl;
 
         switch (level)
@@ -79,9 +79,9 @@ glb_log (glb_log_level_t level,
         fprintf (out, "%s%s\n", lvl, buf);
         return;
     }
-    default:
-        abort();
     }
+
+    abort();
 }
 
 long

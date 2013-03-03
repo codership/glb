@@ -72,7 +72,7 @@ glb_router_disconnect (glb_router_t* router, const glb_sockaddr_t* dst_addr,
 
 #else /* GLBD */
 
-extern int __glb_router_connect(glb_router_t* const router, int const sockfd);
+extern int glb_router_connect(glb_router_t* const router, int const sockfd);
 
 #endif /* GLBD */
 

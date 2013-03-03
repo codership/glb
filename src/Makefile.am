@@ -36,6 +36,10 @@ libglb_la_SOURCES = \
 	glb_env.c      \
 	glb_lib.c
 
+if ENABLE_DEBUG
+libglb_la_SOURCES += glb_log.c
+endif
+
 libglb_la_LDFLAGS = -version-info 1:0:0
 endif
 

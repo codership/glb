@@ -443,7 +443,8 @@ wdog_process_membership_change (glb_wdog_t* wdog, const char* const memb_str)
             continue;
         }
 
-#if GLBD /* logging macros are undefined for libglb and GCC complains
+#if defined(GLB_LOGGING)
+        /* logging macros are undefined for libglb and GCC complains
           * about unused variable. */
         glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst.addr);
 #endif

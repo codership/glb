@@ -7,7 +7,9 @@
 #ifndef _glb_log_h_
 #define _glb_log_h_
 
-#ifdef GLBD
+#if defined(GLBD) || !defined(NDEBUG)
+
+#define GLB_LOGGING
 
 #include <stdlib.h>
 

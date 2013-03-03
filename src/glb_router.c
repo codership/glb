@@ -674,6 +674,13 @@ router_connect_dst (glb_router_t*   const router,
 
         GLB_MUTEX_UNLOCK (&router->lock);
 
+#ifndef NDEBUG
+        if (router->cnf->verbose) {
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
+            glb_log_debug ("Connecting to %s", a.str);
+        }
+#endif
+
         ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
                            sizeof (dst->dst.addr));
 
@@ -687,17 +694,22 @@ router_connect_dst (glb_router_t*   const router,
             dst->conns--; router->conns--;
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
-            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
-            glb_log_warn ("Failed to connect to %s: %d (%s)",
-                          a.str, error, strerror(error));
 #endif
+            if (router->cnf->verbose) {
+#if defined(GLB_LOGGING)
+                glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
+                glb_log_warn ("Failed to connect to %s: %d (%s)",
+                              a.str, error, strerror(error));
+#endif
+            }
+
             router_dst_failed (router, dst);
             redirect = true;
         }
         else {
             *addr = dst->dst.addr;
-            if (redirect) {
-#ifdef GLBD
+            if (redirect && router->cnf->verbose) {
+#if defined(GLB_LOGGING)
                 glb_sockaddr_str_t a = glb_sockaddr_to_str (addr);
                 glb_log_warn ("Redirecting to %s", a.str);
 #endif
@@ -705,7 +717,8 @@ router_connect_dst (glb_router_t*   const router,
             break;
         }
     }
-    assert(dst != 0 || error != 0);
+
+    assert(dst != 0 || error >= 0);
 
     router->busy_count--;
     assert (router->busy_count >= 0);
@@ -903,7 +916,7 @@ glb_router_print_info (glb_router_t* router, char* buf, size_t buf_len)
 
 #else /* GLBD */
 
-int __glb_router_connect(glb_router_t* const router, int const sockfd)
+int glb_router_connect(glb_router_t* const router, int const sockfd)
 {
     glb_sockaddr_t dst;
 
@@ -918,6 +931,8 @@ int __glb_router_connect(glb_router_t* const router, int const sockfd)
         if (orig_flags != block_flags) fcntl (sockfd, F_SETFL, block_flags);
 
         int const ret = router_connect_dst (router, sockfd, hint, &dst);
+
+        assert (ret <= 0);
 
         if (orig_flags != block_flags) fcntl (sockfd, F_SETFL, orig_flags);
 
