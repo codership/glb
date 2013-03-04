@@ -9,9 +9,8 @@
 
 #include "glb_socket.h"
 #include "glb_router.h"
-#ifdef GLBD
+#include "glb_wdog.h"
 #include "glb_pool.h"
-#endif /* GLBD */
 
 typedef struct glb_ctrl glb_ctrl_t;
 
@@ -29,9 +28,8 @@ typedef struct glb_ctrl glb_ctrl_t;
 extern glb_ctrl_t*
 glb_ctrl_create (glb_cnf_t*    cnf,
                  glb_router_t* router,
-#ifdef GLBD
-                 glb_pool_t*   pool,
-#endif /* GLBD */
+                 glb_pool_t*   pool, // can be NULL
+                 glb_wdog_t*   wdog, // can be NULL
                  uint16_t      port,
                  int           fifo,
                  int           sock);

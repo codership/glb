@@ -15,7 +15,8 @@ glb_cnf_t* glb_cnf = NULL;
 #include <stddef.h> // ptrdiff_t
 #include <string.h>
 
-static const char default_fifo_name[]  = "/tmp/glbd.fifo";
+static const long long default_check_interval = 1000000000; // 1 sec
+static const char      default_fifo_name[]    = "/tmp/glbd.fifo";
 
 glb_cnf_t*
 glb_cnf_init ()
@@ -35,6 +36,7 @@ glb_cnf_init ()
 #else
         ret->policy    = GLB_POLICY_ROUND;
 #endif /* GLBD */
+        ret->interval  = default_check_interval;
     }
     else
     {
@@ -88,7 +90,7 @@ glb_parse_addr (glb_sockaddr_t* addr,
 
 //    printf ("Option: %s, found addr = '%s', port = '%s'\n",
 //            str, addr_str, port_str);
-    return glb_socket_addr_init (addr, addr_str, port);
+    return glb_sockaddr_init (addr, addr_str, port);
 }
 
 // parses array list of destinations
@@ -128,7 +130,6 @@ glb_parse_dst_list (const char* const dst_list[],
     return out;
 }
 
-#ifdef GLBD
 
 void
 glb_print_version (FILE* out)
@@ -144,35 +145,46 @@ glb_print_version (FILE* out)
         );
 }
 
+
 static const char* policy_str[GLB_POLICY_MAX] =
 {
     "least connected", "round-robin", "single", "random", "source"
 };
 
+
 void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
 {
     ulong i;
+    glb_sockaddr_str_t inc_addr  = glb_sockaddr_to_str (&cnf->inc_addr);
+    glb_sockaddr_str_t ctrl_addr = glb_sockaddr_to_str (&cnf->ctrl_addr);
 
     glb_print_version(out);
-    fprintf (out, "Incoming address: %s, ",
-             glb_socket_addr_to_string (&cnf->inc_addr));
+    fprintf (out, "Incoming address: %s, ", inc_addr.str);
+#if GLBD
     fprintf (out, "control FIFO: %s\n", cnf->fifo_name);
+#endif
     fprintf (out, "Control  address:  %s\n",
-             cnf->ctrl_set ? glb_socket_addr_to_string (&cnf->ctrl_addr) :
-             "none");
-    fprintf (out, "Number of threads: %d, max conn: %d, policy: '%s', top: %s, "
-             "nodelay: %s, keepalive: %s, defer accept: %s, verbose: %s, "
-             "daemon: %s\n",
+             cnf->ctrl_set ? ctrl_addr.str : "none");
+    fprintf (out,
+#if GLBD
+             "Number of threads: %d, max conn: %d, "
+             "nodelay: %s, keepalive: %s, defer accept: %s, daemon: %s, "
+#endif
+             "lat.factor: %d, policy: '%s', top: %s, verbose: %s\n",
+#if GLBD
              cnf->n_threads,
              cnf->max_conn,
-             policy_str[cnf->policy],
-             cnf->top ? "YES" : "NO",
              cnf->nodelay ? "ON" : "OFF",
              cnf->keepalive ? "ON" : "OFF",
              cnf->defer_accept ? "ON" : "OFF",
-             cnf->verbose ? "ON" : "OFF",
-             cnf->daemonize ? "YES" : "NO");
+             cnf->daemonize ? "YES" : "NO",
+#endif
+             cnf->lat_factor,
+             policy_str[cnf->policy],
+             cnf->top ? "YES" : "NO",
+             cnf->verbose ? "YES" : "NO"
+        );
     fprintf (out, "Destinations: %lu\n", (ulong)cnf->n_dst);
 
     for (i = 0; i < cnf->n_dst; i++) {
@@ -182,6 +194,6 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     }
 }
 
-#endif /* GLBD */
+//#endif /* GLBD */
 
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 
-// unfotunately I see no way to use glb_pool.c polling code in here
+// unfortunately I see no way to use glb_pool.c polling code in here
 // so it is yet another implementation
 #include <poll.h>
 
@@ -49,9 +49,8 @@ struct glb_ctrl
 {
     glb_cnf_t*    cnf;
     glb_router_t* router;
-#ifdef GLBD
     glb_pool_t*   pool;
-#endif
+    glb_wdog_t*   wdog;
     pthread_t     thread;
     int           fifo;
     int           inet_sock;
@@ -150,11 +149,10 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
         ctrl_respond (ctrl, fd, req);
         return 0;
     }
-    else if (!strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
-#ifdef GLBD
+    else if (ctrl->pool &&
+             !strncasecmp (ctrl_getstat_cmd, req, strlen(ctrl_getstat_cmd))) {
         glb_pool_print_stats (ctrl->pool, req, sizeof(req));
         ctrl_respond (ctrl, fd, req);
-#endif /* GLBD */
         return 0;
     }
     else { // change destiantion request
@@ -167,22 +165,32 @@ ctrl_handle_request (glb_ctrl_t* ctrl, int fd)
             return 0;
         }
 
-        if (glb_router_change_dst (ctrl->router, &dst) < 0) {
+        int err;
+        if (ctrl->wdog) {
+            err = glb_wdog_change_dst (ctrl->wdog, &dst);
+        }
+        else {
+            err = glb_router_change_dst (ctrl->router, &dst, NULL);
+        }
+
+        if (err < 0) {
+#ifdef GLBD
             char tmp[128];
             glb_dst_print (tmp, 128, &dst);
             glb_log_info ("Ctrl: failed to apply destination change: %s", tmp);
+#endif /* GLBD */
             ctrl_respond (ctrl, fd, "Error\n");
             return 0;
         }
 
         ctrl_respond (ctrl, fd, "Ok\n");
 
-#ifdef GLBD
-        if (dst.weight < 0.0) {
+        if (ctrl->pool && dst.weight < 0.0 && ctrl->wdog) {
             // destination was removed from router, drop all connections to it
+            // watchdog will do it itself
             glb_pool_drop_dst (ctrl->pool, &dst.addr);
         }
-#endif /* GLBD */
+
         return 0;
     }
 }
@@ -231,8 +239,9 @@ ctrl_thread (void* arg)
             ctrl_add_client (ctrl, client_sock);
 #ifdef GLBD
             if (ctrl->cnf->verbose) {
-                glb_log_info ("Ctrl: accepted connection from %s\n",
-                         glb_socket_addr_to_string ((glb_sockaddr_t*)&client));
+                glb_sockaddr_str_t a =
+                    glb_sockaddr_to_str ((glb_sockaddr_t*)&client);
+                glb_log_info ("Ctrl: accepted connection from %s\n", a.str);
             }
 #endif
             continue;
@@ -258,9 +267,8 @@ ctrl_thread (void* arg)
 glb_ctrl_t*
 glb_ctrl_create (glb_cnf_t*    const cnf,
                  glb_router_t* const router,
-#ifdef GLBD
                  glb_pool_t*   const pool,
-#endif /* GLBD */
+                 glb_wdog_t*   const wdog,
                  uint16_t      const port,
                  int           const fifo,
                  int           const sock)
@@ -281,9 +289,8 @@ glb_ctrl_create (glb_cnf_t*    const cnf,
     if (ret) {
         ret->cnf          = cnf;
         ret->router       = router;
-#ifdef GLBD
         ret->pool         = pool;
-#endif /* GLBD */
+        ret->wdog         = wdog;
         ret->fifo         = fifo;
         ret->inet_sock    = sock;
         ret->default_port = port;

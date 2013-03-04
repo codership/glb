@@ -7,29 +7,44 @@
 #include "glb_log.h"
 #include "glb_signal.h"
 
+#include <stdio.h> // remove()
+
 volatile sig_atomic_t
 glb_terminate = 0;
+
+const char*
+glb_fifo_name = NULL;
+
+static void
+fifo_cleanup()
+{
+    if (glb_fifo_name) remove (glb_fifo_name);
+}
 
 static void
 signal_handler(int signum)
 {
     switch(signum) {
 //    case SIGALRM: should not be getting this signal either
-//        break;
+    case SIGPIPE: // ignore?
+        break;
     case GLB_SIGNAL_OK: // used by child to report OK
         exit (EXIT_SUCCESS);
     case SIGCHLD:
+        fifo_cleanup();
         glb_log_fatal ("Child unexpectedly terminated.");
         exit (EXIT_FAILURE);
     case SIGHUP:
     case SIGTERM:
     case SIGINT:
     case SIGQUIT:
-    case SIGPIPE:
+    case SIGABRT:
         glb_log_info ("Received signal %d. Terminating.", signum);
         glb_terminate = 1;
+        fifo_cleanup();
         return;
     default: // should never get here
+        fifo_cleanup();
         glb_log_warn ("Received signal %d.", signum);
         abort();
     }
@@ -45,4 +60,5 @@ glb_signal_set_handler()
     signal (SIGINT,  signal_handler);
     signal (SIGQUIT, signal_handler);
     signal (SIGPIPE, signal_handler);
+    signal (SIGABRT, signal_handler);
 }

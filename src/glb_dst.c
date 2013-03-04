@@ -81,7 +81,7 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
     ret = 3;
 
 end:
-    if (glb_socket_addr_init (&dst->addr, addr_str, port)) {
+    if (glb_sockaddr_init (&dst->addr, addr_str, port)) {
         glb_log_error ("%s", strerror (EINVAL));
         return -EINVAL;
     }

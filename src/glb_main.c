@@ -10,9 +10,11 @@
 #include "glb_signal.h"
 #include "glb_daemon.h"
 #include "glb_router.h"
+#include "glb_wdog.h"
 #include "glb_pool.h"
 #include "glb_listener.h"
 #include "glb_control.h"
+#include "glb_misc.h"
 
 #include <unistd.h>    // for sleep()
 #include <sys/types.h>
@@ -71,6 +73,14 @@ allocate_resources(const glb_cnf_t* conf,
         goto cleanup3;
     }
 
+    if (conf->daemonize) { // make sure those survive fork()
+        glb_fd_setfd (*ctrl_fifo,   FD_CLOEXEC, false);
+        glb_fd_setfd (*ctrl_sock,   FD_CLOEXEC, false);
+        glb_fd_setfd (*listen_sock, FD_CLOEXEC, false);
+    }
+
+    glb_fifo_name = conf->fifo_name;
+
     return 0;
 
 cleanup3:
@@ -101,10 +111,12 @@ free_resources (const char* const fifo_name,
 
 int main (int argc, char* argv[])
 {
-    glb_router_t*   router;
-    glb_pool_t*     pool;
-    glb_listener_t* listener;
-    glb_ctrl_t*     ctrl;
+    bool success             = false;
+    glb_router_t*   router   = NULL;
+    glb_pool_t*     pool     = NULL;
+    glb_listener_t* listener = NULL;
+    glb_wdog_t*     wdog     = NULL;
+    glb_ctrl_t*     ctrl     = NULL;
     uint16_t        inc_port;
 
     int listen_sock, ctrl_fifo, ctrl_sock = 0;
@@ -120,7 +132,7 @@ int main (int argc, char* argv[])
     glb_cnf_print (stdout, cnf);
     glb_socket_init (cnf);
 
-    if (glb_log_init (GLB_LOG_PRINTF)) {
+    if (glb_log_init (GLB_LOG_STDERR, cnf->verbose)) {
         fprintf (stderr, "Failed to initialize logger. Aborting.\n");
         exit (EXIT_FAILURE);
     }
@@ -133,33 +145,48 @@ int main (int argc, char* argv[])
     glb_signal_set_handler();
 
     if (cnf->daemonize) {
-        glb_daemon_start();
-        // at this point we're a child process
+        glb_daemon_start (cnf);
+        /* at this point we're a child process:
+         * 1) make at least those sockets unforkable */
+        glb_fd_setfd (ctrl_fifo,   FD_CLOEXEC, true);
+        glb_fd_setfd (ctrl_sock,   FD_CLOEXEC, true);
+        glb_fd_setfd (listen_sock, FD_CLOEXEC, true);
     }
+    /*     2) remove SIGCHLD handler */
+    signal (SIGCHLD, SIG_DFL);
 
     router = glb_router_create (cnf);
     if (!router) {
         glb_log_fatal ("Failed to create router. Exiting.");
-        goto failure;
+        goto cleanup;
     }
 
     pool = glb_pool_create (cnf, router);
     if (!pool) {
         glb_log_fatal ("Failed to create thread pool. Exiting.");
-        goto failure;
+        goto cleanup;
+    }
+
+    if (cnf->watchdog) {
+        wdog = glb_wdog_create (cnf, router, pool);
+        if (!wdog) {
+            glb_log_fatal ("Failed to create destination watchdog. Exiting.");
+            goto cleanup;
+        }
+    }
+
+    inc_port = glb_sockaddr_get_port (&cnf->inc_addr);
+    ctrl = glb_ctrl_create (cnf, router, pool, wdog,
+                            inc_port, ctrl_fifo, ctrl_sock);
+    if (!ctrl) {
+        glb_log_fatal ("Failed to create control thread. Exiting.");
+        goto cleanup;
     }
 
     listener = glb_listener_create (cnf, router, pool, listen_sock);
     if (!listener) {
         glb_log_fatal ("Failed to create connection listener. Exiting.");
-        goto failure;
-    }
-
-    inc_port = glb_socket_addr_get_port (&cnf->inc_addr);
-    ctrl = glb_ctrl_create (cnf, router, pool, inc_port, ctrl_fifo, ctrl_sock);
-    if (!ctrl) {
-        glb_log_fatal ("Failed to create control thread. Exiting.");
-        goto failure;
+        goto cleanup;
     }
 
     if (cnf->daemonize) {
@@ -167,10 +194,18 @@ int main (int argc, char* argv[])
         glb_log_info ("Started.");
     }
 
+    success = true;
+
     while (!glb_terminate) {
 
         if (!cnf->daemonize) {
             char stats[BUFSIZ];
+
+            if (wdog)
+            {
+                glb_wdog_print_info (wdog, stats, BUFSIZ);
+                puts (stats);
+            }
 
             glb_router_print_info (router, stats, BUFSIZ);
             puts (stats);
@@ -182,8 +217,15 @@ int main (int argc, char* argv[])
         sleep (5);
     }
 
-    // cleanup
-    glb_ctrl_destroy (ctrl);
+cleanup:
+
+    glb_log_debug ("Cleanup on %s.", success ? "shutdown" : "failure");
+
+    if (listener) glb_listener_destroy (listener);
+    if (ctrl)     glb_ctrl_destroy     (ctrl);
+    if (wdog)     glb_wdog_destroy     (wdog);
+    if (pool)     glb_pool_destroy     (pool);
+    if (router)   glb_router_destroy   (router);
 
     if (cnf->daemonize) {
         glb_log_info ("Exit.");
@@ -191,10 +233,9 @@ int main (int argc, char* argv[])
 
     free_resources (cnf->fifo_name, ctrl_fifo, ctrl_sock, listen_sock);
     free (cnf);
-    return 0;
 
-failure:
-    free_resources (cnf->fifo_name, ctrl_fifo, ctrl_sock, listen_sock);
-    free (cnf);
-    exit (EXIT_FAILURE);
+    if (success)
+        exit (EXIT_SUCCESS);
+    else
+        exit (EXIT_FAILURE);
 }

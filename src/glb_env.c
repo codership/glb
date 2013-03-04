@@ -1,18 +1,20 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
 
 #include "glb_env.h"
+#include "glb_opt.h"
 #include "glb_limits.h"
 #include "glb_socket.h"
+#include "glb_misc.h"
 
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <ctype.h>
 #include <errno.h>
+#include <ctype.h>
 #include <assert.h>
 
 /* Environment variable names */
@@ -22,94 +24,158 @@ static const char env_policy[]  = "GLB_POLICY";
 static const char env_ctrl[]    = "GLB_CONTROL"; // address to accept control
                                                  // connections
 static const char env_targets[] = "GLB_TARGETS"; // balancing targets
+static const char env_interval[]= "GLB_INTERVAL";// health check interval
+static const char env_watchdog[]= "GLB_WATCHDOG";// watchdog spec string
 
 // Defaults relevant to ENV
 static const char env_ctrl_addr_default[] = "127.0.0.1";
 static const char env_bind_addr_default[] = "127.0.0.1";
 
-/*!
- * convert string into array of tokens
- *
- * @param sep - additional separator to whitespace
- */
-static bool
-env_parse_token_string (char*         tok_str,
-                        const char*** tok_list,
-                        int*          tok_num,
-                        int           sep)
+static inline glb_opt_t
+env_option_is (const char* opt, const glb_option_t* opts)
 {
-    assert (tok_str);
+    if (NULL == opt || '-' != opt[0]) return GLB_OPT_NOOPT;
 
-    *tok_list = NULL;
-    *tok_num  = 0;
+    /* at this point opt is guaranteed to consist at least of '-' and \0 */
 
-    if (!tok_str) return true;
-
-    size_t const tlen = strlen(tok_str);
-    if (!tlen) return true;
-
-    const char** list = NULL;
-    int num = 0;
-
-    size_t i;
-    for (i = 1; i <= tlen; i++) /* we can skip the first string char */
+    if ('-' == opt[1]) /* long option */
     {
-        if (isspace(tok_str[i]) || sep == tok_str[i]) tok_str[i] = '\0';
-        if (tok_str[i] == '\0' && tok_str[i-1] != '\0') num++;/* end of token */
-    }
-
-    list = calloc (num, sizeof(const char*));
-    if (!list) return true;
-
-    list[0] = tok_str;
-    num = 1;
-
-    for (i = 1; i <= tlen; i++)
-    {
-        if (tok_str[i-1] == '\0' && tok_str[i] != '\0') /* beginning of token */
+        while (NULL != opts->name)
         {
-            list[num] = &tok_str[i];
-            num++;
+            if (!strcmp (opt + 2, opts->name)) return opts->val;
+            opts++;
+        }
+    }
+    else              /* short option */
+    {
+        while (NULL != opts->name)
+        {
+            if (opt[1] == opts->val) return opts->val;
+            opts++;
         }
     }
 
-    *tok_list = list;
-    *tok_num  = num;
-
-    return false;
+    return GLB_OPT_NOOPT;
 }
 
-static inline bool
-env_option_is (const char* opt, const char* shopt, const char* lopt)
+static glb_cnf_t*
+env_parse_options (glb_cnf_t* const cnf, char* o)
 {
-    return false; //stub until 1.0
-}
+    glb_cnf_t* ret = cnf;
 
-static void
-env_parse_options (glb_cnf_t* cnf, char* o)
-{
-    if (!o) return;
+    if (!o) return ret;
 
     int    argc = 0;
     char** argv = NULL;
+    char*  endptr = NULL;
 
-    if (env_parse_token_string (o, (const char***)&argv, &argc, '\0'))
-        return;
+    if (glb_parse_token_string (o, (const char***)&argv, &argc, '\0'))
+        return ret;
 
     int i;
     for (i = 0; i < argc; i++)
     {
-        // stub
+        switch (env_option_is (argv[i], glb_options))
+        {
+        case GLB_OPT_NOOPT:
+            // options ended, now we expect bind addr and dst list
+            goto end_opts;
+        case GLB_OPT_DISCOVER:
+            cnf->discover = true;
+            break;
+        case GLB_OPT_SINGLE:
+            cnf->policy = GLB_POLICY_SINGLE; // implies GLB_OPT_TOP
+        case GLB_OPT_TOP:
+            cnf->top = true;
+            break;
+        case GLB_OPT_ROUND_ROBIN:
+            cnf->policy = GLB_POLICY_ROUND;
+            break;
+        case GLB_OPT_CONTROL:
+            if (i + 1 < argc) {
+                if (!glb_parse_addr (&cnf->ctrl_addr, argv[i+1],
+                                     env_ctrl_addr_default)) {
+                    i++;
+                    cnf->ctrl_set = true;
+                }
+            }
+            break;
+        case GLB_OPT_INTERVAL:
+            if (i + 1 < argc) {
+                long long intvl =
+                    glb_time_from_double (strtod (argv[i + 1], &endptr));
+                if ((*endptr == '\0' || isspace(*endptr)) && !errno &&
+                    intvl > 0) {
+                    i++;
+                    cnf->interval = intvl;
+                }
+            }
+            break;
+        case GLB_OPT_LATENCY:
+            if (i + 1 < argc) {
+                long lf = strtol (argv[i + 1], &endptr, 10);
+                if ((*endptr == '\0' || isspace(*endptr)) && !errno && lf >= 0){
+                    i++;
+                    cnf->lat_factor = lf;
+                }
+            }
+            break;
+        case GLB_OPT_RANDOM:
+            cnf->policy = GLB_POLICY_RANDOM;
+            break;
+        case GLB_OPT_SRC_TRACKING:
+            cnf->policy = GLB_POLICY_SOURCE;
+            break;
+        case GLB_OPT_VERBOSE:
+            cnf->verbose = true;
+            break;
+#if 0
+        case GLB_OPT_WATCHDOG:
+            if (i + 1 < argc) {
+                i++;
+                cnf->watchdog = argv[i];
+            }
+            break;
+#endif /* 0 */
+        case GLB_OPT_EXTRA_POLLS:
+            if (i + 1 < argc) {
+                glb_time_t ext= glb_time_from_double(strtod(argv[i+1],&endptr));
+                if ((*endptr == '\0' || isspace(*endptr)) && !errno && ext >= 0)
+                {
+                    i++;
+                    cnf->extra = ext;
+                }
+            }
+            break;
+        default:
+            ; // just silently ignore unsupported iptions
+        }
+    }
+
+end_opts:
+
+    if (i < argc) { /* parse bind address */
+        glb_sockaddr_t tmp;
+        if (!glb_parse_addr (&tmp, argv[i], env_bind_addr_default)) {
+            cnf->inc_addr = tmp;
+            i++;
+        }
+    }
+
+    if (i < argc) { /* parse dst list */
+        unsigned short const inc_port = glb_sockaddr_get_port (&cnf->inc_addr);
+        ret = glb_parse_dst_list ((const char**)(argv + i), argc - i,
+                                  inc_port, cnf);
     }
 
     free (argv);
+
+    return ret;
 }
 
 static void
 env_parse_policy (glb_cnf_t* cnf, const char* p)
 {
-    cnf->policy = GLB_POLICY_ROUND; // default
-
     if (p)
     {
         if (!strcmp(p, "single"))
@@ -134,52 +200,86 @@ env_parse_control (glb_cnf_t* cnf, const char* p)
     }
 }
 
+static void
+env_parse_watchdog (glb_cnf_t* cnf, const char* p)
+{
+    if (p) cnf->watchdog = strdup(p);
+}
+
+static bool
+env_addr_empty (const glb_sockaddr_t* const addr)
+{
+    glb_sockaddr_t empty;
+
+    memset (&empty, 0, sizeof(empty));
+
+    return glb_sockaddr_is_equal (addr, &empty);
+}
+
 glb_cnf_t*
 glb_env_parse ()
 {
-    bool err;
-
-    if (!getenv (env_bind))    return NULL;
-    if (!getenv (env_targets)) return NULL;
+    bool err = false;
 
     glb_cnf_t* ret = glb_cnf_init(); // initialize to defaults
     if (!ret) return NULL;
 
-    err = glb_parse_addr (&ret->inc_addr, getenv (env_bind),
-                          env_bind_addr_default);
-    if (err) goto failure;
+    glb_cnf_t* tmp = env_parse_options (ret, getenv (env_options));
+    if (!tmp) goto failure;
 
-    const char** dst_list = NULL;
-    int          dst_num  = 0;
-    uint16_t     bind_port = glb_socket_addr_get_port (&ret->inc_addr);
+    ret = tmp;
 
-    if (!env_parse_token_string (getenv(env_targets), &dst_list, &dst_num, ','))
+    const char* const bind_str = getenv (env_bind);
+    if (bind_str && strlen(bind_str))
     {
-        assert(dst_list);
-        assert(dst_num >= 0);
+        err = glb_parse_addr (&ret->inc_addr, bind_str, env_bind_addr_default);
+    }
+    // must make sure that inc_addr is set
+    err = err || env_addr_empty (&ret->inc_addr);
+    if (err)
+    {
+        fputs (LIBGLB_PREFIX "Unspecified or invalid \"bind\" address.\n",
+               stderr);
+        goto failure;
+    }
 
-        glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
+    char* targets_str = getenv (env_targets);
+    if (targets_str && strlen(targets_str))
+    {
+        const char** dst_list  = NULL;
+        int          dst_num   = 0;
+        uint16_t     bind_port = glb_sockaddr_get_port (&ret->inc_addr);
 
-        if (tmp)
+        if (!glb_parse_token_string (targets_str, &dst_list, &dst_num, ','))
         {
-            ret = tmp;
+            assert(dst_list);
+            assert(dst_num >= 0);
 
-            env_parse_options (ret, getenv (env_options));
-            env_parse_policy  (ret, getenv (env_policy));
-            env_parse_control (ret, getenv (env_ctrl));
+            tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
+
+            free (dst_list);
+            err = (!tmp);
         }
         else err = true;
-
-        free (dst_list);
     }
-    else err = true;
+    err = err || (0 == ret->n_dst);
+    if (err)
+    {
+        fputs (LIBGLB_PREFIX "Unspecified or invalid targets list.\n", stderr);
+        goto failure;
+    }
 
-    if (!err) return ret;
+    env_parse_policy   (ret, getenv (env_policy));
+    env_parse_control  (ret, getenv (env_ctrl));
+    env_parse_watchdog (ret, getenv (env_watchdog));
+
+    return ret;
 
 failure:
 
+    if (ret->verbose) glb_cnf_print(stderr, ret);
+
+    if (ret->watchdog) free ((void*)ret->watchdog);
     free (ret);
     return NULL;
 }
-
-

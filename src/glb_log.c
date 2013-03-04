@@ -11,7 +11,7 @@
 
 #include "glb_log.h"
 
-static glb_log_type_t log_type = GLB_LOG_PRINTF;
+static glb_log_type_t log_type = GLB_LOG_STDERR;
 
 void
 glb_log (glb_log_level_t level,
@@ -30,7 +30,7 @@ glb_log (glb_log_level_t level,
     if (len < 0) abort();
 
     if (buf_len > (size_t)len) {
-        va_start (ap, format); 
+        va_start (ap, format);
         vsnprintf (buf + len, buf_len - len, format, ap);
         va_end (ap);
     }
@@ -58,12 +58,12 @@ glb_log (glb_log_level_t level,
             priority = LOG_MAKEPRI(facility, LOG_DEBUG); break;
         }
 
-        syslog (priority, "%s", buf);
+        syslog (priority, LIBGLB_PREFIX "%s", buf);
         return;
     }
-    case GLB_LOG_PRINTF:
+    case GLB_LOG_STDERR:
     {
-        FILE* out = stdout;
+        FILE* out = stderr;
         const char* lvl;
 
         switch (level)
@@ -76,22 +76,32 @@ glb_log (glb_log_level_t level,
         default:              lvl = "UNKNOWN: "; break;
         }
 
-        fprintf (out, "%s%s\n", lvl, buf);
+        fprintf (out, LIBGLB_PREFIX "%s%s\n", lvl, buf);
         return;
     }
-    default:
-        abort();
     }
+
+    abort();
+}
+
+bool glb_debug = false;
+
+void
+glb_set_debug (bool const d)
+{
+    glb_debug = d;
 }
 
 long
-glb_log_init (glb_log_type_t lt)
+glb_log_init (glb_log_type_t const lt, bool const debug)
 {
+    glb_set_debug (debug);
+
     switch (lt) {
     case GLB_LOG_SYSLOG:
-        setlogmask (LOG_UPTO (LOG_DEBUG)); // avoid debug messages in syslog
+        setlogmask (LOG_UPTO (glb_debug ? LOG_DEBUG : LOG_INFO));
         openlog (NULL, LOG_CONS | LOG_PID | LOG_NDELAY, LOG_DAEMON);
-    case GLB_LOG_PRINTF:
+    case GLB_LOG_STDERR:
         log_type = lt;
         return 0;
     default:
@@ -99,3 +109,4 @@ glb_log_init (glb_log_type_t lt)
         return -1;
     }
 }
+

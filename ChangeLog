@@ -1,23 +1,42 @@
+2013-03-04 alex 
+- Fixed libglb initialization which was thread-unsafe and unoptimal.
+- Fixed GLB_OPTIONS parsing in libglb, which didn't actually work.
+- Added logging capability to libglb and --verbose option support.
+- Cleaned up logging.
+- Fixed -D|--discovery option, which didn't have effect.
+  Version 1.0.0rc1
+
+2013-01-21 alex 
+- Added automatic Galera node discovery (-D|--discover option).
+- Added GLB_OPTIONS env. variable to set misc. options for libglb.
+- Added a sample curl script for checking HTTP servers.
+- Fixed a bunch of leaks and uninitialized values shown by valgrind.
+  Version 1.0.0beta
+
 2013-01-18 alex 
+  Merged with version 0.9.2:
 - New option -T|--top: all policies use only top-weighted destinations for
   routing. E.g. in the presence of destinations with weights 1 and 2 only
   the latter will be used to route connections to until all of them fail.
 - New policy 'single': all connections are directed to only one destination
   chosen by highest weight.
 - Added SO_KEEPALIVE option to server side sockets to avoid stalled connections
-  Version 0.9.2
+  Version 1.0.0alpha4
 
 2013-01-10 alex 
-- Added asynchronous connection processing by default. -Y option to turn back
-  old synchronous (one-at-a-time) bevaviour.
-- Avoid destination map recalculation when not using 'random' or 'source'
-  policies.
-- A more intuitive weghting algorithm where weight 100 means that the dest.
-  will get ~100 connections before a destination with weight 1 will be tried.
-- Made libglb connect() more compliant with standard connect() - i.e.
-  returning -1 in case of error instead of negative error code and setting
-  errno acordingly. Also improved handling of non-blocking sockets in libglb.
-  Version 0.9.1
+- Merged in asynchronous connection processing from 0.9.1 and other missing
+  fixes from the trunk.
+  Version 1.0.0alpha3
+
+2012-12-23 alex 
+- Implemented initial watchdog framework that asynchronously monitors
+  destinations using server-spceific probes and updates routing table
+  accordingly. (Destination discovery is not supported yet)
+- Implemented basic watchdog module that spawns destination probes via shell,
+  allowing various probing scripts to be written.
+- Added ability to use watchdog probes to probe destinations immediately before
+  connect.
+  Version 1.0.0alpha2
 
 2012-12-19 alex 
 - Fixed division by 0 when destination list is empty introduced by

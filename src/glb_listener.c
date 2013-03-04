@@ -16,6 +16,10 @@
 #include <string.h>
 #include <poll.h>
 
+#ifndef _GNU_SOURCE
+#include <fcntl.h>
+#endif /* _GNU_SOURCE */
+
 typedef struct pollfd pollfd_t;
 
 struct glb_listener
@@ -32,21 +36,38 @@ listener_thread (void* arg)
 {
     glb_listener_t* listener = arg;
 
-    while (1) {
+    while (!glb_terminate) {
         int            ret;
         int            client_sock;
         glb_sockaddr_t client;
-        socklen_t      client_size;
+        socklen_t      client_size = sizeof(client);
         int            server_sock;
         glb_sockaddr_t server;
 
+#ifdef _GNU_SOURCE
+        client_sock = accept4(listener->sock,
+                              (struct sockaddr*) &client, &client_size,
+                              SOCK_CLOEXEC);
+#else
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
-        if (client_sock < 0) {
-            glb_log_error ("Failed to accept connection: %d (%s)",
-                           errno, strerror (errno));
+#endif /* _GNU_SOURCE */
+
+        if (client_sock < 0 || glb_terminate) {
+            if (client_sock < 0) {
+                glb_log_error ("Failed to accept connection: %d (%s)",
+                               errno, strerror (errno));
+            }
+            else {
+                glb_log_debug ("Listener thread termonating.");
+            }
+
             goto err;
         }
+
+#ifndef _GNU_SOURCE
+        (void) fcntl (client_sock, F_SETFD, FD_CLOEXEC);
+#endif /* !_GNU_SOURCE */
 
         ret = glb_router_connect(listener->router, &client ,&server,
                                  &server_sock);
@@ -72,20 +93,24 @@ listener_thread (void* arg)
         }
 
         if (listener->cnf->verbose) {
-            glb_log_info ("Accepted connection from %s ",
-                          glb_socket_addr_to_string (&client));
-            glb_log_info ("to %s\n",
-                          glb_socket_addr_to_string (&server));
+            glb_sockaddr_str_t ca = glb_sockaddr_to_str (&client);
+            glb_sockaddr_str_t sa = glb_sockaddr_to_str (&server);
+            glb_log_info ("Accepted connection from %s to %s\n", ca.str,sa.str);
         }
         continue;
 
     err2:
-        close (server_sock);
+        assert (server_sock > 0);
+        close  (server_sock);
         glb_router_disconnect (listener->router, &server, false);
+
     err1:
-        close (client_sock);
+        assert (client_sock > 0);
+        close  (client_sock);
+
     err:
-        usleep (100000); // to avoid busy loop in case of error
+        // to avoid busy loop in case of error
+        if (!glb_terminate) usleep (100000);
     }
 
     return NULL;
@@ -131,6 +156,28 @@ glb_listener_create (const glb_cnf_t* const cnf,
 extern void
 glb_listener_destroy (glb_listener_t* listener)
 {
-    glb_log_error ("glb_listener_destroy() not implemented");
+    /* need to connect to own socket to break the accept() call */
+    glb_sockaddr_t sockaddr;
+    glb_sockaddr_init (&sockaddr, "0.0.0.0", 0);
+    int socket = glb_socket_create (&sockaddr, 0);
+    if (socket >= 0)
+    {
+        int err = connect (socket, (struct sockaddr*)&listener->cnf->inc_addr,
+                           sizeof (listener->cnf->inc_addr));
+        close (socket);
+        if (err) {
+            glb_log_error ("Failed to connect to listener socket: %d (%s)",
+                           errno, strerror(errno));
+            glb_log_error ("glb_listener_destroy(): failed to join thread.");
+        }
+        else {
+            pthread_join (listener->thread, NULL);
+        }
+    }
+    else {
+        glb_log_error ("Failed to create socket: %d (%s)",
+                       -socket, strerror(-socket));
+    }
+    free (listener);
 }
 

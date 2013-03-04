@@ -8,6 +8,7 @@
 #define _glb_cnf_h_
 
 #include "glb_dst.h"
+#include "glb_time.h"
 
 #include <stdbool.h>    // for bool
 #include <stdio.h>      // for FILE and fprintf()
@@ -27,6 +28,9 @@ typedef struct glb_cnf
 {
     glb_sockaddr_t inc_addr;     // IP to bind listener for incoming connecitons
     glb_sockaddr_t ctrl_addr;    // network control interface
+    const char*    watchdog;     // watchdog spec string
+    glb_time_t     interval;     // health check interval (nanoseconds)
+    glb_time_t     extra;        // extra check interval (nanoseconds)
 #ifdef GLBD
     const char*    fifo_name;    // FIFO file name
     int            n_threads;    // number of routing threads (1 .. oo)
@@ -34,12 +38,14 @@ typedef struct glb_cnf
     bool           nodelay;      // use TCP_NODELAY?
     bool           keepalive;    // use SO_KEEPALIVE?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
-    bool           verbose;      // be verbose?
     bool           daemonize;    // become a daemon?
     bool           synchronous;  // connect synchronously
 #endif /* GLBD */
+    bool           verbose;      // be verbose?
+    bool           discover;     // automatically discover new destinations
     bool           top;          // only use top weighted destinations
     bool           ctrl_set;     // was set? (false)
+    int            lat_factor;   // smoothe latency over that many samples
     glb_policy_t   policy;       // algorithm to use for load-balancing
     size_t         n_dst;        // number of destinations
     glb_dst_t      dst[];        // destination descriptions
