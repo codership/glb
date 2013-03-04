@@ -132,7 +132,7 @@ int main (int argc, char* argv[])
     glb_cnf_print (stdout, cnf);
     glb_socket_init (cnf);
 
-    if (glb_log_init (GLB_LOG_PRINTF)) {
+    if (glb_log_init (GLB_LOG_STDERR, cnf->verbose)) {
         fprintf (stderr, "Failed to initialize logger. Aborting.\n");
         exit (EXIT_FAILURE);
     }
@@ -145,7 +145,7 @@ int main (int argc, char* argv[])
     glb_signal_set_handler();
 
     if (cnf->daemonize) {
-        glb_daemon_start();
+        glb_daemon_start (cnf);
         /* at this point we're a child process:
          * 1) make at least those sockets unforkable */
         glb_fd_setfd (ctrl_fifo,   FD_CLOEXEC, true);
@@ -201,8 +201,11 @@ int main (int argc, char* argv[])
         if (!cnf->daemonize) {
             char stats[BUFSIZ];
 
-            glb_wdog_print_info (wdog, stats, BUFSIZ);
-            puts (stats);
+            if (wdog)
+            {
+                glb_wdog_print_info (wdog, stats, BUFSIZ);
+                puts (stats);
+            }
 
             glb_router_print_info (router, stats, BUFSIZ);
             puts (stats);

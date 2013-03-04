@@ -8,6 +8,11 @@
  * $Id$
  */
 
+#include "glb_daemon.h"
+#include "glb_log.h"
+#include "glb_signal.h"
+#include "glb_cnf.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,16 +25,12 @@
 #include <pwd.h>
 #include <signal.h>
 
-#include "glb_log.h"
-#include "glb_signal.h"
-#include "glb_daemon.h"
-
 /* Change this to the user under which to run */
 #define RUN_AS_USER "daemon"
 
 #define CHILD_OK_TIMEOUT 5
 
-void glb_daemon_start()
+void glb_daemon_start (const glb_cnf_t* cnf)
 {
     pid_t pid, sid;
 
@@ -92,7 +93,7 @@ void glb_daemon_start()
         exit(EXIT_FAILURE);
     }
 
-    if (glb_log_init (GLB_LOG_SYSLOG)) exit (EXIT_FAILURE);
+    if (glb_log_init (GLB_LOG_SYSLOG, cnf->verbose)) exit (EXIT_FAILURE);
 
     /* Redirect standard files to /dev/null */
     if (NULL == freopen( "/dev/null", "r", stdin)  ||

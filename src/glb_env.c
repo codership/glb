@@ -58,17 +58,19 @@ env_option_is (const char* opt, const glb_option_t* opts)
     return GLB_OPT_NOOPT;
 }
 
-static void
-env_parse_options (glb_cnf_t* cnf, char* o)
+static glb_cnf_t*
+env_parse_options (glb_cnf_t* const cnf, char* o)
 {
-    if (!o) return;
+    glb_cnf_t* ret = cnf;
+
+    if (!o) return ret;
 
     int    argc = 0;
     char** argv = NULL;
     char*  endptr = NULL;
 
     if (glb_parse_token_string (o, (const char***)&argv, &argc, '\0'))
-        return;
+        return ret;
 
     int i;
     for (i = 0; i < argc; i++)
@@ -152,8 +154,7 @@ env_parse_options (glb_cnf_t* cnf, char* o)
 
 end_opts:
 
-    if (i < argc) {
-        /* parse bind address */
+    if (i < argc) { /* parse bind address */
         glb_sockaddr_t tmp;
         if (!glb_parse_addr (&tmp, argv[i], env_bind_addr_default)) {
             cnf->inc_addr = tmp;
@@ -161,19 +162,20 @@ end_opts:
         }
     }
 
-    if (i < argc) {
-        /* parse dst list */
-
+    if (i < argc) { /* parse dst list */
+        unsigned short const inc_port = glb_sockaddr_get_port (&cnf->inc_addr);
+        ret = glb_parse_dst_list ((const char**)(argv + i), argc - i,
+                                  inc_port, cnf);
     }
 
     free (argv);
+
+    return ret;
 }
 
 static void
 env_parse_policy (glb_cnf_t* cnf, const char* p)
 {
-    cnf->policy = GLB_POLICY_ROUND; // default
-
     if (p)
     {
         if (!strcmp(p, "single"))
@@ -204,52 +206,80 @@ env_parse_watchdog (glb_cnf_t* cnf, const char* p)
     if (p) cnf->watchdog = strdup(p);
 }
 
+static bool
+env_addr_empty (const glb_sockaddr_t* const addr)
+{
+    glb_sockaddr_t empty;
+
+    memset (&empty, 0, sizeof(empty));
+
+    return glb_sockaddr_is_equal (addr, &empty);
+}
+
 glb_cnf_t*
 glb_env_parse ()
 {
-    bool err;
-
-    if (!getenv (env_bind))    return NULL;
-    if (!getenv (env_targets)) return NULL;
+    bool err = false;
 
     glb_cnf_t* ret = glb_cnf_init(); // initialize to defaults
     if (!ret) return NULL;
 
-    err = glb_parse_addr (&ret->inc_addr, getenv (env_bind),
-                          env_bind_addr_default);
-    if (err) goto failure;
+    glb_cnf_t* tmp = env_parse_options (ret, getenv (env_options));
+    if (!tmp) goto failure;
 
-    const char** dst_list = NULL;
-    int          dst_num  = 0;
-    uint16_t     bind_port = glb_sockaddr_get_port (&ret->inc_addr);
+    ret = tmp;
 
-    if (!glb_parse_token_string (getenv(env_targets), &dst_list, &dst_num, ','))
+    const char* const bind_str = getenv (env_bind);
+    if (bind_str && strlen(bind_str))
     {
-        assert(dst_list);
-        assert(dst_num >= 0);
+        err = glb_parse_addr (&ret->inc_addr, bind_str, env_bind_addr_default);
+    }
+    // must make sure that inc_addr is set
+    err = err || env_addr_empty (&ret->inc_addr);
+    if (err)
+    {
+        fputs (LIBGLB_PREFIX "Unspecified or invalid \"bind\" address.\n",
+               stderr);
+        goto failure;
+    }
 
-        glb_cnf_t* tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
-        if (tmp)
+    char* targets_str = getenv (env_targets);
+    if (targets_str && strlen(targets_str))
+    {
+        const char** dst_list  = NULL;
+        int          dst_num   = 0;
+        uint16_t     bind_port = glb_sockaddr_get_port (&ret->inc_addr);
+
+        if (!glb_parse_token_string (targets_str, &dst_list, &dst_num, ','))
         {
-            ret = tmp;
+            assert(dst_list);
+            assert(dst_num >= 0);
 
-            env_parse_options  (ret, getenv (env_options));
-            env_parse_policy   (ret, getenv (env_policy));
-            env_parse_control  (ret, getenv (env_ctrl));
-            env_parse_watchdog (ret, getenv (env_watchdog));
+            tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
+
+            free (dst_list);
+            err = (!tmp);
         }
         else err = true;
-
-        free (dst_list);
     }
-    else err = true;
+    err = err || (0 == ret->n_dst);
+    if (err)
+    {
+        fputs (LIBGLB_PREFIX "Unspecified or invalid targets list.\n", stderr);
+        goto failure;
+    }
 
-    if (!err) return ret;
+    env_parse_policy   (ret, getenv (env_policy));
+    env_parse_control  (ret, getenv (env_ctrl));
+    env_parse_watchdog (ret, getenv (env_watchdog));
+
+    return ret;
 
 failure:
 
+    if (ret->verbose) glb_cnf_print(stderr, ret);
+
+    if (ret->watchdog) free ((void*)ret->watchdog);
     free (ret);
     return NULL;
 }
-
-

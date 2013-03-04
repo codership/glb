@@ -139,17 +139,22 @@ wdog_change_dst (glb_wdog_t*      const wdog,
 
     // sanity check
     if (!d && dst->weight < 0) {
-#ifdef GLBD
         char tmp[256];
         glb_dst_print (tmp, sizeof(tmp), dst);
         glb_log_warn ("Command to remove inexisting destination: %s", tmp);
-#endif
         return -EADDRNOTAVAIL;
     }
 
     if (!d) { // add destination
 
+        assert (0 <= dst->weight);
         assert (i == wdog->n_dst);
+
+        if (GLB_UNLIKELY (wdog->cnf->verbose)) {
+            char tmp[256];
+            glb_dst_print (tmp, sizeof(tmp), dst);
+            glb_log_debug ("Adding '%s' at pos. %d", tmp, i);
+        }
 
         glb_backend_thread_ctx_t* ctx =
             wdog_backend_thread_ctx_create (wdog->backend.ctx, dst,
@@ -223,6 +228,9 @@ wdog_change_dst (glb_wdog_t*      const wdog,
         }
     }
     else {
+        assert (d);
+        assert (i >= 0 && i < wdog->n_dst);
+
         /* keep destination in the list as long as it is being referred to */
         d->fail_count = 0;
 
@@ -342,7 +350,7 @@ wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
                  strcmp(d->result.others, res->others)))
             {
                 glb_log_debug("Setting memb_changed because changed_length: %d "
-                              "or strcmp(\n old: '%s'new: '%s'): %d",
+                              "or strcmp(\n old: '%s'\n new: '%s'): %d",
                               changed_length, d->result.others, res->others,
                               strcmp(d->result.others, res->others));
                 d->memb_changed = true;
@@ -357,12 +365,10 @@ wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
         // smooth latency measurement with the previous one
         d->result.latency = (d->result.latency + old_lat * lf) / (lf + 1);
         if (*max_lat < d->result.latency) *max_lat = d->result.latency;
-#if GLBD
-#ifndef NDEBUG
+
 //        glb_sockaddr_str_t a = glb_sockaddr_to_str (&d->dst.addr);
 //        glb_log_debug ("%s latency: %6.4f", a.str, d->result.latency);
-#endif /* NDEBUG */
-#endif /* GLBD */
+
     }
     else {
         // preserve previously measured latency
@@ -406,7 +412,9 @@ wdog_dst_free (wdog_dst_t* d)
 static int
 wdog_process_membership_change (glb_wdog_t* wdog, const char* const memb_str)
 {
-    glb_log_debug ("Processing new membership: %s", memb_str);
+    assert (wdog);
+    assert (memb_str);
+//    glb_log_debug ("Processing new membership: %s", memb_str);
 
     char* const tmp_str = strdup (memb_str);
 
@@ -443,23 +451,34 @@ wdog_process_membership_change (glb_wdog_t* wdog, const char* const memb_str)
             continue;
         }
 
-#if defined(GLB_LOGGING)
-        /* logging macros are undefined for libglb and GCC complains
-          * about unused variable. */
-        glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst.addr);
-#endif
-        glb_log_debug ("'%s' -> '%s'", memb_list[i], a.str);
+        if (GLB_UNLIKELY(wdog->cnf->verbose))
+        {
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst.addr);
+
+            if (strcmp(memb_list[i], a.str))
+            {
+                glb_log_debug ("'%s' -> '%s'", memb_list[i], a.str);
+            }
+        }
 
         err = wdog_change_dst (wdog, &dst, false);
+
         if (err < 0)
         {
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst.addr);
+
             glb_log_error ("Failed to adjust destination '%s': %d (%s).",
                            a.str, -err, strerror (-err));
         }
-        else
+#if 0 // does not seem to be necessary
+        else if (GLB_UNLIKELY(wdog->cnf->verbose))
         {
-            glb_log_debug ("Adjusted destination '%s' at pos. %d.", a.str, err);
+            glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst.addr);
+
+            glb_log_debug ("Adjusted destination '%s' at pos. %d.",
+                           a.str, err);
         }
+#endif // 0
     }
 
     free (memb_list);
@@ -473,7 +492,7 @@ static int
 wdog_collect_results (glb_wdog_t* const wdog)
 {
 #ifdef GLBD
-    if (wdog->cnf->verbose) glb_log_debug ("main loop collecting...");
+    glb_log_debug ("main loop collecting...");
 #endif
     double max_lat = 0.0;
     int results = 0;
@@ -494,8 +513,8 @@ wdog_collect_results (glb_wdog_t* const wdog)
 
         if (d->ctx->join) {
             pthread_join (d->ctx->id, NULL);
-            glb_log_info ("Joined thread for '%s:%hu'",
-                          d->ctx->host, d->ctx->port);
+            glb_log_debug ("Joined thread for '%s:%hu'",
+                           d->ctx->host, d->ctx->port);
             wdog_dst_free (d);
             wdog->n_dst--;
             if (i < wdog->n_dst) {
@@ -510,12 +529,13 @@ wdog_collect_results (glb_wdog_t* const wdog)
             new_weight = wdog_result_weight (d, max_lat,
                                              wdog->cnf->lat_factor > 0);
 
-            if (memb_source < 0 && GLB_DST_READY == d->result.state &&
-                d->result.others)
+            if (wdog->cnf->discover && memb_source < 0 &&
+                GLB_DST_READY == d->result.state && d->result.others)
             {
                 /* This will restrict new memb check only to the first dst
                  * entry which is GLB_DST_READY. For Galera this should be
-                 * enough as every node should report the same membership. */
+                 * enough as every node should report the same membership -
+                 * at least "eventually". */
                 memb_source = i;
             }
         }
@@ -573,8 +593,8 @@ wdog_collect_results (glb_wdog_t* const wdog)
 
         assert (d->result.others);
 
-        glb_log_debug ("Adjusting dest. because memb_source: %d, "
-                       "memb_changed: %d", memb_source, d->memb_changed);
+//        glb_log_debug ("Adjusting dest. because memb_source: %d, "
+//                       "memb_changed: %d", memb_source, d->memb_changed);
 
         d->memb_changed = false; // reset trigger
 
@@ -738,13 +758,18 @@ glb_wdog_destroy(glb_wdog_t* wdog)
 size_t
 glb_wdog_print_info (glb_wdog_t* wdog, char* buf, size_t buf_len)
 {
+    assert (wdog);
+    assert (buf);
+    assert (buf_len > 128);
+
     size_t len = 0;
     int    n_dst;
     int    i;
 
     len += snprintf(buf + len, buf_len - len, "Watchdog:\n"
-                    "------------------------------------------------------------\n"
-                    "        Address       : exp  setw     state    lat     curw\n");
+               "------------------------------------------------------------\n"
+               "        Address       : exp  setw     state    lat     curw\n");
+
     if (len == buf_len) {
         buf[len - 1] = '\0';
         return (len - 1);

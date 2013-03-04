@@ -1,4 +1,4 @@
-# Copyright (C) 2007-2012 Codership Oy <info@codership.com>
+# Copyright (C) 2007-2013 Codership Oy <info@codership.com>
 
 Mailing list:
 https://groups.google.com/forum/?fromgroups=#!forum/codership-team
@@ -195,9 +195,9 @@ configuration options. Example:
 $ glbd -w exec:"mysql.sh -utest -ptestpass" -t 2 3306 192.168.0.1 192.168.0.2
 
 This initializes "exec" backend that executes external programs. In this case
-it will periodically execute mysql.sh script (can be found in the files/
-directory, must be placed in PATH) with provided parameters to check MySQL
-servers at 192.168.0.1 and 192.168.0.2 (in parallel threads). To pass server
+it will execute mysql.sh script (can be found in the files/ directory,
+must be placed in PATH) with provided parameters to check MySQL servers
+at192.168.0.1 and 192.168.0.2 (in parallel threads). To pass server
 address to a script, 'exec' backend will insert host:port string as the first
 argument after a script/command name, so the actual command that would be
 executed in this case looks like:
@@ -209,10 +209,10 @@ Check interval is set with -i|--interval parameter (fractional seconds, 1.0).
 
 DESTINATION DISCOVERY:
 ======================
-If destinations can supply information about other members of the cluster it can
-be used to automatically populate watchdog destination list if -D|--discover
-option is supplied. Currently only MySQL/Galera nodes are known to do this, so
-it is a Galera-only option.
+If destinations can supply information about other members of the cluster
+it can be used to automatically populate watchdog destination list if
+-D|--discover option is supplied. Currently only MySQL/Galera nodes are known
+to do this, so it is a Galera-only option.
 
 
 RUNNING GLBD AS A "SERVICE":
@@ -222,12 +222,43 @@ See README in the files/ directory.
 
 USING LIBGLB:
 =============
-libglb requres 3 program environment variables to be set:
+Using libglb requres 2 environment variables to be set:
 
 LD_PRELOAD=<path-to-libglb>
 
+GLB_OPTIONS='options string'
+    Allows to specify GLB options to libglb the same way as command line
+    parameters for glbd. It is limited however in that ptions and their values
+    cannot contain whitespaces and commas and short options cannot be
+    concatenated (i.e. '-qri10' should go as '-q -r -i 10'). Parsing errors and
+    options unsupported by libglb (like -d) will be silently ignored.
+    In particular, watchdog option cannot be specified this way.
+    (See GLB_WATCHDOG environment variable below)
+
+Example:
+
+$ LD_PRELOAD=src/.libs/libglb.so \
+GLB_OPTIONS="--random 3306 192.168.0.1 192.168.0.2 192.168.0.3" \
+mysql -uroot -prootpass -h127.0.0.1 -P3306
+
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 76
+Server version: 5.5.28 Source distribution, wsrep_24dev.7.r3830
+...
+
+
+Additional libglb parameters:
+
+In case GLB_OPTIONS is not sufficient (e.g. watchdog option needs to be
+specified) below there is a list of additional environment variables (which
+take precedence over GLB_OPTIONS). Note however, that all these options except
+GLB_WATCHDOG are considered deprecated at the moment.
+
+GLB_WATCHDOG=<watchdog specification>
+    Interpreted the same way as --watchdog parameter.
+
 GLB_TARGETS=H1[:P1[:W1]],[H2[:P2[:W2]],...]
-    Which is a comma-separated list of target servers among which the client
+    Is a comma-separated list of target servers among which the client
     connections must be distributed.
 
 GLB_BIND=<addr>
@@ -236,26 +267,7 @@ GLB_BIND=<addr>
     request will be intercepted and connection established to one of the
     servers from GLB_TARGETS list according to balancing rules.
 
-Example:
-
-$ LD_PRELOAD=src/.libs/libglb.so \
-GLB_BIND=3306 GLB_TARGETS=192.168.0.1,192.168.0.2,192.168.0.3 \
-mysql -uroot -prootpass -h127.0.0.1 -P3306
-
-Welcome to the MySQL monitor.  Commands end with ; or \g.
-Your MySQL connection id is 76
-Server version: 5.5.28 Source distribution, wsrep_24dev.7.r3830
-...
-
-Here GLB_BIND=3306 is interpreted as 127.0.0.1:3306, and GLB_TARGETS as
-192.168.0.1:3306,192.168.0.2:3306,192.168.0.3:3306 (note port in GLB_BIND).
-Note that mysql is connecting to 127.0.0.1:3306 as well and since this
-address matches GLB_BIND, connection is intecepted and directed to the server
-from the GLB_TARGETS list.
-
-Additional libglb parameters:
-
-GLB_POLICY=random|source
+GLB_POLICY=single|random|source
     Default libglb balancing policy is "round-robin", "single", "random" and
     "source tracking" policies can be specified with GLB_POLICY variable.
 
@@ -272,12 +284,3 @@ GLB_CONTROL=[IP:]PORT
     statistics or connection count is maintained, so "getstat" command is a
     noop and "getinfo" only prints out a routing table.
 
-GLB_WATCHDOG=<watchdog specification>
-    Interpreted the same way as --watchdog parameter.
-
-GLB_OPTIONS='options string'
-    Allows to specify other GLB options to libglb in the form of command line
-    parameters for glbd. Options and their values cannot contain whitespaces
-    and commas and short options cannot be concatenated (i.e. '-qri 10' should go
-    as '-q -r -i 10'). Parsing errors and options unsupported by libglb (like -d)
-    will be silently ignored.

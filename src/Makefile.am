@@ -2,6 +2,7 @@
 # $Id$
 
 COMMON_SRCS = \
+	glb_log.c       \
 	glb_misc.c      \
 	glb_proc.c      \
 	glb_socket.c    \
@@ -17,7 +18,6 @@ sbin_PROGRAMS = glbd
 
 glbd_SOURCES = \
 	$(COMMON_SRCS) \
-	glb_log.c      \
 	glb_signal.c   \
 	glb_daemon.c   \
 	glb_cmd.c      \
@@ -35,10 +35,6 @@ libglb_la_SOURCES = \
 	$(COMMON_SRCS) \
 	glb_env.c      \
 	glb_lib.c
-
-if ENABLE_DEBUG
-libglb_la_SOURCES += glb_log.c
-endif
 
 libglb_la_LDFLAGS = -version-info 1:0:0
 endif

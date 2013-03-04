@@ -130,7 +130,6 @@ glb_parse_dst_list (const char* const dst_list[],
     return out;
 }
 
-//#ifdef GLBD
 
 void
 glb_print_version (FILE* out)
@@ -146,10 +145,12 @@ glb_print_version (FILE* out)
         );
 }
 
+
 static const char* policy_str[GLB_POLICY_MAX] =
 {
     "least connected", "round-robin", "single", "random", "source"
 };
+
 
 void
 glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
@@ -182,7 +183,7 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
              cnf->lat_factor,
              policy_str[cnf->policy],
              cnf->top ? "YES" : "NO",
-             cnf->verbose ? "ON" : "OFF"
+             cnf->verbose ? "YES" : "NO"
         );
     fprintf (out, "Destinations: %lu\n", (ulong)cnf->n_dst);
 

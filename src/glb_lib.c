@@ -32,12 +32,15 @@ static void glb_init() __attribute__((constructor));
 
 static void glb_init()
 {
+    unsetenv ("LD_PRELOAD");
+
     glb_cnf = glb_env_parse();
 
     if (glb_cnf)
     {
-        if (glb_cnf->verbose)
-            glb_cnf_print(stdout, glb_cnf);
+        if (glb_cnf->verbose) glb_cnf_print(stdout, glb_cnf);
+
+        glb_log_init (GLB_LOG_STDERR, glb_cnf->verbose);
 
         glb_router = glb_router_create(glb_cnf);
 
@@ -66,7 +69,7 @@ static void glb_init()
 
     if (!glb_router)
     {
-        fputs ("Failed to initialize libglb.\n", stderr);
+        fputs (LIBGLB_PREFIX "Failed to initialize!\n", stderr);
         fflush (stderr);
     }
 

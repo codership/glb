@@ -8,18 +8,11 @@
 #define _glb_misc_h_
 
 #include "glb_log.h"
+#include "glb_macros.h"
 
 #include <pthread.h>
 #include <string.h> // strerror()
 #include <stdlib.h> // abort()
-
-#if __GNUC__ >= 3
-#  define GLB_LIKELY(x)   __builtin_expect((x), 1)
-#  define GLB_UNLIKELY(x) __builtin_expect((x), 0)
-#else
-#  define GLB_LIKELY(x)   (x)
-#  define GLB_UNLIKELY(x) (x)
-#endif
 
 static inline void GLB_MUTEX_LOCK (pthread_mutex_t* mtx)
 {

@@ -1,8 +1,10 @@
-2013-03-03 alex 
-- Fixed libglb initialization.
+2013-03-04 alex 
+- Fixed libglb initialization which was thread-unsafe and unoptimal.
 - Fixed GLB_OPTIONS parsing in libglb, which didn't actually work.
-- Added logging to libglb in debug build and support for --verbose option.
-  Version 1.0.0
+- Added logging capability to libglb and --verbose option support.
+- Cleaned up logging.
+- Fixed -D|--discovery option, which didn't have effect.
+  Version 1.0.0rc1
 
 2013-01-21 alex 
 - Added automatic Galera node discovery (-D|--discover option).

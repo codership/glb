@@ -674,12 +674,10 @@ router_connect_dst (glb_router_t*   const router,
 
         GLB_MUTEX_UNLOCK (&router->lock);
 
-#ifndef NDEBUG
-        if (router->cnf->verbose) {
+        if (GLB_UNLIKELY(router->cnf->verbose)) {
             glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
             glb_log_debug ("Connecting to %s", a.str);
         }
-#endif
 
         ret = glb_connect (sock, (struct sockaddr*)&dst->dst.addr,
                            sizeof (dst->dst.addr));
@@ -695,12 +693,10 @@ router_connect_dst (glb_router_t*   const router,
             assert (dst->conns >= 0);
             dst->usage = router_dst_usage(dst);
 #endif
-            if (router->cnf->verbose) {
-#if defined(GLB_LOGGING)
+            if (GLB_UNLIKELY(router->cnf->verbose)) {
                 glb_sockaddr_str_t a = glb_sockaddr_to_str (&dst->dst.addr);
                 glb_log_warn ("Failed to connect to %s: %d (%s)",
                               a.str, error, strerror(error));
-#endif
             }
 
             router_dst_failed (router, dst);
@@ -708,11 +704,9 @@ router_connect_dst (glb_router_t*   const router,
         }
         else {
             *addr = dst->dst.addr;
-            if (redirect && router->cnf->verbose) {
-#if defined(GLB_LOGGING)
+            if (GLB_UNLIKELY(redirect && router->cnf->verbose)) {
                 glb_sockaddr_str_t a = glb_sockaddr_to_str (addr);
                 glb_log_warn ("Redirecting to %s", a.str);
-#endif
             }
             break;
         }
