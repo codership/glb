@@ -40,7 +40,7 @@ libglb_la_LDFLAGS = -version-info 1:0:0
 endif
 
 # for make dist
-include_HEADERS = *.h
+noinst_HEADERS = *.h
 
 .PHONY: all clean
 
