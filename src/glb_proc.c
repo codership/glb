@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
  * A unit to spawn external processes. No human should have ever had to write
  * that, but POSIX committee decided otherwise.
@@ -118,10 +118,14 @@ cleanup:
 /*!
  * @arg pid
  *      spawned process ID
- * @arg pargv
- *      process arguments vector, should start with process image and then
- *      each argument in a separate string.
+ * @arg argv
+ *      null-terminated process arguments vector, should start with process
+ *      image and then each argument in a separate string.
  *      (the same thing that is passed as a second argument to main())
+ * @arg envp
+ *      null-terminated vector of environment variables to be used by the
+ *      spawned process, if NULL, extern char **environ (parent environment)
+ *      will be used.
  * @arg std_in
  *      Pointer to stream associated with the process standard input (for the
  *      parent to write to). If NULL, the process will inherit stdin from the
@@ -136,7 +140,7 @@ cleanup:
  *      caller.
  * @return 0 on success or error code.
  */
-int glb_proc_start (pid_t* pid, char* pargv[],
+int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
                     FILE** std_in, FILE** std_out, FILE** std_err)
 {
     int err, err1;
@@ -200,7 +204,7 @@ int glb_proc_start (pid_t* pid, char* pargv[],
     }
 
     /* Finally... */
-    err = posix_spawnp (pid, pargv[0], &fact, &attr, pargv, environ);
+    err = posix_spawnp (pid, pargv[0], &fact, &attr, pargv, envp?envp:environ);
 
     if (err)
     {
@@ -245,7 +249,7 @@ cleanup_attr:
 }
 
 /*! Same as glb_proc_start, but spawns "sh -c 'cmd'" */
-int glb_proc_startc (pid_t* pid, const char* cmd,
+int glb_proc_startc (pid_t* pid, const char* cmd, char* envp[],
                      FILE** std_in, FILE** std_out, FILE** std_err)
 {
     char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
@@ -253,7 +257,7 @@ int glb_proc_startc (pid_t* pid, const char* cmd,
     int err;
 
     if (pargv[0] && pargv[1] && pargv[2])
-        err = glb_proc_start (pid, pargv, std_in, std_out, std_err);
+        err = glb_proc_start (pid, pargv, envp, std_in, std_out, std_err);
     else
         err = ENOMEM;
 

@@ -77,12 +77,8 @@ exec_send_cmd (const char* cmd, FILE* stream)
 {
     if (EOF != fputs (cmd, stream))
     {
-        if (EOF != fputc ('\n', stream))
-        {
-//            glb_log_debug ("Sent cmd '%s'", cmd);
-            fflush (stream);
-            return 0;
-        }
+        fflush (stream);
+        return 0;
     }
 
     return EIO;
@@ -122,7 +118,7 @@ exec_thread (void* arg)
     FILE* std_in  = NULL;
     FILE* std_out = NULL;
 
-    ctx->errn = glb_proc_start (&pid, pargv, &std_in, &std_out, NULL);
+    ctx->errn = glb_proc_start (&pid, pargv, NULL, &std_in, &std_out, NULL);
 
 init_error:
 
@@ -149,7 +145,7 @@ init_error:
 
         assert (std_in);
 
-        ctx->errn = exec_send_cmd ("poll", std_in);
+        ctx->errn = exec_send_cmd ("poll\n", std_in);
 
         if (!ctx->errn)
         {
@@ -236,7 +232,7 @@ init_error:
         assert(std_in);
         assert(std_out);
 
-        int err = exec_send_cmd ("quit", std_in);
+        int err = exec_send_cmd ("quit\n", std_in);
         if (err) {
             glb_log_error ("Failed to send 'quit' to the process");
         }
