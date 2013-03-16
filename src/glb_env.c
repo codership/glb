@@ -59,18 +59,22 @@ env_option_is (const char* opt, const glb_option_t* opts)
 }
 
 static glb_cnf_t*
-env_parse_options (glb_cnf_t* const cnf, char* o)
+env_parse_options (glb_cnf_t* const cnf, const char* opts)
 {
     glb_cnf_t* ret = cnf;
 
-    if (!o) return ret;
+    if (!opts) return ret;
 
-    int    argc = 0;
-    char** argv = NULL;
+    char* tmp_opts = strdup (opts);
+
+    if (!tmp_opts) return ret;
+
+    int    argc   = 0;
+    char** argv   = NULL;
     char*  endptr = NULL;
 
-    if (glb_parse_token_string (o, (const char***)&argv, &argc, '\0'))
-        return ret;
+    if (glb_parse_token_string (tmp_opts, (const char***)&argv, &argc, '\0'))
+        goto cleanup;
 
     int i;
     for (i = 0; i < argc; i++)
@@ -168,7 +172,10 @@ end_opts:
                                   inc_port, cnf);
     }
 
+cleanup:
+
     free (argv);
+    free (tmp_opts);
 
     return ret;
 }
@@ -258,7 +265,8 @@ glb_env_parse ()
             tmp = glb_parse_dst_list(dst_list, dst_num, bind_port, ret);
 
             free (dst_list);
-            err = (!tmp);
+
+            if (tmp) ret = tmp; else err = true;
         }
         else err = true;
     }

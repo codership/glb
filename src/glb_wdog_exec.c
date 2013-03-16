@@ -26,14 +26,81 @@ bool const glb_terminate = false;
 struct glb_backend_ctx
 {
     const char* cmd;
+    char* envp[];
 };
 
+
 static void
-exec_destroy (glb_backend_ctx_t* ctx)
+exec_destroy_ctx (glb_backend_ctx_t* ctx)
 {
     free ((void*)ctx->cmd);
+
+    char** tmp;
+    for (tmp = ctx->envp; tmp && *tmp; tmp++)
+    {
+        free (*tmp);
+    }
+
     free (ctx);
 }
+
+
+extern char** environ;
+
+#define LD_PRELOAD_ENV "LD_PRELOAD="
+
+static glb_backend_ctx_t*
+exec_create_ctx (const char* cmd)
+{
+    int n_envp  = 0;
+    char** envp = environ;
+
+    assert (envp);
+
+    if (envp) for (; *envp; envp++, n_envp++);
+
+    size_t const ctx_size = sizeof(glb_backend_ctx_t) +
+        (n_envp + 1) * sizeof(char*);
+
+    glb_backend_ctx_t* ret = calloc (1, ctx_size);
+
+    if (!ret) return NULL;
+
+    ret->cmd = strdup(cmd);
+
+    envp  = environ;
+    int i = 0;
+
+    if (envp)
+    {
+        for (; *envp; envp++)
+        {
+#ifndef GLBD /* we probably want to preserve LD_PRELOAD in case of glbd */
+            if (!strncmp (*envp, LD_PRELOAD_ENV, sizeof(LD_PRELOAD_ENV) - 1))
+            {
+//                glb_log_debug ("skipping LD_PRELOAD variable");
+                continue;
+            }
+#endif /* GLBD */
+
+//          glb_log_debug ("copying '%s'", *envp);
+            ret->envp[i] = strdup(*envp);
+
+            if (!ret->envp[i])
+            {
+                // things are pretty bad if we can't make a copy of environment
+                exec_destroy_ctx(ret);
+                return NULL;
+            }
+
+            i++;
+        }
+    }
+//    glb_log_debug ("total %d variables copied", i);
+
+    return ret;
+}
+
 
 static char*
 exec_create_cmd (const glb_backend_thread_ctx_t* ctx)
@@ -118,7 +185,8 @@ exec_thread (void* arg)
     FILE* std_in  = NULL;
     FILE* std_out = NULL;
 
-    ctx->errn = glb_proc_start (&pid, pargv, NULL, &std_in, &std_out, NULL);
+    ctx->errn = glb_proc_start (&pid, pargv, ctx->backend->envp,
+                                &std_in, &std_out, NULL);
 
 init_error:
 
@@ -263,19 +331,13 @@ exec_init (glb_backend_t* backend, const char* spec)
         return -EINVAL;
     }
 
-    glb_backend_ctx_t* ctx = calloc (1, sizeof(*ctx));
+    glb_backend_ctx_t* ctx = exec_create_ctx (spec);
 
     if (!ctx) return -ENOMEM;
 
-    ctx->cmd = strdup(spec);
-    if (!ctx->cmd) {
-        free (ctx);
-        return -ENOMEM;
-    }
-
     backend->ctx     = ctx;
     backend->thread  = exec_thread;
-    backend->destroy = exec_destroy;
+    backend->destroy = exec_destroy_ctx;
 
     return 0;
 }

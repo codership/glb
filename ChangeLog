@@ -1,3 +1,8 @@
+2013-03-15 alex 
+- Fixed issue with LD_PRELOAD and GLB environment variables being inherited
+  by the processes spawned by watchdog (and, consequently spawning more).
+  Version 1.0.0
+
 2013-03-04 alex 
 - Fixed libglb initialization which was thread-unsafe and unoptimal.
 - Fixed GLB_OPTIONS parsing in libglb, which didn't actually work.
@@ -30,7 +35,7 @@
 
 2012-12-23 alex 
 - Implemented initial watchdog framework that asynchronously monitors
-  destinations using server-spceific probes and updates routing table
+  destinations using server-specific probes and updates routing table
   accordingly. (Destination discovery is not supported yet)
 - Implemented basic watchdog module that spawns destination probes via shell,
   allowing various probing scripts to be written.
