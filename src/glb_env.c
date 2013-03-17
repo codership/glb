@@ -250,7 +250,8 @@ glb_env_parse ()
         goto failure;
     }
 
-    char* targets_str = getenv (env_targets);
+    const char* const targets_tmp = getenv (env_targets);
+    char* targets_str = targets_tmp ? strdup(targets_tmp) : NULL;
     if (targets_str && strlen(targets_str))
     {
         const char** dst_list  = NULL;
@@ -270,7 +271,10 @@ glb_env_parse ()
         }
         else err = true;
     }
+    free (targets_str);
+
     err = err || (0 == ret->n_dst);
+
     if (err)
     {
         fputs (LIBGLB_PREFIX "Unspecified or invalid targets list.\n", stderr);
