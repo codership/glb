@@ -1,6 +1,6 @@
 2013-03-15 alex 
 - Fixed issue with LD_PRELOAD and GLB environment variables being inherited
-  by the processes spawned by watchdog (and, consequently spawning more).
+  by the processes spawned by watchdog (and, consequently, spawning more).
   Version 1.0.0
 
 2013-03-04 alex 

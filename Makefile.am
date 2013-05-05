@@ -1,6 +1,7 @@
 SUBDIRS = src doc
 
 EXTRA_DIST = \
+	bootstrap.sh    \
 	files/README    \
 	files/curl.sh   \
 	files/glbd.cfg  \
