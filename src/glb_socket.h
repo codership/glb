@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -56,10 +56,11 @@ glb_sockaddr_get_port (const glb_sockaddr_t* addr);
 extern glb_sockaddr_str_t
 glb_sockaddr_get_host (const glb_sockaddr_t* addr);
 
-#define GLB_SOCK_NODELAY      1U
-#define GLB_SOCK_DEFER_ACCEPT 2U
-#define GLB_SOCK_NONBLOCK     4U
-#define GLB_SOCK_KEEPALIVE    8U
+#define GLB_SOCK_NODELAY      (1 << 0)
+#define GLB_SOCK_DEFER_ACCEPT (1 << 1)
+#define GLB_SOCK_NONBLOCK     (1 << 2)
+#define GLB_SOCK_KEEPALIVE    (1 << 3)
+#define GLB_SOCK_LINGER       (1 << 4)
 
 // Returns socket (file descriptor) bound to a given address
 // with default options set

@@ -37,6 +37,7 @@ typedef struct glb_cnf
     int            max_conn;     // max allowed client connections
     bool           nodelay;      // use TCP_NODELAY?
     bool           keepalive;    // use SO_KEEPALIVE?
+    bool           linger;       // use SO_LINGER?
     bool           defer_accept; // use TCP_DEFER_ACCEPT?
     bool           daemonize;    // become a daemon?
     bool           synchronous;  // connect synchronously

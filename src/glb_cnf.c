@@ -169,15 +169,17 @@ glb_cnf_print (FILE* out, const glb_cnf_t* cnf)
     fprintf (out,
 #if GLBD
              "Number of threads: %d, max conn: %d, "
-             "nodelay: %s, keepalive: %s, defer accept: %s, daemon: %s, "
+             "nodelay: %s, keepalive: %s, defer accept: %s, linger: %s, "
+             "daemon: %s, "
 #endif
-             "lat.factor: %d, policy: '%s', top: %s, verbose: %s\n",
+             "lat.count: %d, policy: '%s', top: %s, verbose: %s\n",
 #if GLBD
              cnf->n_threads,
              cnf->max_conn,
              cnf->nodelay ? "ON" : "OFF",
              cnf->keepalive ? "ON" : "OFF",
              cnf->defer_accept ? "ON" : "OFF",
+             cnf->linger ? "ON" : "OFF",
              cnf->daemonize ? "YES" : "NO",
 #endif
              cnf->lat_factor,

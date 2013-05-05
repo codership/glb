@@ -115,7 +115,7 @@ env_parse_options (glb_cnf_t* const cnf, const char* opts)
                 }
             }
             break;
-        case GLB_OPT_LATENCY:
+        case GLB_OPT_LATENCY_COUNT:
             if (i + 1 < argc) {
                 long lf = strtol (argv[i + 1], &endptr, 10);
                 if ((*endptr == '\0' || isspace(*endptr)) && !errno && lf >= 0){

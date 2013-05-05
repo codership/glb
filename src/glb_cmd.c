@@ -28,7 +28,7 @@ cmd_parse_options (int argc, char* argv[], glb_cnf_t* cnf)
     char* endptr;
 
     // parse options
-    while ((opt = getopt_long (argc, argv, "DKSTVYabc:dfhi:l:m:nt:rsvw:x:",
+    while ((opt = getopt_long (argc, argv, "DKL:STVYabc:dfhi:lm:nt:rsvw:x:",
                                glb_options, &opt_idx)) != -1) {
         switch (opt) {
         case GLB_OPT_DISCOVER:
@@ -36,6 +36,15 @@ cmd_parse_options (int argc, char* argv[], glb_cnf_t* cnf)
             break;
         case GLB_OPT_KEEPALIVE:
             cnf->keepalive = false;
+            break;
+        case GLB_OPT_LATENCY_COUNT:
+            cnf->lat_factor = strtol (optarg, &endptr, 10);
+            if ((*endptr != '\0' && !isspace(*endptr)) || errno ||
+                cnf->lat_factor < 0) {
+                fprintf (stderr, "Bad latency count value: %s. "
+                         "Non-negative integer expected.\n", optarg);
+                exit (EXIT_FAILURE);
+            }
             break;
         case GLB_OPT_SINGLE:
             cnf->policy = GLB_POLICY_SINGLE; // implies GLB_OPT_TOP
@@ -80,14 +89,8 @@ cmd_parse_options (int argc, char* argv[], glb_cnf_t* cnf)
                 exit (EXIT_FAILURE);
             }
             break;
-        case GLB_OPT_LATENCY:
-            cnf->lat_factor = strtol (optarg, &endptr, 10);
-            if ((*endptr != '\0' && !isspace(*endptr)) || errno ||
-                cnf->lat_factor < 0) {
-                fprintf (stderr, "Bad latency value: %s. "
-                         "Non-negative integer expected.\n", optarg);
-                exit (EXIT_FAILURE);
-            }
+        case GLB_OPT_LINGER:
+            cnf->linger = true;
             break;
         case GLB_OPT_MAX_CONN:
             cnf->max_conn = strtol (optarg, &endptr, 10);
@@ -157,19 +160,21 @@ glb_cmd_help (FILE* out, const char* progname)
     fprintf (out,
              "  -d|--daemon               run as a daemon.\n");
     fprintf (out,
-             "  -f|--fifo <fifo name>     name of the FIFO file for control.\n");
+             "  -f|--fifo <fifo name>     "
+             "name of the FIFO file for control.\n");
     fprintf (out,
              "  -i|--interval D.DDD       "
              "how often to probe destinations for liveness\n"
-             "(fractional seconds, default 1.0).\n");
+             "                            (fractional seconds, default 1.0).\n"
+        );
     fprintf (out,
-             "  -l|--latency <samples>    "
-             "when using latency reported by watchdog probes for destination\n"
-             "weight adjustment, how many smaples to average latency over.\n"
-             "(default: 0 - not using latency for weight adjustment)");
+             "  -l|--linger               "
+             "*DISABLE* sockets lingering in TIME_WAIT state after\n"
+             "                            close().\n");
     fprintf (out,
              "  -m|--max_conn N           "
-             "maximum allowed number of client connections (OS dependent).\n");
+             "maximum allowed number of client connections\n"
+             "                            (OS dependent).\n");
     fprintf (out,
              "  -n|--nodelay              "
              "*DISABLE* TCP_NODELAY socket option\n"
@@ -190,16 +195,31 @@ glb_cmd_help (FILE* out, const char* progname)
              "  -w|--watchdog SPEC_STR    watchdog specification.\n");
     fprintf (out,
              "  -x|--extra D.DDD          "
-             "extra polling frequency (fractional seconds).\n");
+             "perform extra destination poll on connection attempt\n"
+             "                            "
+             "if the previous poll happened more than D.DD seconds\n"
+             "                            ago.\n"
+             "                            "
+             "(default: 0.0 - extra polling disabled)\n");
     fprintf (out,
              "  -D|--discover             "
-             "use watchdog results to discover and set new destinations.\n"
+             "use watchdog results to discover and set new\n"
+             "                            destinations.\n"
              "                            "
-             "(Currently only Galera nodes can supply such information.)\n");
+             "(Currently only Galera nodes supply such info.)\n");
     fprintf (out,
              "  -K|--keepalive            "
              "*DISABLE* SO_KEEPALIVE socket option on server-side\n"
              "                            sockets (default: enabled).\n");
+    fprintf (out,
+             "  -L|--latency <samples>    "
+             "when using latency reported by watchdog probes for\n"
+             "                            "
+             "destination weight adjustment, how many samples to\n"
+             "                            average latency over.\n"
+             "                            "
+             "(default: 0 - not using reported latency for weight\n"
+             "                            adjustment)\n");
     fprintf (out,
              "  -S|--single               "
              "direct all connections to a single destination\n"
@@ -207,7 +227,7 @@ glb_cmd_help (FILE* out, const char* progname)
              "with top weight.\n");
     fprintf (out,
              "  -T|--top                  "
-             "only balance between destinations with top weight.\n");
+             "balance only between destinations with top weight.\n");
     fprintf (out,
              "  -V|--version              print program version.\n");
     fprintf (out,

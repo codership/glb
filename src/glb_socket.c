@@ -153,9 +153,9 @@ glb_sockaddr_hash (const glb_sockaddr_t* addr)
 int
 glb_socket_setopt (int sock, uint32_t const optflags)
 {
+//    int const zero = 0;
     int const one  = 1;
     int ret = 0;
-//    int const zero = 0;
 
 #if 0
     size_t const buf_size = 1024;
@@ -177,7 +177,7 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     if ((optflags & GLB_SOCK_KEEPALIVE) &&
         setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one)))
     {
-        glb_log_warn ("Setting TCP_DEFER_ACCEPT failed: %d (%s)",
+        glb_log_warn ("Setting SO_KEEPALIVE failed: %d (%s)",
                       errno, strerror(errno));
         ret = -errno;
     }
@@ -245,6 +245,17 @@ glb_socket_setopt (int sock, uint32_t const optflags)
         glb_log_warn ("Setting O_NONBLOCK failed: %d (%s)",
                       errno, strerror(errno));
         ret = -errno;
+    }
+
+    if (glb_cnf->linger)
+    {
+        struct linger l = { 1, 0 };
+        if (setsockopt (sock, SOL_SOCKET, SO_LINGER, &l, sizeof(l)))
+        {
+            glb_log_warn ("Setting SO_LINGER failed: %d (%s)",
+                          errno, strerror(errno));
+            ret = -errno;
+        }
     }
 
     return ret;
