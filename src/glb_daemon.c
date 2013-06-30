@@ -41,8 +41,13 @@ void glb_daemon_start (const glb_cnf_t* cnf)
     if (getuid() == 0 || geteuid() == 0) {
         struct passwd *pw = getpwnam(RUN_AS_USER);
         if ( pw ) {
-            glb_log_info ("Setting user to '%s'", RUN_AS_USER);
-            setuid(pw->pw_uid);
+            glb_log_info ("Changing effective user to '%s'", RUN_AS_USER);
+            if (setuid(pw->pw_uid))
+            {
+                glb_log_fatal ("Failed to change user: %d (%s)",
+                               errno, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
