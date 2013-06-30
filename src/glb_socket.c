@@ -122,8 +122,8 @@ glb_sockaddr_get_host (const glb_sockaddr_t* addr)
 
 #ifdef GLBD
 
-#define FNV32_SEED  2166136261
-#define FNV32_PRIME 16777619
+#define FNV32_SEED  2166136261U
+#define FNV32_PRIME 16777619U
 #define ROTL32(x,r) ((x << r) | (x >> (32 - r)))
 
 static inline uint32_t
