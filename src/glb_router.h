@@ -16,7 +16,7 @@ extern glb_router_t*
 glb_router_create (const glb_cnf_t* cnf);
 
 extern void
-glb_router_destroy ();
+glb_router_destroy (glb_router_t* router);
 
 /*!
  * Modifies internal list of destinations
