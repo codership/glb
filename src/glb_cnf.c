@@ -1,18 +1,20 @@
 /*
  * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_cnf.c 160 2013-11-03 14:49:02Z alex $
  */
 
 #include "../config.h" // for version
 
 #include "glb_cnf.h"
 #include "glb_limits.h"
+#include "glb_types.h" // ulong
 
 glb_cnf_t* glb_cnf = NULL;
 
 #include <errno.h>
 #include <stddef.h> // ptrdiff_t
+#include <stdlib.h>
 #include <string.h>
 
 static const long long default_check_interval = 1000000000; // 1 sec

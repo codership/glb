@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_pool.c 160 2013-11-03 14:49:02Z alex $
  */
 
 #include "glb_misc.h"
@@ -10,6 +10,7 @@
 #include "glb_pool.h"
 
 #include "glb_cmd.h"
+#include "glb_types.h" // ulong
 
 #include <pthread.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+#include <sys/socket.h>
 
 #ifndef USE_EPOLL
     #ifndef USE_POLL
@@ -514,8 +516,13 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
     uint32_t dst_events = dst->events;
 
 #ifndef GLB_USE_SPLICE
+#ifdef MSG_NOSIGNAL
     ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
                 MSG_DONTWAIT | MSG_NOSIGNAL);
+#else
+    ret = send (dst->sock, &dst->buf[dst->sent], dst->total - dst->sent,
+                MSG_DONTWAIT);
+#endif
 #else
     ret = splice (dst->splice[0], NULL, dst->sock, NULL,
                   dst->total - dst->sent, SPLICE_F_NONBLOCK);
@@ -784,17 +791,17 @@ pool_handle_events (pool_t* pool, long count)
         if (pfd->revents) {
             // revents might be less than pfd->revents because some of the
             // pfd->events might be cleared in the previous loop
-            register ulong revents = pfd->revents & pfd->events;
+            ulong revents = pfd->revents & pfd->events;
 
             if (revents & POOL_FD_READ) {
-                register long ret;
+                long ret;
                 pool->stats.poll_reads++;
 
                 ret = pool_handle_read (pool, pfd->fd);
                 if (ret < 0) return ret;
             }
             if (revents & POOL_FD_WRITE) {
-                register long ret;
+                long ret;
                 pool->stats.poll_writes++;
 
                 ret = pool_handle_write (pool, pfd->fd);
@@ -957,7 +964,7 @@ pool_get_pool (glb_pool_t* pool)
 {
     pool_t* ret       = pool->pool;
     ulong   min_conns = ret->n_conns;
-    register ulong i;
+    ulong   i;
 
     for (i = 1; i < pool->n_pools; i++) {
         if (min_conns > pool->pool[i].n_conns) {

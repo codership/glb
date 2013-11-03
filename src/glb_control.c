@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_control.c 156 2013-08-23 08:24:56Z vlad $
  */
 
 // keep asserts here for now
@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <ctype.h>
 

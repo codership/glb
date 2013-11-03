@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_cmd.c 156 2013-08-23 08:24:56Z vlad $
  */
 
 #include "glb_cmd.h"
@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <ctype.h> // isspace()
+#include <stdlib.h>
 
 extern char* optarg;
 

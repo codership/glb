@@ -48,9 +48,9 @@ LISTEN_PORT=$(echo $LISTEN_ADDR | awk -F ':' '{ print $2 }')
 [ -z "$LISTEN_PORT" ] && LISTEN_PORT=$LISTEN_ADDR
 
 if [ -n "$CONTROL_ADDR" ]; then
-	CONTROL_PORT=$(echo $LISTEN_ADDR | awk -F ':' '{ print $2 }')
+	CONTROL_PORT=$(echo $CONTROL_ADDR | awk -F ':' '{ print $2 }')
 	if [ -n "$CONTROL_PORT" ]; then # CONTROL_ADDR has both address and port
-		CONTROL_IP=$(echo $LISTEN_ADDR | awk -F ':' '{ print $1 }')
+		CONTROL_IP=$(echo $CONTROL_ADDR | awk -F ':' '{ print $1 }')
 	else                            # CONTROL_ADDR contains only port
 		CONTROL_PORT=$CONTROL_ADDR
 		CONTROL_IP="127.0.0.1"
@@ -107,7 +107,7 @@ start() {
 	GLBD_OPTIONS="--fifo=$CONTROL_FIFO --threads=$THREADS --daemon $OTHER_OPTIONS"
 	[ -n "$MAX_CONN" ] && GLBD_OPTIONS="$GLBD_OPTIONS --connections=$MAX_CONN"
 	[ -n "$CONTROL_ADDR" ] && GLBD_OPTIONS="$GLBD_OPTIONS --control=$CONTROL_ADDR"
-	$exec $GLBD_OPTIONS $LISTEN_ADDR $DEFAULT_TARGETS
+	eval $exec $GLBD_OPTIONS $LISTEN_ADDR $DEFAULT_TARGETS
 	PID=`pidof $exec`
 	if [ $? -ne 0 ]; then
 		echo "[`date`] $prog: failed to start."

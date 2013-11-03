@@ -7,6 +7,12 @@ AC_CONFIG_SRCDIR([src/glb_main.c])
 AC_CONFIG_HEADER([config.h])
 AC_CANONICAL_SYSTEM
 
+case $host_os in freebsd*)
+    : ${CC:="gcc48"}
+    : ${CXX:="g++48"}
+    : ${LD_LIBRARY_PATH:=/usr/local/lib/gcc48}
+esac
+
 AM_INIT_AUTOMAKE
 CFLAGS="$CFLAGS" # prevent configure from guessing its own CFLAGS
 
@@ -82,8 +88,11 @@ AC_CHECK_HEADERS([strings.h sys/time.h unistd.h dlfcn.h])
 AC_CHECK_LIB([pthread], [pthread_testcancel],,
              AC_MSG_ERROR([*** POSIX threads not found! ***]))
 
-AC_CHECK_LIB([dl], [dlsym],,
-             AC_MSG_ERROR([*** libdl not found! ***]))
+case $host_os in freebsd*) ;; *)
+    AC_CHECK_LIB([dl], [dlsym],,
+                 AC_MSG_ERROR([*** libdl not found! ***]))
+    ;;
+esac
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL

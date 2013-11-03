@@ -1,14 +1,16 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_listener.c 156 2013-08-23 08:24:56Z vlad $
  */
 
 #include "glb_listener.h"
 #include "glb_log.h"
 #include "glb_limits.h"
 #include "glb_cmd.h"
+#include "glb_misc.h"
 
+#include <sys/socket.h>
 #include <pthread.h>
 #include <assert.h>
 #include <unistd.h>
@@ -44,14 +46,14 @@ listener_thread (void* arg)
         int            server_sock;
         glb_sockaddr_t server;
 
-#ifdef _GNU_SOURCE
+#if defined(_GNU_SOURCE) && defined(SOCK_CLOEXEC)
         client_sock = accept4(listener->sock,
                               (struct sockaddr*) &client, &client_size,
                               SOCK_CLOEXEC);
 #else
         client_sock = accept (listener->sock,
                               (struct sockaddr*) &client, &client_size);
-#endif /* _GNU_SOURCE */
+#endif /* _GNU_SOURCE && SOCK_CLOEXEC*/
 
         if (client_sock < 0 || glb_terminate) {
             if (client_sock < 0) {
@@ -65,9 +67,9 @@ listener_thread (void* arg)
             goto err;
         }
 
-#ifndef _GNU_SOURCE
-        (void) fcntl (client_sock, F_SETFD, FD_CLOEXEC);
-#endif /* !_GNU_SOURCE */
+#if !defined(_GNU_SOURCE) || !defined(SOCK_CLOEXEC)
+	(void) glb_fd_setfd (client_sock, FD_CLOEXEC, true);
+#endif /* !_GNU_SOURCE || !SOCK_CLOEXEC */
 
         ret = glb_router_connect(listener->router, &client ,&server,
                                  &server_sock);

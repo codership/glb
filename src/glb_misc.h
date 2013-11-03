@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_misc.h 156 2013-08-23 08:24:56Z vlad $
  */
 
 #ifndef _glb_misc_h_
@@ -84,5 +84,10 @@ glb_parse_token_string (char*         tok_str,
                         const char*** tok_list,
                         int*          tok_num,
                         int           sep);
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
+# include <errno.h>
+# define ENONET ((ELAST)+1)
+#endif
 
 #endif // _glb_misc_h_

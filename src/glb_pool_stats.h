@@ -1,11 +1,13 @@
 /*
  * Copyright (C) 2008 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_pool_stats.h 160 2013-11-03 14:49:02Z alex $
  */
 
 #ifndef _glb_pool_stats_h_
 #define _glb_pool_stats_h_
+
+#include "glb_types.h" // ulong
 
 typedef struct glb_pool_stats
 {

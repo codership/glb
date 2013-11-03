@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_socket.c 161 2013-11-03 14:54:45Z alex $
  */
 
 #include "glb_socket.h"
@@ -18,6 +18,9 @@
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
+#if defined(__APPLE__) || defined(__FreeBSD__)
+# define SOL_TCP IPPROTO_TCP
+#endif
 
 #ifdef GLBD
 
@@ -183,34 +186,46 @@ glb_socket_setopt (int sock, uint32_t const optflags)
     }
     else
     {
-#if defined(TCP_KEEPIDLE)
+#if defined(__APPLE__)
+        int idle_seconds = 10;
+        if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE,
+                        &idle_seconds, sizeof(idle_seconds)))
+        {
+            glb_log_warn ("Setting TCP_KEEPIDLE failed: %d (%s)",
+                          errno, strerror(errno));
+            ret = -errno;
+        }
+        // keep interval is system-wide and is equal to 75 secs by default
+        // keep count is system-wide and is equal to 8 by default
+#else /* !__APPLE__ */
+# if defined(TCP_KEEPIDLE)
         int idle_seconds = 10;
         if (!setsockopt(sock, SOL_TCP, TCP_KEEPIDLE,
                         &idle_seconds, sizeof(idle_seconds)))
         {
-#if defined(TCP_KEEPINTVL)
+# if defined(TCP_KEEPINTVL)
             int interval = 5;
             if (!setsockopt(sock, SOL_TCP, TCP_KEEPINTVL,
                             &interval, sizeof(interval)))
             {
-#if defined(TCP_KEEPCNT)
+# if defined(TCP_KEEPCNT)
                 int tries = 3;
-                if (setsockopt(sock, SOL_TCP, TCP_KEEPINTVL,
+                if (setsockopt(sock, SOL_TCP, TCP_KEEPCNT,
                                &tries, sizeof(tries)))
                 {
-                    glb_log_warn ("Setting TCP_KEEPINTVL failed: %d (%s)",
+                    glb_log_warn ("Setting TCP_KEEPCNT failed: %d (%s)",
                                   errno, strerror(errno));
                     ret = -errno;
                 }
-#endif /* TCP_KEEPCNT */
+# endif /* TCP_KEEPCNT */
             }
             else
             {
-                glb_log_warn ("Setting TCP_KEEPCNT failed: %d (%s)",
+                glb_log_warn ("Setting TCP_KEEPINTVL failed: %d (%s)",
                               errno, strerror(errno));
                 ret = -errno;
             }
-#endif /* TCP_KEEPINTVL */
+# endif /* TCP_KEEPINTVL */
         }
         else
         {
@@ -218,7 +233,8 @@ glb_socket_setopt (int sock, uint32_t const optflags)
                           errno, strerror(errno));
             ret = -errno;
         }
-#endif /* TCP_KEEPIDLE */
+# endif /* TCP_KEEPIDLE */
+#endif /* !__APPLE__ */
     }
 
     if ((optflags & GLB_SOCK_NODELAY) && glb_cnf->nodelay &&
@@ -285,9 +301,9 @@ glb_socket_create (const struct sockaddr_in* addr, uint32_t const optflags)
 
 #ifdef GLBD
 #ifndef SOCK_CLOEXEC
-    if ((err = glb_set_fd_flag (sock, FD_CLOEXEC, true))) goto error;
+    if ((err = glb_fd_setfd (sock, FD_CLOEXEC, true))) goto error;
 #endif /* !SOCK_CLOEXEC */
-    if ((err = glb_socket_setopt (sock, optflags)))       goto error;
+    if ((err = glb_socket_setopt (sock, optflags)))    goto error;
 #endif /* GLBD */
 
     if (bind (sock, (struct sockaddr *) addr, sizeof (*addr)) < 0)

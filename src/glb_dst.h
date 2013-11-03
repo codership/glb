@@ -1,13 +1,12 @@
 /*
  * Copyright (C) 2008-2012 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_dst.h 160 2013-11-03 14:49:02Z alex $
  */
 
 #ifndef _glb_dst_h_
 #define _glb_dst_h_
 
-#include <stdlib.h>     // for ulong
 #include <stdbool.h>    // for bool
 #include <stdio.h>      // for snprintf()
 

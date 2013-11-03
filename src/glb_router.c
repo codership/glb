@@ -4,7 +4,7 @@
  * NOTE: connection count and usage make sense only for standalone balancer
  *       so all operations on them are #ifdef GLBD ... #endif
  *
- * $Id$
+ * $Id: glb_router.c 156 2013-08-23 08:24:56Z vlad $
  */
 
 #include "glb_router.h"
@@ -20,6 +20,7 @@
 #include <unistd.h> // for close()
 #include <time.h>
 #include <sys/time.h>
+#include <sys/socket.h>
 #include <float.h> // for DBL_EPSILON
 
 static double const GLB_DBL_EPSILON = (DBL_EPSILON * 2.0);

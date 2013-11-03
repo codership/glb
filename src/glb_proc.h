@@ -1,12 +1,13 @@
 /*
  * Copyright (C) 2012-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_proc.h 160 2013-11-03 14:49:02Z alex $
  */
 
 #ifndef _glb_proc_h_
 #define _glb_proc_h_
 
+#include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -39,7 +40,8 @@ extern int
 glb_proc_start (pid_t* pid, char* argv[], char* envp[],
                 FILE** std_in, FILE** std_out, FILE** std_err);
 
-/*! Same as glb_proc_start, but spawns "sh -c 'cmd'" */
+/*! Same as glb_proc_start, but spawns "sh -c 'cmd'" so that shell does the
+ *  proper command line parsing. */
 extern int
 glb_proc_startc (pid_t* pid, const char* cmd, char* envp[],
                  FILE** std_in, FILE** std_out, FILE** std_err);

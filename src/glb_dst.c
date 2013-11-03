@@ -1,16 +1,17 @@
 /*
  * Copyright (C) 2008 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_dst.c 160 2013-11-03 14:49:02Z alex $
  */
-
-#include <stddef.h> // ptrdiff_t
-#include <errno.h>
-#include <assert.h>
 
 #include "glb_log.h"
 #include "glb_socket.h"
 #include "glb_dst.h"
+#include "glb_types.h"
+
+#include <stddef.h> // ptrdiff_t
+#include <errno.h>
+#include <assert.h>
 
 // Some constants
 #define dst_separator      ':'

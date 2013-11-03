@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2008-2013 Codership Oy <info@codership.com>
  *
- * $Id$
+ * $Id: glb_router.h 161 2013-11-03 14:54:45Z alex $
  */
 
 #ifndef _glb_router_h_

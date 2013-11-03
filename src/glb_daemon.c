@@ -5,7 +5,7 @@
  * http://www.itp.uzh.ch/~dpotter/howto/daemonize
  * which is public domain.
  *
- * $Id$
+ * $Id: glb_daemon.c 161 2013-11-03 14:54:45Z alex $
  */
 
 #include "glb_daemon.h"
@@ -37,7 +37,7 @@ void glb_daemon_start (const glb_cnf_t* cnf)
     /* already a daemon */
     if (getppid() == 1) return;
 
-    /* Drop user if there is one, and we were run as root */
+    /* Drop user if there is one, and we run as root */
     if (getuid() == 0 || geteuid() == 0) {
         struct passwd *pw = getpwnam(RUN_AS_USER);
         if ( pw ) {

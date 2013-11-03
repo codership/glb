@@ -7,7 +7,7 @@ LOG=$0.log
 
 run_prog()
 {
-    echo -n "Running $1... "
+    $(which echo) -n "Running $1... "
     $* 1>$LOG 2>&1 && echo "Ok" && rm -f $LOG || (echo "Failed. See $LOG"; exit 1)
 }
 
