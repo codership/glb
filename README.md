@@ -1,6 +1,6 @@
 GLB
 ===
-**(_glbd_ and _libglb_: TCP proxy daemon and load balancing library in one bottle)**
+#### (_glbd_ and _libglb_: TCP proxy daemon and load balancing library in one bottle)
 
 Copyright (C) 2007-2013 Codership Oy <info@codership.com>
 
@@ -8,8 +8,7 @@ Mailing list:
 https://groups.google.com/forum/?fromgroups=#!forum/codership-team
 
 
-DISCLAIMER:
------------
+### DISCLAIMER:
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
@@ -17,13 +16,12 @@ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See COPYING for license details.
 
 
-ABOUT:
-------
+### ABOUT:
 _glbd_ is a simple TCP connection balancer made with scalability and
 performance in mind. It was inspired by _pen_, but unlike _pen_ its
 functionality is limited only to balancing generic TCP connections.
 
-Features:
+#### Features:
  - list of backend servers is configurable in runtime.
  - supports server "draining", i.e. does not allocate new connections to
    server, but does not kill existing ones, waiting for them to end
@@ -43,8 +41,7 @@ that function in runtime. No other program functionality is affected and no
 program modification or recompilation is needed. See below for details.
 
 
-BALANCING POLICIES:
--------------------
+### BALANCING POLICIES:
 GLB (both _glbd_ and _libglb_) supports five balancing "policies":
 
  a) **least connected** - new connection will be directed to the server with
@@ -68,8 +65,7 @@ configured with weight 1 and 2, all balancing will happen only between servers
 with weight 2 as long as at least one of them is avaialble.
 
 
-MAXIMUM CONCURRENT CONNECTIONS:
--------------------------------
+### MAXIMUM CONCURRENT CONNECTIONS:
 Maximum connections that can be opened via _glbd_ simultaneously depends on the
 system open files limit and is 493 for a standard limit of 1024. If needed _glbd_
 will attempt to increase open files limit as much as allowed by the effective
@@ -80,18 +76,16 @@ On Linux open files limit may be checked with `ulimit -n` and if necessary
 increased in `/etc/security/limits.conf`.
 
 
-COMMAND LINE OPTIONS:
----------------------
+### COMMAND LINE OPTIONS:
 See output of the `--help` option.
 
 
-RUNTIME MANAGEMENT:
--------------------
+### RUNTIME MANAGEMENT:
 Runtime management can be done either through FIFO file, or network socket.
 By default network socket is not opened; address and port to listen at must
 be explicitly specified with `-c` option.
 
-To add/modify/delete backend server:
+#### To add/modify/delete backend server (destination):
 send server specification in the form `<IP address>:<port>[:weight]` where
 weight is an integer to the daemon. Connections are distributed proportionally
 to the weight. Default weight is 1. Weight of 0 means drain the server.
@@ -99,11 +93,12 @@ Negative weight means delete the server completely (all connections to that
 server are closed immediately). This works both on socket connection and on
 FIFO file.
 
-To see the stats:
+#### To see the stats:
 send `getstat` command to the daemon. This works only on socket connection
 since it implies response.
 
-Example (here _glbd_ is listening at 127.0.0.1:4444):
+##### Example:
+(here _glbd_ is listening at 127.0.0.1:4444)
 ```
 $ echo "192.168.0.1:3307:5" | nc -q 1 127.0.0.1 4444
 OK
@@ -123,8 +118,7 @@ with connections (relative to weight). Ranges from 0 (totally unused) to 1.0
 (very busy). Router tries to keep `usage` equal on all destinations.
 
 
-ADDRESS CONVENTIONS:
---------------------
+### ADDRESS CONVENTIONS:
 All network addresses are specified in the form `IP|HOSTNAME:PORT:WEIGHT`.
 Depending on the context some parts can be optional, in that case they can be
 omitted. For example address to listen for client connections can be specified
@@ -134,8 +128,7 @@ client connections on all interfaces. Backend servers can be specified as
 for `PORT` value and 1 will be used for `WEIGHT` value.
 
 
-PERFORMANCE STATISTICS:
------------------------
+### PERFORMANCE STATISTICS:
 GLB allows to query raw performance statistics through control socket using
 `getstat` command. The client can use these data to obtain useful information,
 e.g. average number of reads per poll() call.
@@ -179,8 +172,7 @@ overflow after enough time elapsed, so the first statistics report in the series
 may need to be discarded.
 
 
-SOURCE TRACKING CAPABILITY:
----------------------------
+### SOURCE TRACKING CAPABILITY:
 GLB features simple source tracking capability where connections originating
 from one address can be routed to the same destination, chosen randomly
 among available destinations according to their weights. One limitation of such
@@ -195,10 +187,9 @@ In other words source tracking should be considered a best effort feature and
 will work best for short-lived connections.
 
 
-WATCHDOG:
----------
-(NOTE: this is a work in progress and neither functionality nor terminology is
-       final.)
+### WATCHDOG:
+_(NOTE: this is a work in progress and neither functionality nor terminology is
+       final.)_
 
 Without the watchdog GLB can check destination availability only via the
 ability to establish TCP connection to destination. For most use cases TCP
@@ -209,7 +200,7 @@ made to check particular service availability.
 
 Watchdog is enabled with a `-w|--watchdog` option. Its parameter is a string
 containig the backend ID string, optionally followed by a colon and backend
-configuration options. Example:
+configuration options. For example:
 ```
 $ glbd -w exec:"mysql.sh -utest -ptestpass" -t 2 3306 192.168.0.1 192.168.0.2
 ```
@@ -223,24 +214,21 @@ executed in this case looks like:
 ```
 "mysql.sh 192.168.0.1:3306 -utest -ptestpass"
 ```
-Check interval is set with `-i|--interval` parameter (fractional seconds, 1.0).
+Check interval is set with `-i|--interval` parameter (fractional seconds, default 1.0).
 
 
-DESTINATION DISCOVERY:
-----------------------
+### DESTINATION DISCOVERY:
 If destinations can supply information about other members of the cluster
 it can be used to automatically populate watchdog destination list if
 `-D|--discover` option is supplied. Currently only MySQL/Galera nodes are known
 to do this, so it is a Galera-only option.
 
 
-RUNNING GLBD AS A "SERVICE":
-----------------------------
+### RUNNING GLBD AS A "SERVICE":
 See `README` in the `files/` directory.
 
 
-USING LIBGLB:
--------------
+### USING LIBGLB:
 Using _libglb_ requres 2 environment variables to be set:
 
 `LD_PRELOAD=<path-to-libglb>`
@@ -249,7 +237,7 @@ and
 
 `GLB_OPTIONS='options string'`
 
-  Allows to specify GLB options to _libglb_ the same way as command line
+  - allows to specify GLB options to _libglb_ the same way as command line
   parameters for _glbd_. It is limited however in that options and their values
   cannot contain whitespaces and commas and short options cannot be
   concatenated (i.e. `-qri10` should go as `-q -r -i 10`). Parsing errors and
@@ -257,7 +245,7 @@ and
   In particular, watchdog option cannot be specified this way.
   (See `GLB_WATCHDOG` environment variable below)
 
-Example:
+##### Example:
 ```
 $ LD_PRELOAD=src/.libs/libglb.so \
 GLB_OPTIONS="--random 3306 192.168.0.1 192.168.0.2 192.168.0.3" \
@@ -269,7 +257,7 @@ Server version: 5.5.28 Source distribution, wsrep_24dev.7.r3830
 ...
 ```
 
-Additional _libglb_ parameters:
+#### Additional _libglb_ parameters:
 
 In case `GLB_OPTIONS` is not sufficient (e.g. watchdog option needs to be
 specified) below there is a list of additional environment variables (which
@@ -295,7 +283,7 @@ take precedence over `GLB_OPTIONS`). Note however, that all these options except
 `GLB_POLICY=single|random|source`
 
   Default libglb balancing policy is "round-robin", "single", "random" and
-  "source tracking" policies can be specified with GLB_POLICY variable.
+  "source tracking" policies can be specified with `GLB_POLICY` variable.
 
 (The meaning of `GLB_POLICY=source` in this case is that all connections from
 this client will be routed to the same random destination, and failover to
