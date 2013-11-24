@@ -228,7 +228,7 @@ LD_PRELOAD=<path-to-libglb>
 
 GLB_OPTIONS='options string'
     Allows to specify GLB options to libglb the same way as command line
-    parameters for glbd. It is limited however in that ptions and their values
+    parameters for glbd. It is limited however in that options and their values
     cannot contain whitespaces and commas and short options cannot be
     concatenated (i.e. '-qri10' should go as '-q -r -i 10'). Parsing errors and
     options unsupported by libglb (like -d) will be silently ignored.
@@ -278,7 +278,7 @@ achieved, however load from many clients will be spread over all available
 destinations.)
 
 GLB_CONTROL=[IP:]PORT
-    Interpreted the same way as --cotrol parameter of glbd. Application will
+    Interpreted the same way as --control parameter of glbd. Application will
     open a socket at a specified address to listen to control commands. Due
     to library functionality limited only to connect() call, no traffic
     statistics or connection count is maintained, so "getstat" command is a
