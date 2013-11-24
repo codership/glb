@@ -1,6 +1,6 @@
 GLB
 ===
-(_glbd_ and _libglb_: TCP proxy daemon and load balancing library in one bottle)
+**(_glbd_ and _libglb_: TCP proxy daemon and load balancing library in one bottle)**
 
 Copyright (C) 2007-2013 Codership Oy <info@codership.com>
 
@@ -242,13 +242,15 @@ See `README` in the `files/` directory.
 USING LIBGLB:
 -------------
 Using _libglb_ requres 2 environment variables to be set:
-```
-LD_PRELOAD=<path-to-libglb>
-```
+
+`LD_PRELOAD=<path-to-libglb>`
+
+and
+
 `GLB_OPTIONS='options string'`
 
   Allows to specify GLB options to _libglb_ the same way as command line
-  parameters for glbd. It is limited however in that options and their values
+  parameters for _glbd_. It is limited however in that options and their values
   cannot contain whitespaces and commas and short options cannot be
   concatenated (i.e. `-qri10` should go as `-q -r -i 10`). Parsing errors and
   options unsupported by _libglb_ (like `-d`) will be silently ignored.
@@ -303,7 +305,7 @@ destinations.)
 
 `GLB_CONTROL=[IP:]PORT`
 
-  Interpreted the same way as `--control` parameter of `glbd`. Application will
+  Interpreted the same way as `--control` parameter of _glbd_. Application will
   open a socket at a specified address to listen to control commands. Due
   to library functionality limited only to `connect()` call, no traffic
   statistics or connection count is maintained, so `"getstat"` command is a
