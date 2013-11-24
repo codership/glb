@@ -86,6 +86,7 @@ typedef struct pool_conn_end
 
 #define POOL_MAX_FD (1 << 16) // highest possible file descriptor + 1
                               // only affects the map size
+
 typedef struct pool
 {
     const glb_cnf_t* cnf;
@@ -123,10 +124,10 @@ typedef enum pool_fd_ops
 {
 #ifdef USE_EPOLL
     POOL_FD_READ  = EPOLLIN,
-    POOL_FD_WRITE = EPOLLOUT,
+    POOL_FD_WRITE = EPOLLOUT | EPOLLERR,
 #else /* POLL */
     POOL_FD_READ  = POLLIN,
-    POOL_FD_WRITE = POLLOUT,
+    POOL_FD_WRITE = POLLOUT  | POLLERR,
 #endif /* POLL */
     POOL_FD_RW    = POOL_FD_READ | POOL_FD_WRITE
 } pool_fd_ops_t;
@@ -192,7 +193,7 @@ static inline pool_conn_end_t*
 pool_conn_end_by_fd (pool_t* pool, int fd)
 {
     // map points to the other end, but that's enough
-    register pool_conn_end_t* other_end = pool->route_map[fd];
+    pool_conn_end_t* other_end = pool->route_map[fd];
     if (POOL_END_CLIENT == other_end->end) {
         return (pool_conn_end_t*)((uint8_t*)other_end + pool_end_size);
     } else {
@@ -253,7 +254,7 @@ pool_fds_set_events (pool_t* pool, pool_conn_end_t* end)
 #endif /* POLL */
 }
 
-static inline long
+static inline int
 pool_fds_wait (pool_t* pool)
 {
 #ifdef USE_EPOLL
@@ -392,12 +393,12 @@ pool_handle_add_conn (pool_t* pool, pool_ctl_t* ctl)
     pool_set_conn_end (pool, inc_end, dst_end);
     pool_set_conn_end (pool, dst_end, inc_end);
 
-    pool->n_conns++; // increment connection count
+    pool->n_conns++;
     pool->stats.conns_opened++;
 
     if (pool->cnf->verbose) {
-        glb_log_info ("Pool %ld: added connection, "
-                      "(total pool connections: %ld)", pool->id, pool->n_conns);
+        glb_log_info ("Pool %d: added connection "
+                      "(total pool connections: %d)", pool->id, pool->n_conns);
     }
 }
 
@@ -467,16 +468,15 @@ pool_handle_shutdown (pool_t* pool)
     pool->shutdown = true;
 }
 
-static long
+static int
 pool_handle_ctl (pool_t* pool)
 {
     pool_ctl_t ctl;
-    register long ret;
 
     // remove ctls from poll count to get only traffic polls
     pool->stats.n_polls--;
 
-    ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
+    ssize_t ret = read (pool->ctl_recv, &ctl, sizeof(ctl));
 
     if (sizeof(ctl) != ret) { // incomplete ctl read, should never happen
         glb_log_fatal ("Incomplete read from ctl, errno: %d (%s)",
@@ -587,13 +587,13 @@ pool_send_data (pool_t* pool, pool_conn_end_t* dst, pool_conn_end_t* src)
     if (dst_events != dst->events) { // events changed
         glb_log_debug ("Old flags on %s: %s %s",
                        POOL_END_CLIENT == dst->end ? "client":"server",
-                       dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
+                       dst->events & POOL_FD_READ  ? "POOL_FD_READ":"",
                        dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
         dst->events = dst_events;
         pool_fds_set_events (pool, dst);
         glb_log_debug ("New flags on %s: %s %s",
                        POOL_END_CLIENT == dst->end ? "client":"server",
-                       dst->events & POOL_FD_READ ? "POOL_FD_READ":"",
+                       dst->events & POOL_FD_READ  ? "POOL_FD_READ":"",
                        dst->events & POOL_FD_WRITE ? "POOL_FD_WRITE":"");
     }
 
@@ -690,9 +690,9 @@ pool_handle_conn_complete (pool_t* pool, pool_conn_end_t* dst_end)
         uint32_t const hint = pool->cnf->policy < GLB_POLICY_SOURCE ?
             0 : glb_sockaddr_hash (&inc_end->addr);
 
-        ret = glb_router_choose_dst_again (pool->router, hint, &dst_end->addr);
+        int err = glb_router_choose_dst_again (pool->router, hint, &dst_end->addr);
 
-        if (!ret) {
+        if (!err) {
             a = glb_sockaddr_to_str (&dst_end->addr);
             glb_log_info ("Reconnecting to %s", a.str);
             pool_remove_conn (pool, dst_end->sock, false); dst_end->sock = -1;
@@ -715,7 +715,7 @@ pool_handle_conn_complete (pool_t* pool, pool_conn_end_t* dst_end)
     return ret;
 }
 
-static inline ssize_t
+static inline int
 pool_handle_write (pool_t* pool, int dst_fd)
 {
     pool_conn_end_t* src = pool->route_map[dst_fd];
@@ -748,17 +748,17 @@ pool_handle_write (pool_t* pool, int dst_fd)
 
 // returns on error or after handling ctl - the latter may cause changes in
 // file descriptors.
-static inline long
-pool_handle_events (pool_t* pool, long count)
+static inline int
+pool_handle_events (pool_t* pool, int count)
 {
-    long idx;
+    int idx;
 #ifdef USE_EPOLL
     for (idx = 0; idx < count; idx++) {
         pollfd_t* pfd = pool->pollfds + idx;
         if (pfd->events & POOL_FD_READ) {
 
-            if (pfd->data.fd != pool->ctl_recv) { // normal read
-                register long ret;
+            if (GLB_LIKELY(pfd->data.fd != pool->ctl_recv)) { // normal read
+                ssize_t ret;
                 pool->stats.poll_reads++;
 
                 ret = pool_handle_read (pool, pfd->data.fd);
@@ -769,7 +769,7 @@ pool_handle_events (pool_t* pool, long count)
             }
         }
         if (pfd->events & POOL_FD_WRITE) {
-            register long ret;
+            int ret;
             pool->stats.poll_writes++;
 
             assert (pfd->data.fd != pool->ctl_recv);
@@ -794,14 +794,14 @@ pool_handle_events (pool_t* pool, long count)
             ulong revents = pfd->revents & pfd->events;
 
             if (revents & POOL_FD_READ) {
-                long ret;
+                ssize_t ret;
                 pool->stats.poll_reads++;
 
                 ret = pool_handle_read (pool, pfd->fd);
                 if (ret < 0) return ret;
             }
             if (revents & POOL_FD_WRITE) {
-                long ret;
+                int ret;
                 pool->stats.poll_writes++;
 
                 ret = pool_handle_write (pool, pfd->fd);
@@ -824,7 +824,7 @@ pool_thread (void* arg)
     GLB_MUTEX_UNLOCK (&pool->lock);
 
     while (!pool->shutdown) {
-        long ret;
+        int ret;
 
         ret = pool_fds_wait (pool);
 
@@ -931,8 +931,8 @@ glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router)
     glb_pool_t* ret = malloc (ret_size);
 
     if (ret) {
-        long err;
-        long i;
+        int err;
+        int i;
 
         memset (ret, 0, ret_size);
         pthread_mutex_init (&ret->lock, NULL);
@@ -941,7 +941,7 @@ glb_pool_create (const glb_cnf_t* cnf, glb_router_t* router)
 
         for (i = 0; i < ret->n_pools; i++) {
             if ((err = pool_init(ret->cnf, &ret->pool[i], i, router))) {
-                glb_log_fatal ("Failed to initialize pool %ld.", i);
+                glb_log_fatal ("Failed to initialize pool %d.", i);
                 abort();
             }
         }
@@ -963,8 +963,8 @@ static inline pool_t*
 pool_get_pool (glb_pool_t* pool)
 {
     pool_t* ret       = pool->pool;
-    ulong   min_conns = ret->n_conns;
-    ulong   i;
+    int     min_conns = ret->n_conns;
+    int     i;
 
     for (i = 1; i < pool->n_pools; i++) {
         if (min_conns > pool->pool[i].n_conns) {
