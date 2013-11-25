@@ -62,7 +62,7 @@ GLB (both _glbd_ and _libglb_) supports five balancing "policies":
 `-T|--top` option was introduced in GLB 0.9.2. It restricts all balancing
 policies to a subset of destinations with top weight. E.g. if there are servers
 configured with weight 1 and 2, all balancing will happen only between servers
-with weight 2 as long as at least one of them is avaialble.
+with weight 2 as long as at least one of them is available.
 
 
 ### MAXIMUM CONCURRENT CONNECTIONS:
@@ -194,12 +194,12 @@ _(NOTE: this is a work in progress and neither functionality nor terminology is
 Without the watchdog GLB can check destination availability only via the
 ability to establish TCP connection to destination. For most use cases TCP
 connectivity is an insufficient check. E.g. for HTTP server it is important to
-be able to serve webpages and for DBMS server - to be able to execute queries.
-Watchdog module implements asynchronus monitoring of destinations via backends
+be able to serve web pages and for DBMS server - to be able to execute queries.
+Watchdog module implements asynchronous monitoring of destinations via backends
 made to check particular service availability.
 
 Watchdog is enabled with a `-w|--watchdog` option. Its parameter is a string
-containig the backend ID string, optionally followed by a colon and backend
+containing the backend ID string, optionally followed by a colon and backend
 configuration options. For example:
 ```
 $ glbd -w exec:"mysql.sh -utest -ptestpass" -t 2 3306 192.168.0.1 192.168.0.2
@@ -229,7 +229,7 @@ See `README` in the `files/` directory.
 
 
 ### USING LIBGLB:
-Using _libglb_ requres 2 environment variables to be set:
+Using _libglb_ requires 2 environment variables to be set:
 
 `LD_PRELOAD=<path-to-libglb>`
 
@@ -286,7 +286,7 @@ take precedence over `GLB_OPTIONS`). Note however, that all these options except
   "source tracking" policies can be specified with `GLB_POLICY` variable.
 
 (The meaning of `GLB_POLICY=source` in this case is that all connections from
-this client will be routed to the same random destination, and failover to
+this client will be routed to the same random destination, and fail over to
 another if the primary destination fails. Thus client-server affinity is
 achieved, however load from many clients will be spread over all available
 destinations.)

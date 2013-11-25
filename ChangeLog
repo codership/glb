@@ -1,3 +1,10 @@
+2013-11-25 alex 
+- Fixed broken failover from failed destination when using asynchronous
+  connects (default).
+- added -l|--linger option to disable socket lingering after connection close.
+- must be builadble on FreeBSD now.
+- various small compilation fixes and such.
+
 2013-03-15 alex 
 - Fixed issue with LD_PRELOAD and GLB environment variables being inherited
   by the processes spawned by watchdog (and, consequently, spawning more).
