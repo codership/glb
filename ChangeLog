@@ -4,6 +4,7 @@
 - added -l|--linger option to disable socket lingering after connection close.
 - must be builadble on FreeBSD now.
 - various small compilation fixes and such.
+  Version 1.0.1
 
 2013-03-15 alex 
 - Fixed issue with LD_PRELOAD and GLB environment variables being inherited
