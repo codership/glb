@@ -56,7 +56,7 @@ do
     then
         STATE=$(echo $RES | cut -d ' ' -f 2)
     # Fix garbd issue that shows empty string in wsrep_incoming_addresses : Bug https://github.com/codership/glb/issues/11
-        OTHERS=$(echo $RES | cut -d ' ' -f 4 | sed -e 's/^,//g' -e 's/,,*/,/g' -e 's/,$//g' )
+        OTHERS=$(echo $RES | cut -d ' ' -f 4 | sed -e 's/,,*/,/g' -e 's/^,//g'  -e 's/,$//g')
     # If wsrep_local_state variable was not found on the server, we assume it
     # is a regular MySQL and is ready for connections (it accepted connection)
         STATE=${STATE:-"4"}
