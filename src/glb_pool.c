@@ -1059,7 +1059,10 @@ pool_bcast_ctl (glb_pool_t* pool, pool_ctl_t* ctl)
 int
 glb_pool_drop_dst (glb_pool_t* pool, const glb_sockaddr_t* dst)
 {
-    pool_ctl_t drop_dst_ctl = { POOL_CTL_DROP_DST, (void*)dst };
+    pool_ctl_t drop_dst_ctl;
+    memset(&drop_dst_ctl, 0, sizeof(pool_ctl_t));
+    drop_dst_ctl.code = POOL_CTL_DROP_DST;
+    drop_dst_ctl.data = (void*)dst;
     return pool_bcast_ctl (pool, &drop_dst_ctl);
 }
 
@@ -1067,7 +1070,10 @@ ssize_t
 glb_pool_print_stats (glb_pool_t* pool, char* buf, size_t buf_len)
 {
     glb_pool_stats_t stats = glb_zero_stats;
-    pool_ctl_t stats_ctl   = { POOL_CTL_STATS, (void*)&stats };
+    pool_ctl_t stats_ctl;
+    memset(&stats_ctl, 0, sizeof(pool_ctl_t));
+    stats_ctl.code = POOL_CTL_STATS;
+    stats_ctl.data = (void*)&stats;
     ssize_t    ret;
     glb_time_t now = glb_time_now();
 
@@ -1170,7 +1176,10 @@ void
 glb_pool_destroy (glb_pool_t* pool)
 {
     long i;
-    pool_ctl_t shutdown_ctl = { POOL_CTL_SHUTDOWN, NULL };
+    pool_ctl_t shutdown_ctl;
+    memset(&shutdown_ctl, 0, sizeof(pool_ctl_t));
+    shutdown_ctl.code = POOL_CTL_SHUTDOWN;
+    shutdown_ctl.data = NULL;
     int err = pool_bcast_ctl (pool, &shutdown_ctl);
 
     if (err) glb_log_debug ("shutdown broadcast failed: %d", -err);
