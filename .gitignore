@@ -1,9 +1,11 @@
 # Object files
 *.o
+*.lo
 
 # Libraries
 *.lib
 *.a
+*.la
 
 # Shared objects (inc. Windows DLLs)
 *.dll
@@ -16,3 +18,30 @@
 *.out
 *.app
 .svn
+
+# Temporaries
+INSTALL
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.*
+configure
+depcomp
+install-sh
+libtool
+ltmain.sh
+missing
+src/.deps/
+src/.libs/
+src/glbd
+stamp-h1
+
+# Packages
+description-pak
+doc-pak/
+*.tgz
+*.gz
+*.deb
+*.rpm

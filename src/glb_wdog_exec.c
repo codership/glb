@@ -274,9 +274,9 @@ init_error:
         }
         ctx->waiting = 0;
 
-        if (ctx->errn) break;
+        ctx->result  = r;
 
-        ctx->result = r;
+        if (ctx->errn) break;
 
         if (ETIMEDOUT != pthread_cond_timedwait (&ctx->cond, &ctx->lock, &next))
         {
