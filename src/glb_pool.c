@@ -134,7 +134,9 @@ typedef enum pool_fd_ops
 
 //#define FD_SETSIZE 1024; // leater get it from select.h
 
+#ifndef USE_EPOLL
 static const pollfd_t zero_pollfd = { 0, };
+#endif /* !EPOLL */
 
 /*!
  * @return negative error code or the index of file descriptor in the set

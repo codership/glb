@@ -18,7 +18,9 @@ glb_cnf_t* glb_cnf = NULL;
 #include <string.h>
 
 static const long long default_check_interval = 1000000000; // 1 sec
+#ifdef GLBD
 static const char      default_fifo_name[]    = "/tmp/glbd.fifo";
+#endif /* GLBD */
 
 glb_cnf_t*
 glb_cnf_init ()

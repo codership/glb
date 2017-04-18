@@ -24,7 +24,7 @@ static const char env_policy[]  = "GLB_POLICY";
 static const char env_ctrl[]    = "GLB_CONTROL"; // address to accept control
                                                  // connections
 static const char env_targets[] = "GLB_TARGETS"; // balancing targets
-static const char env_interval[]= "GLB_INTERVAL";// health check interval
+//static const char env_interval[]= "GLB_INTERVAL";// health check interval
 static const char env_watchdog[]= "GLB_WATCHDOG";// watchdog spec string
 
 // Defaults relevant to ENV
