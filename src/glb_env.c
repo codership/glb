@@ -289,9 +289,12 @@ glb_env_parse ()
 
 failure:
 
+    /* on failure, ret may be freed */
+    if (tmp != NULL) {
     if (ret->verbose) glb_cnf_print(stderr, ret);
 
     if (ret->watchdog) free ((void*)ret->watchdog);
     free (ret);
+    }
     return NULL;
 }
