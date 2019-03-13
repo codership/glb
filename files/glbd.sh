@@ -22,8 +22,8 @@
 # Provides: glbd
 # Required-Start: $local_fs
 # Required-Stop: $local_fs
-# Default-Start:  2345
-# Default-Stop: 90
+# Default-Start:  2 3 4 5
+# Default-Stop: 9 0
 # Short-Description: run glbd daemon
 # Description: GLB is a TCP load balancer similar to Pen.
 ### END INIT INFO

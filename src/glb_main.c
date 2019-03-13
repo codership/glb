@@ -21,6 +21,10 @@
 #include <sys/stat.h>  // for mkfifo()
 #include <fcntl.h>     // for open()
 #include <errno.h>
+#include <grp.h> // for getgrnam()
+
+/* Change this to the user under which to run */
+#define RUN_AS_USER "daemon"
 
 /* this function is to allocate all possible resources before dropping
  * privileges */
@@ -30,7 +34,13 @@ allocate_resources(const glb_cnf_t* conf,
                    int* ctrl_sock,
                    int* listen_sock)
 {
-    if (mkfifo (conf->fifo_name, S_IRUSR | S_IWUSR)) {
+    gid_t gid = getegid();
+    struct group *grp = getgrnam(RUN_AS_USER);  
+    setegid(grp->gr_gid);
+    mode_t um = umask(0); 
+    if (mkfifo (conf->fifo_name, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) {
+        setegid(gid);
+        umask(um);
         switch (errno)
         {
         case EEXIST:
@@ -45,6 +55,10 @@ allocate_resources(const glb_cnf_t* conf,
 
         }
         return 1;
+    }
+    else {
+      setegid(gid);
+      umask(um);
     }
 
     *ctrl_fifo = open (conf->fifo_name, O_RDWR);
