@@ -46,7 +46,7 @@ glb_dst_parse (glb_dst_t* dst, const char* s, uint16_t default_port)
         return -EINVAL;
     }
 
-    strncpy (addr_str, s, addr_len); // this now contains only host address
+    memcpy (addr_str, s, addr_len); // this now contains only host address
 
     ret = 1;
     if (NULL == endptr) // string is over
