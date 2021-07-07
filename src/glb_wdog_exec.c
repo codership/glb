@@ -157,6 +157,10 @@ exec_thread (void* arg)
     glb_backend_thread_ctx_t* ctx = arg;
 
     char* cmd = NULL;
+    pid_t pid     = -1;
+    FILE* std_in  = NULL;
+    FILE* std_out = NULL;
+    char* pargv[4] = { NULL, NULL, NULL, NULL };
 
     /* read buffer */
     size_t const res_size = 4096;
@@ -174,16 +178,14 @@ exec_thread (void* arg)
         goto init_error;
     }
 
-    char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
+    pargv[0] = strdup ("sh");
+    pargv[1] = strdup ("-c");
+    pargv[2] = strdup (cmd);
 
     if (!pargv[0] || !pargv[1] || !pargv[2]) {
         ctx->errn = ENOMEM;
         goto init_error;
     }
-
-    pid_t pid     = -1;
-    FILE* std_in  = NULL;
-    FILE* std_out = NULL;
 
     ctx->errn = glb_proc_start (&pid, pargv, ctx->backend->envp,
                                 &std_in, &std_out, NULL);
