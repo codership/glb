@@ -1,0 +1,15 @@
+Source: glbd
+Section: database
+Priority: optional
+Maintainer: Alexey Bychko <alexey.bychko@galeracluster.com>
+Build-Depends: debhelper (>= 9), autoconf, automake, libtool, gcc, g++, make
+Standards-Version: 3.9.8
+Homepage: https://galeracluster.com
+Vcs-Git: https://github.com/codership/glb
+
+Package: glbd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: glbd and libglb: TCP proxy daemon and load balancing library in one bottle
+ glbd is a simple TCP connection balancer made with scalability and performance in mind. It was inspired by pen, but unlike pen its functionality is limited only to balancing generic TCP connections.
+

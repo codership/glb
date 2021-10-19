@@ -1,0 +1,5 @@
+glbd (1.0.1) unstable; urgency=medium
+
+  * Initial release for debian systems 
+
+ -- Alexey Bychko <alexey.bychko@galeracluster.com>  Mon, 18 Oct 2021 23:37:46 -0700

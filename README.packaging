@@ -1,0 +1,9 @@
+# Source tarball
+run git archive --format=tar.gz --prefix=glbd-1.0.1/ HEAD > ../glbd-1.0.1.tar.gz
+
+# Debian
+run dpkg-buildpackage from git directory to build native package
+
+# RedHat
+run git archive --format=tar.gz --prefix=glbd-1.0.1/ HEAD > ../glbd-1.0.1.tar.gz
+run rpmbuild -tb ../glbd-1.0.1.tar.gz
