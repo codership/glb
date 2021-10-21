@@ -45,3 +45,11 @@ doc-pak/
 *.gz
 *.deb
 *.rpm
+
+debian/.debhelper/
+debian/autoreconf.after
+debian/autoreconf.before
+debian/files
+debian/glbd.debhelper.log
+debian/glbd.substvars
+debian/glbd/
