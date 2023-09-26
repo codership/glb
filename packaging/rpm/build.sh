@@ -11,6 +11,7 @@ BASE=${BASE:='rockylinux:8'}
 
 docker buildx build -t glb-builder-${BASE} --build-arg base=${BASE} \
        https://github.com/codership/glb.git\#${GIT_BRANCH}:packaging/rpm/
-mkdir ${BASE} # output dir for packages
+mkdir -p ${BASE} # output dir for packages
+rm -rf ${BASE}/*
 docker run -v ${PWD}:/output --env GIT_BRANCH=${GIT_BRANCH} \
        --env BASE=${BASE} glb-builder-${BASE}
