@@ -31,5 +31,6 @@ else
 fi
 
 # Move the RPM package to the mounted volume
-mv "${RPMBUILD_DIR}/RPMS/x86_64/"*.rpm "/output/"
-echo "RPM package moved to: /output/"
+OUTPUT="/output/${BASE}"
+mv "${RPMBUILD_DIR}/RPMS/x86_64/"*.rpm "${OUTPUT}"
+echo "RPM package moved to: ${OUTPUT}"
