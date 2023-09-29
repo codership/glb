@@ -8,7 +8,7 @@ URL:            https://github.com/codership/glb
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  autoconf, automake, libtool
-BuildRequires:  gcc, gcc-c++, make
+BuildRequires:  gcc, make
 
 %description
 glbd is a simple TCP connection balancer made with scalability and performance in mind. 
@@ -59,6 +59,8 @@ fi
 %endif
 
 %changelog
+* Tue Sep 26 2021 ALexey Yurchenko <alexey.yurchenko@galeracluster.com> - 1.0.1-1
+- Remove gcc-c++ dependecy
+
 * Wed Oct 20 2021 Alexey Bychko <alexey.bychko@galeracluster.com> - 1.0.1-1
 - Initial RPM release
-
