@@ -2,7 +2,7 @@ Source: glbd
 Section: database
 Priority: optional
 Maintainer: Alexey Bychko <alexey.bychko@galeracluster.com>
-Build-Depends: debhelper (>= 9), autoconf, automake, libtool, gcc, g++, make
+Build-Depends: debhelper (>= 9), autoconf, automake, libtool, gcc, make
 Standards-Version: 3.9.8
 Homepage: https://galeracluster.com
 Vcs-Git: https://github.com/codership/glb
