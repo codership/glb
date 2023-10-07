@@ -40,6 +40,8 @@ glb_parse_token_string (char*         tok_str,
         if (tok_str[i] == '\0' && tok_str[i-1] != '\0') num++;/* end of token */
     }
 
+    if (num == 0) return true;
+
     list = calloc (num, sizeof(const char*));
     if (!list) return true;
 

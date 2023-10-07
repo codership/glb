@@ -271,7 +271,7 @@ glb_router_change_dst (glb_router_t*             const router,
         assert (0 == router->busy_count);
     }
 
-    router_dst_t* tmp;
+    router_dst_t* tmp = NULL;
 
     if (!d) { // add destination to the list
 
@@ -320,7 +320,8 @@ glb_router_change_dst (glb_router_t*             const router,
         else
             router->rrb_next = 0;
 
-        tmp = realloc (router->dst, router->n_dst * sizeof(router_dst_t));
+        if (router->n_dst > 0)
+            tmp = realloc (router->dst, router->n_dst * sizeof(router_dst_t));
 
         if (!tmp && (router->n_dst > 0)) {
             i = -ENOMEM; // this should actually be survivable, but no point
