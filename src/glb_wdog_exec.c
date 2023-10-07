@@ -174,7 +174,7 @@ exec_thread (void* arg)
         goto init_error;
     }
 
-    char* pargv[4] = { strdup ("sh"), strdup ("-c"), strdup (cmd), NULL };
+    char* pargv[4] = { strdup ("bash"), strdup ("-c"), strdup (cmd), NULL };
 
     if (!pargv[0] || !pargv[1] || !pargv[2]) {
         ctx->errn = ENOMEM;
