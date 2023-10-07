@@ -329,7 +329,7 @@ wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
             if (others_len < res->others_len ||
                 others_len > (res->others_len * 2)) {
                 // buffer size is too different, reallocate
-                d->result.others = realloc (others, res->others_len);
+                d->result.others = realloc (others, res->others_len + 1);
                 if (!d->result.others && res->others_len > 0) {
                     // this is pretty much fatal, but we'll try
                     free (others);
@@ -707,6 +707,7 @@ glb_wdog_create (const glb_cnf_t* cnf, glb_router_t* router, glb_pool_t* pool)
         ret->cnf    = cnf;
         ret->router = router;
         ret->pool   = pool;
+        ret->dst    = NULL;
 
         pthread_mutex_init (&ret->lock, NULL);
         pthread_cond_init  (&ret->cond, NULL);
