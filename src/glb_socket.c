@@ -18,6 +18,9 @@
 #include <errno.h>
 #include <assert.h>
 #include <unistd.h>
+#ifndef GLBD
+#include <arpa/inet.h>
+#endif
 #if defined(__APPLE__) || defined(__FreeBSD__)
 # define SOL_TCP IPPROTO_TCP
 #endif
@@ -83,6 +86,7 @@ glb_sockaddr_init (glb_sockaddr_t* addr,
                    const char*     hostname,
                    uint16_t        port)
 {
+#ifdef GLBD
     struct hostent* host = gethostbyname (hostname);
 
     if (host == NULL)
@@ -93,6 +97,12 @@ glb_sockaddr_init (glb_sockaddr_t* addr,
 
     memset (addr, 0, sizeof(*addr));
     addr->sin_addr   = *(struct in_addr *) host->h_addr;
+#else
+    memset (addr, 0, sizeof(*addr));
+    if (inet_aton(hostname, &addr->sin_addr) != 1)
+        return -EINVAL;
+#endif /* GLBD */
+
     addr->sin_port   = htons (port);
     addr->sin_family = AF_INET;
 
