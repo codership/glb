@@ -61,11 +61,15 @@ else
 fi
 
 wait_for_connections_to_drop() {
-	while (netstat -na | grep -m 1 ":$LISTEN_PORT " > /dev/null); do
-		echo "[`date`] $prog: waiting for lingering sockets to clear up..."
-		sleep 1s
-	done;
-	return 0
+    _LISTEN_ADDR=$LISTEN_ADDR
+    if [ "$_LISTEN_ADDR" = "$LISTEN_PORT" ]; then
+        _LISTEN_ADDR=":"$LISTEN_PORT
+    fi
+    while (netstat -na | awk '{ print $4 }' | grep "$_LISTEN_ADDR" > /dev/null); do
+        echo "[`date`] $prog: waiting for lingering sockets to clear up..."
+        sleep 1s
+    done;
+    return 0
 }
 
 stop() {
