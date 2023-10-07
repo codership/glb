@@ -1,0 +1,18 @@
+[Unit]
+Description=Galera Load Balancer Service
+After=network.target
+
+[Service]
+#adjust the EnvironmentFile variable for your distribution
+# On Red Hat and derivatives it should be /etc/sysconfig/glbd
+#
+# On Debian  and derivatives it should be /etc/default/glbd
+#
+# On ArchLinux it should be /etc/conf.d/glbd
+#
+EnvironmentFile=/etc/conf.d/glbd
+Type=simple
+ExecStart=/usr/sbin/glbd $CONTROL_FIFO $CONTROL_ADDR $OTHER_OPTIONS $MAX_CONN $THREADS $LISTEN_ADDR $DEFAULT_TARGETS
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# This systemd file is for the case when you want to run different glbd instances on one machine.
+# copy the default config file to /etc/syconfig/glbd@yourname (distribution specific, see below) 
+# and enable or start the service with "systemctl enable glbd@yourname"
+#
+
+[Unit]
+Description=Galera Load Balancer Service %i
+After=network.target
+
+[Service]
+#adjust the EnvironmentFile variable for your distribution
+# On Red Hat and derivatives it should be /etc/sysconfig/glbd@%i
+#
+# On Debian  and derivatives it should be /etc/default/glbd@%i
+#
+# On ArchLinux it should be /etc/conf.d/glbd@%i
+#
+EnvironmentFile=/etc/conf.d/glbd@%i
+Type=simple
+ExecStart=/usr/sbin/glbd $CONTROL_FIFO $CONTROL_ADDR $OTHER_OPTIONS $MAX_CONN $THREADS $LISTEN_ADDR $DEFAULT_TARGETS
+
+[Install]
+WantedBy=multi-user.target
