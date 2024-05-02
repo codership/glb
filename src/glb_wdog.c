@@ -329,8 +329,8 @@ wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
             if (others_len < res->others_len ||
                 others_len > (res->others_len * 2)) {
                 // buffer size is too different, reallocate
-                d->result.others = realloc (others, res->others_len);
-                if (!d->result.others && res->others_len > 0) {
+                void* const tmp = realloc (others, res->others_len);
+                if (!tmp && res->others_len > 0) {
                     // this is pretty much fatal, but we'll try
                     free (others);
                     d->result.others_len = 0;
@@ -339,6 +339,7 @@ wdog_copy_result (wdog_dst_t* const d, double* const max_lat, int const lf)
                     changed_length = true;
                     d->result.others_len = res->others_len;
                 }
+                d->result.others = tmp;
             }
 
             assert (d->result.others || 0 == d->result.others_len);
