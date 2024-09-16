@@ -9,7 +9,7 @@ Vcs-Git: https://github.com/codership/glb
 
 Package: glbd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, netcat-traditional
 Description: glbd and libglb: TCP proxy daemon and load balancing library in one bottle
  glbd is a simple TCP connection balancer made with scalability and performance in mind. It was inspired by pen, but unlike pen its functionality is limited only to balancing generic TCP connections.
 
