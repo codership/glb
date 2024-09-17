@@ -129,7 +129,9 @@ int main (int argc, char* argv[])
         exit (EXIT_FAILURE);
     }
 
-    glb_cnf_print (stdout, cnf);
+    if (cnf->verbose) {
+        glb_cnf_print (stdout, cnf);
+    }
     glb_socket_init (cnf);
 
     if (glb_log_init (GLB_LOG_STDERR, cnf->verbose)) {
@@ -198,7 +200,7 @@ int main (int argc, char* argv[])
 
     while (!glb_terminate) {
 
-        if (!cnf->daemonize) {
+        if (cnf->verbose && !cnf->daemonize) {
             char stats[BUFSIZ];
 
             if (wdog)
