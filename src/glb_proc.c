@@ -144,6 +144,9 @@ int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
                     FILE** std_in, FILE** std_out, FILE** std_err)
 {
     int err, err1;
+    int stdin_pipe[2] = { -1, -1 };
+    int stdout_pipe[2] = { -1, -1 };
+    int stderr_pipe[2] = { -1, -1 };
 
     *pid = 0;
 
@@ -176,7 +179,6 @@ int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
         goto cleanup_attr;
     }
 
-    int stdin_pipe[2] = { -1, -1 };
     if (std_in &&
         (err = proc_pipe_fds(&fact, stdin_pipe, STDIN_FD, false, std_in)))
     {
@@ -185,7 +187,6 @@ int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
         goto cleanup_fact;
     }
 
-    int stdout_pipe[2] = { -1, -1 };
     if (std_out &&
         (err = proc_pipe_fds(&fact, stdout_pipe, STDOUT_FD, true, std_out)))
     {
@@ -194,7 +195,6 @@ int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
         goto cleanup_stdin;
     }
 
-    int stderr_pipe[2] = { -1, -1 };
     if (std_err &&
         (err = proc_pipe_fds(&fact, stderr_pipe, STDERR_FD, true, std_err)))
     {
@@ -212,16 +212,22 @@ int glb_proc_start (pid_t* pid, char* pargv[], char* envp[],
                        pargv[0], err, strerror(err));
         *pid = 0; // just to make sure it was not messed up in the call
 
+        if (std_err) {
         if (NULL != *std_err) { fclose (*std_err); *std_err = NULL; }
         else if (stderr_pipe[PIPE_READ] >= 0) close (stderr_pipe[PIPE_READ]);
+        }
 
 cleanup_stdout:
+        if (std_out) {
         if (NULL != *std_out) { fclose (*std_out); *std_out = NULL; }
         else if (stdout_pipe[PIPE_READ] >= 0) close (stdout_pipe[PIPE_READ]);
+        }
 
 cleanup_stdin:
+        if (std_in) {
         if (NULL != *std_in) { fclose (*std_in); *std_in = NULL; }
         else if (stdin_pipe[PIPE_WRITE] >= 0) close (stdin_pipe[PIPE_WRITE]);
+        }
     }
 
     /* Now we should close child's end of the pipe in the parent */
