@@ -1,12 +1,12 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.50)
-AC_INIT(glb, 1.0.2, info@codership.com)
+AC_PREREQ([2.71])
+AC_INIT([glb],[1.0.2],[info@codership.com])
 AC_CONFIG_MACRO_DIRS([m4])
 AC_CONFIG_SRCDIR([src/glb_main.c])
-AC_CONFIG_HEADER([config.h])
-AC_CANONICAL_SYSTEM
+AC_CONFIG_HEADERS([config.h])
+AC_CANONICAL_TARGET
 
 case $host_os in freebsd*)
     : ${CC:="gcc48"}
@@ -19,8 +19,7 @@ CFLAGS="$CFLAGS" # prevent configure from guessing its own CFLAGS
 
 # Check for debug
 AC_ARG_ENABLE(debug,
-              AC_HELP_STRING([--enable-debug],
-                             [enable debugging code [[default=disabled]]]),,
+              AS_HELP_STRING([--enable-debug],[enable debugging code [[default=disabled]]]),,
               enable_debug="no")
 if test "$enable_debug" == "yes"
 then
@@ -33,8 +32,7 @@ AM_CONDITIONAL(ENABLE_DEBUG, test "$enable_debug" != "no")
 
 # Check for _GNU_SOURCE
 AC_ARG_ENABLE(gnu,
-              AC_HELP_STRING([--disable-gnu],
-                             [disable GNU extensions (disables libglb) [[default=enabled]]]),,
+              AS_HELP_STRING([--disable-gnu],[disable GNU extensions (disables libglb) [[default=enabled]]]),,
               enable_gnu="yes")
 if test "$enable_gnu" != "no"
 then
@@ -47,17 +45,15 @@ AM_CONDITIONAL(BUILD_LIBGLB, test "$enable_gnu" != "no")
 
 # Check for poll method
 AC_ARG_ENABLE([poll],
-              [AC_HELP_STRING([--enable-poll],
-                              [use poll() for polling (default: use epoll() if available)]
-                             )
+              [AS_HELP_STRING([--enable-poll],[use poll() for polling (default: use epoll() if available)
+                             ])
               ],
               [],
               enable_poll="no")
 
 # Check for splice()
 AC_ARG_ENABLE(splice,
-              AC_HELP_STRING([--enable-splice],
-                             [use splice() [[default=disabled]]]),,
+              AS_HELP_STRING([--enable-splice],[use splice() [[default=disabled]]]),,
               enable_splice="no")
 if test "$enable_splice" == "yes"
 then
@@ -67,8 +63,7 @@ AM_CONDITIONAL(ENABLE_SPLICE, test "$enable_splice" != "no")
 
 # Check for stats
 AC_ARG_ENABLE(stats,
-              AC_HELP_STRING([--enable-stats],
-                            [use extensive pool statistics [[default=disabled]]]),,
+              AS_HELP_STRING([--enable-stats],[use extensive pool statistics [[default=disabled]]]),,
               enable_stats="no")
 if test "$enable_stats" == "yes"
 then
@@ -99,13 +94,34 @@ AC_HEADER_STDBOOL
 AC_C_CONST
 AC_C_INLINE
 AC_TYPE_SIZE_T
-AC_HEADER_TIME
+m4_warn([obsolete],
+[Update your code to rely only on HAVE_SYS_TIME_H,
+then remove this warning and the obsolete code below it.
+All current systems provide time.h; it need not be checked for.
+Not all systems provide sys/time.h, but those that do, all allow
+you to include it and time.h simultaneously.])dnl
+AC_CHECK_HEADERS_ONCE([sys/time.h])
+# Obsolete code to be removed.
+if test $ac_cv_header_sys_time_h = yes; then
+  AC_DEFINE([TIME_WITH_SYS_TIME],[1],[Define to 1 if you can safely include both <sys/time.h>
+	     and <time.h>.  This macro is obsolete.])
+fi
+# End of obsolete code.
+
 AC_C_VOLATILE
 
 # Checks for library functions.
 AC_FUNC_ERROR_AT_LINE
 AC_FUNC_MALLOC
-AC_HEADER_STDC
+m4_warn([obsolete],
+[The preprocessor macro `STDC_HEADERS' is obsolete.
+  Except in unusual embedded environments, you can safely include all
+  ISO C90 headers unconditionally.])dnl
+# Autoupdate added the next two lines to ensure that your configure
+# script's behavior did not change.  They are probably safe to remove.
+AC_CHECK_INCLUDES_DEFAULT
+AC_PROG_EGREP
+
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gettimeofday memset strdup strcasecmp strncasecmp strtol])
 
